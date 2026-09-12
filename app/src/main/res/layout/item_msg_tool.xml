@@ -5,8 +5,8 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/bg_tool"
-    android:padding="12dp"
-    android:layout_marginTop="6dp"
+    android:padding="8dp"
+    android:layout_marginTop="4dp"
     android:layout_marginBottom="2dp">
 
     <LinearLayout
@@ -20,8 +20,8 @@
         android:background="?android:attr/selectableItemBackground">
 
         <ImageView
-            android:layout_width="16dp"
-            android:layout_height="16dp"
+            android:layout_width="13dp"
+            android:layout_height="13dp"
             android:src="@drawable/ic_tool"
             android:contentDescription="@null" />
 
@@ -29,24 +29,23 @@
             android:id="@+id/tvToolName"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:textColor="@color/text_primary"
-            android:textSize="13sp"
-            android:textStyle="bold" />
+            android:layout_marginStart="6dp"
+            android:textColor="@color/tool_text"
+            android:textSize="11sp" />
 
         <TextView
             android:id="@+id/tvToolStatus"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="6dp"
             android:textColor="@color/text_secondary"
-            android:textSize="12sp" />
+            android:textSize="10sp" />
 
         <ImageView
             android:id="@+id/ivChevron"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
             android:src="@drawable/ic_chevron"
             android:contentDescription="@null" />
     </LinearLayout>
@@ -57,43 +56,43 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:visibility="gone"
-        android:layout_marginTop="10dp">
+        android:layout_marginTop="6dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/tool_params"
             android:textColor="@color/text_secondary"
-            android:textSize="11sp"
+            android:textSize="10sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/tvToolArgs"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
+            android:layout_marginTop="1dp"
             android:fontFamily="monospace"
             android:textColor="@color/tool_text"
-            android:textSize="12sp"
+            android:textSize="10sp"
             android:textIsSelectable="true" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="6dp"
             android:text="@string/tool_result"
             android:textColor="@color/text_secondary"
-            android:textSize="11sp"
+            android:textSize="10sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/tvToolResult"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
+            android:layout_marginTop="1dp"
             android:fontFamily="monospace"
             android:textColor="@color/tool_text"
-            android:textSize="12sp"
+            android:textSize="10sp"
             android:textIsSelectable="true" />
     </LinearLayout>
 </LinearLayout>

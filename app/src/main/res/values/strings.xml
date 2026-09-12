@@ -16,6 +16,7 @@
     <string name="model_panel_model">模型</string>
     <string name="model_panel_depth">思考深度</string>
     <string name="model_box_format">%1$s · %2$s</string>
+    <string name="ai_disclaimer">内容由 AI 生成，请注意甄别</string>
     <string name="btn_send">发送</string>
     <string name="btn_stop">停止</string>
     <string name="btn_attach">添加附件</string>

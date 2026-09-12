@@ -4,7 +4,7 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="start"
-    android:paddingTop="6dp"
+    android:paddingTop="4dp"
     android:paddingBottom="2dp">
 
     <TextView
@@ -12,11 +12,11 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_bubble_assistant"
-        android:paddingStart="14dp"
-        android:paddingEnd="14dp"
-        android:paddingTop="10dp"
-        android:paddingBottom="10dp"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
         android:text="@string/typing"
         android:textColor="@color/text_secondary"
-        android:textSize="14sp" />
+        android:textSize="12sp" />
 </LinearLayout>
