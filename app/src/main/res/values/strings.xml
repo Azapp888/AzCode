@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AzCode Bridge</string>
+    <string name="accessibility_label">AzCode Screen Control</string>
+    <string name="accessibility_desc">允许 AzCode 读取屏幕节点并按文本/坐标点击，用于自动化操作。</string>
+
+    <string name="notif_channel_bridge">设备桥接</string>
+    <string name="notif_title">AzCode Bridge 运行中</string>
+
+    <string name="status_bridge_off">桥接服务：已停止</string>
+    <string name="status_bridge_on">桥接服务：127.0.0.1:%1$d</string>
+    <string name="status_accessibility_on">无障碍：已开启</string>
+    <string name="status_accessibility_off">无障碍：未开启</string>
+    <string name="status_shizuku_on">Shizuku：已授权</string>
+    <string name="status_shizuku_off">Shizuku：不可用</string>
+    <string name="status_root_on">Root：可用</string>
+    <string name="status_root_off">Root：不可用</string>
+
+    <string name="btn_start_bridge">启动桥接</string>
+    <string name="btn_stop_bridge">停止桥接</string>
+    <string name="btn_open_accessibility">打开无障碍设置</string>
+    <string name="btn_request_shizuku">申请 Shizuku 授权</string>
+    <string name="btn_cycle_mode">切换模式</string>
+</resources>

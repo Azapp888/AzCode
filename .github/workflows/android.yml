@@ -1,0 +1,58 @@
+name: android-build
+
+on:
+  push:
+    branches: [main, "260912-feat-android-native"]
+    tags: ["android-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: 构建 Debug APK
+        run: gradle -p . assembleDebug --stacktrace
+
+      - name: 构建 Release APK（未签名）
+        run: gradle -p . assembleRelease --stacktrace
+
+      - name: 收集产物
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/azcode-bridge-${GITHUB_REF_NAME}-debug.apk"
+          cp app/build/outputs/apk/release/app-release-unsigned.apk "dist/azcode-bridge-${GITHUB_REF_NAME}-release-unsigned.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: azcode-bridge-apk
+          path: dist/*.apk
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/android-v')
+    runs-on: ubuntu-24.04
+    needs: [build-apk]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: azcode-bridge-apk
+          path: apk/
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: apk/*.apk
+          generate_release_notes: true
