@@ -1,21 +1,40 @@
-# AzCode Bridge (Android)
+# AzCode (Android)
 
-Android 原生端：把手机变成可被 Agent 驱动的「执行手」。应用在设备上跑一个仅绑定回环的 HTTP 能力桥，向 Agent 暴露无障碍读屏/点击/滑动、全局导航、系统通知，以及 Shizuku / Root 级 shell 通道。
+Android 原生端独立应用：在手机上输入自然语言任务，内置 DeepSeek 决策循环，直接调用本机无障碍 / Shizuku 能力操作手机。**不依赖 Windows 端即可独立运行**。
 
-Windows 端（Agent 大脑与编排）位于独立分支 `260912-feat-windows-client`，通过 `adb forward` 连接本桥。
+同时内置一个仅绑定回环（`127.0.0.1:8848`）的 HTTP 能力桥，Windows 端（独立分支 `260912-feat-windows-client`）可经 `adb forward` 复用同一套设备能力。
+
+## 独立运行（主要用法）
+
+1. 打开无障碍服务：应用内「无障碍设置」→ 系统设置里开启 **AzCode Screen Control**。
+2. 填写 **DeepSeek API Key**（Base URL 与模型有默认值，可改），点「保存配置」。
+3. 输入任务（如「打开设置查看 Android 版本号」），点「运行任务」，日志区实时显示决策与执行。
+4. 需要 shell 能力时：安装 Shizuku 并授权，或用「切换模式」切到 ROOT；平时 NORMAL 模式仅用无障碍能力。
+
+Agent 工具集（与 Windows 端一致）：
+
+| 工具 | 说明 |
+| --- | --- |
+| `get_screen` | 读取当前屏幕节点（文本/坐标/可点击性） |
+| `tap` | 坐标或按文本点击 |
+| `swipe` | 滑动 |
+| `global` | back / home / recents / notifications |
+| `shell` | 以 Shizuku/Root 身份执行命令（需高权限模式） |
+| `finish` | 结束任务并总结 |
 
 ## 架构
 
 ```
-Windows Agent Console (.NET/WPF)          Android  (app.azcode.bridge)
-  DeepSeek 决策循环  ── adb forward ──▶  127.0.0.1:8848  AgentBridge
-                                                    ├── /screen  AzAccessibilityService
-                                                    ├── /tap     AzAccessibilityService
-                                                    ├── /shell   DeviceControl (Shizuku/Root)
-                                                    └── /notify  NotificationManager
+Android (app.azcode.bridge)
+  MainActivity ── AgentRunner ── DeepSeekClient ──▶ DeepSeek API
+                      │
+                      ├── AzAccessibilityService  读屏 / 点击 / 滑动 / 全局动作
+                      └── DeviceControl           Shizuku / Root shell 通道
+
+  （可选）AgentBridge 127.0.0.1:8848 ── adb forward ──▶ Windows 端
 ```
 
-## 能力桥 API
+## 能力桥 API（可选，供 Windows 端调用）
 
 | 方法 | 路径 | Body / 说明 |
 | --- | --- | --- |
@@ -37,16 +56,6 @@ Windows Agent Console (.NET/WPF)          Android  (app.azcode.bridge)
 
 读屏与点击依赖无障碍服务，需在系统设置手动开启「AzCode Screen Control」。
 
-## 连接方式
-
-```bash
-# 手机开启 USB 调试并连接后，Windows 端执行端口转发
-adb forward tcp:8848 tcp:8848
-
-# 验证
-curl http://127.0.0.1:8848/health
-```
-
 ## 构建
 
 本地需要 JDK 17 + Android SDK。仓库不含 `gradle-wrapper.jar`，使用系统 `gradle`：
@@ -61,11 +70,14 @@ gradle assembleDebug
 
 ```
 app/src/main/java/app/azcode/bridge/
-  MainActivity.kt            状态面板 + 服务/权限开关
-  BridgeService.kt           前台服务（specialUse）保持桥接常驻
-  AgentBridge.kt             127.0.0.1:8848 环回 HTTP 能力桥
+  MainActivity.kt            模型配置 + 任务输入 + 运行日志 + 能力开关
+  AgentRunner.kt             设备端 Agent 决策循环与工具执行
+  DeepSeekClient.kt          DeepSeek function calling（JDK 标准库）
+  AgentConfig.kt             API Key / Base URL / 模型配置持久化
   AzAccessibilityService.kt  读屏 / 点击 / 滑动 / 全局动作
   DeviceControl.kt           权限模式 + Shizuku/Root shell 执行
+  AgentBridge.kt             127.0.0.1:8848 环回 HTTP 能力桥（供 Windows 端）
+  BridgeService.kt           specialUse 前台服务保活桥接
 app/src/main/res/xml/azcode_accessibility_service.xml
 .github/workflows/android.yml
 ```

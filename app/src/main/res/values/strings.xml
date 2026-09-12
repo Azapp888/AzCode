@@ -1,14 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">AzCode Bridge</string>
+    <string name="app_name">AzCode</string>
     <string name="accessibility_label">AzCode Screen Control</string>
     <string name="accessibility_desc">允许 AzCode 读取屏幕节点并按文本/坐标点击，用于自动化操作。</string>
 
     <string name="notif_channel_bridge">设备桥接</string>
-    <string name="notif_title">AzCode Bridge 运行中</string>
+    <string name="notif_title">AzCode 桥接运行中</string>
 
-    <string name="status_bridge_off">桥接服务：已停止</string>
-    <string name="status_bridge_on">桥接服务：127.0.0.1:%1$d</string>
+    <string name="section_config">模型配置</string>
+    <string name="section_task">任务</string>
+    <string name="section_capabilities">设备能力</string>
+    <string name="section_log">运行日志</string>
+
+    <string name="hint_api_key">DeepSeek API Key</string>
+    <string name="hint_base_url">Base URL（默认 https://api.deepseek.com/v1）</string>
+    <string name="hint_model">模型（默认 deepseek-chat）</string>
+    <string name="hint_task">用自然语言描述要手机完成的任务，例如：打开设置查看 Android 版本号</string>
+
+    <string name="status_bridge_off">桥接：已停止</string>
+    <string name="status_bridge_on">桥接：127.0.0.1:%1$d</string>
     <string name="status_accessibility_on">无障碍：已开启</string>
     <string name="status_accessibility_off">无障碍：未开启</string>
     <string name="status_shizuku_on">Shizuku：已授权</string>
@@ -16,9 +26,12 @@
     <string name="status_root_on">Root：可用</string>
     <string name="status_root_off">Root：不可用</string>
 
+    <string name="btn_save_config">保存配置</string>
+    <string name="btn_run">运行任务</string>
+    <string name="btn_stop">停止</string>
     <string name="btn_start_bridge">启动桥接</string>
     <string name="btn_stop_bridge">停止桥接</string>
-    <string name="btn_open_accessibility">打开无障碍设置</string>
-    <string name="btn_request_shizuku">申请 Shizuku 授权</string>
+    <string name="btn_open_accessibility">无障碍设置</string>
+    <string name="btn_request_shizuku">Shizuku 授权</string>
     <string name="btn_cycle_mode">切换模式</string>
 </resources>
