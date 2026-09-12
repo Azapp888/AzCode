@@ -21,4 +21,7 @@
     <color name="error">#DC2626</color>
     <color name="error_bg">#FEF2F2</color>
     <color name="error_border">#FCA5A5</color>
+
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <color name="accent_navy">#061A3A</color>
 </resources>

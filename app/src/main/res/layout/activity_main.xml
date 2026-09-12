@@ -16,7 +16,7 @@
         <ImageView
             android:layout_width="30dp"
             android:layout_height="30dp"
-            android:src="@drawable/ic_launcher"
+            android:src="@mipmap/ic_launcher"
             android:contentDescription="@null" />
 
         <LinearLayout
@@ -27,9 +27,12 @@
             android:orientation="vertical">
 
             <TextView
+                android:id="@+id/tvHeaderTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/app_name"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/session_default_title"
                 android:textColor="@color/text_primary"
                 android:textSize="17sp"
                 android:textStyle="bold" />
@@ -55,6 +58,14 @@
                     android:textSize="11sp" />
             </LinearLayout>
         </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/btnSessions"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_history"
+            android:contentDescription="@string/title_sessions" />
 
         <ImageButton
             android:id="@+id/btnSettings"

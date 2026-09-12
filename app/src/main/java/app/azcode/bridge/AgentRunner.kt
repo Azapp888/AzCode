@@ -34,8 +34,11 @@ sealed interface AgentEvent {
 }
 
 /**
- * 设备端 Agent 决策循环：读取屏幕 → 交 DeepSeek 决策 → 直接调用本机无障碍/Shizuku 执行 → 回灌结果。
- * 与 Windows 端 AgentRunner 工具集一致，区别是这里直接在本机执行，无需 adb/HTTP。
+ * 设备端 Agent 决策循环：按需读取屏幕 → 交 DeepSeek 决策 → 直接调用本机无障碍/Shizuku 执行 → 回灌结果。
+ *
+ * 会话续接：每个任务的上下文（历史消息）保存在 [ChatSession.agentMessages] 中，
+ * 下一轮请求会在系统提示词之后接续这些历史，从而让同一会话里的多轮对话保持连贯。
+ * 系统提示词不持久化，每次根据最新的技能/记忆重新构建。
  */
 class AgentRunner(
     private val ctx: Context,
@@ -47,7 +50,7 @@ class AgentRunner(
         cancelled = true
     }
 
-    fun run(task: String, attachments: List<AttachmentReader.Prepared> = emptyList()) {
+    fun run(task: String, attachments: List<AttachmentReader.Prepared> = emptyList(), session: ChatSession? = null) {
         val apiKey = AgentConfig.apiKey(ctx)
         val baseUrl = AgentConfig.baseUrl(ctx)
         val model = AgentConfig.model(ctx)
@@ -55,54 +58,112 @@ class AgentRunner(
 
         val messages = JSONArray().apply {
             put(JSONObject().put("role", "system").put("content", buildSystemPrompt()))
+            appendHistory(session)
             put(JSONObject().put("role", "user").put("content", DeepSeekClient.buildUserContent(task, attachments)))
         }
         val tools = buildTools()
 
-        for (step in 1..maxSteps) {
-            if (cancelled) { listener(AgentEvent.Notice("已停止")); return }
-            listener(AgentEvent.Thinking)
-
-            val reply = try {
-                DeepSeekClient.chat(baseUrl, apiKey, model, messages, tools)
-            } catch (e: Exception) {
-                if (cancelled) listener(AgentEvent.Notice("已停止"))
-                else listener(AgentEvent.Failure(e.message ?: "请求模型失败"))
-                return
-            }
-            if (cancelled) { listener(AgentEvent.Notice("已停止")); return }
-
-            messages.put(assistantMessage(reply))
-
-            if (!reply.content.isNullOrBlank()) {
-                listener(AgentEvent.AssistantText(reply.content.trim()))
-            }
-
-            if (reply.toolCalls.isEmpty()) return
-
-            for (c in reply.toolCalls) {
+        try {
+            for (step in 1..maxSteps) {
                 if (cancelled) { listener(AgentEvent.Notice("已停止")); return }
-                listener(AgentEvent.ToolStart(c.name, c.arguments))
+                listener(AgentEvent.Thinking)
 
-                val result = execute(c)
-                val ok = runCatching { JSONObject(result).optBoolean("ok", false) }.getOrDefault(false)
-                listener(AgentEvent.ToolResult(c.name, ok, result))
-
-                messages.put(JSONObject().apply {
-                    put("role", "tool")
-                    put("tool_call_id", c.id)
-                    put("content", result)
-                })
-
-                if (c.name == "finish") {
-                    val summary = runCatching { JSONObject(c.arguments).optString("summary") }
-                        .getOrDefault("")
-                    if (summary.isNotBlank()) listener(AgentEvent.AssistantText(summary))
+                val reply = try {
+                    DeepSeekClient.chat(baseUrl, apiKey, model, messages, tools)
+                } catch (e: Exception) {
+                    if (cancelled) listener(AgentEvent.Notice("已停止"))
+                    else listener(AgentEvent.Failure(e.message ?: "请求模型失败"))
                     return
                 }
+                if (cancelled) { listener(AgentEvent.Notice("已停止")); return }
+
+                messages.put(assistantMessage(reply))
+
+                if (!reply.content.isNullOrBlank()) {
+                    listener(AgentEvent.AssistantText(reply.content.trim()))
+                }
+
+                if (reply.toolCalls.isEmpty()) return
+
+                for (c in reply.toolCalls) {
+                    if (cancelled) { listener(AgentEvent.Notice("已停止")); return }
+                    listener(AgentEvent.ToolStart(c.name, c.arguments))
+
+                    val result = execute(c)
+                    val ok = runCatching { JSONObject(result).optBoolean("ok", false) }.getOrDefault(false)
+                    listener(AgentEvent.ToolResult(c.name, ok, result))
+
+                    messages.put(JSONObject().apply {
+                        put("role", "tool")
+                        put("tool_call_id", c.id)
+                        put("content", result)
+                    })
+
+                    if (c.name == "finish") {
+                        val summary = runCatching { JSONObject(c.arguments).optString("summary") }
+                            .getOrDefault("")
+                        if (summary.isNotBlank()) listener(AgentEvent.AssistantText(summary))
+                        return
+                    }
+                }
+            }
+            listener(AgentEvent.Notice("已达到最大步数 $maxSteps，任务停止"))
+        } finally {
+            if (session != null) persistHistory(session, messages)
+        }
+    }
+
+    // ==================== 会话上下文 ====================
+
+    /** 将之前保存的历史消息接续到本轮消息之前（跳过系统提示词）。 */
+    private fun JSONArray.appendHistory(session: ChatSession?) {
+        if (session == null) return
+        val prior = runCatching { JSONArray(session.agentMessages) }.getOrNull() ?: return
+        for (i in 0 until prior.length()) {
+            val m = prior.optJSONObject(i) ?: continue
+            if (m.optString("role") == "system") continue
+            put(m)
+        }
+    }
+
+    /** 把本轮消息写回会话；剥离图片等大体积内容并限制历史长度。 */
+    private fun persistHistory(session: ChatSession, messages: JSONArray) {
+        val kept = JSONArray()
+        for (i in 0 until messages.length()) {
+            val m = messages.optJSONObject(i) ?: continue
+            val role = m.optString("role")
+            if (role == "system") continue
+            kept.put(sanitize(m))
+        }
+        // 仅保留最近一段，避免文件无限增长；裁剪后若以 tool 开头则丢弃这些孤立结果。
+        val max = 40
+        val trimmed = JSONArray()
+        val start = if (kept.length() > max) kept.length() - max else 0
+        var began = false
+        for (i in start until kept.length()) {
+            val m = kept.optJSONObject(i) ?: continue
+            if (!began && m.optString("role") == "tool") continue
+            began = true
+            trimmed.put(m)
+        }
+        session.agentMessages = trimmed.toString()
+    }
+
+    /** 用文本占位替换图片 base64，避免持久化文件过大。 */
+    private fun sanitize(m: JSONObject): JSONObject {
+        if (m.optString("role") != "user") return m
+        val content = m.opt("content") ?: return m
+        if (content !is JSONArray) return m
+        val out = JSONArray()
+        for (i in 0 until content.length()) {
+            val part = content.optJSONObject(i) ?: continue
+            if (part.optString("type") == "image_url") {
+                out.put(JSONObject().put("type", "text").put("text", "[图片]"))
+            } else {
+                out.put(part)
             }
         }
-        listener(AgentEvent.Notice("已达到最大步数 $maxSteps，任务停止"))
+        return JSONObject().put("role", "user").put("content", out)
     }
 
     private fun assistantMessage(reply: AssistantReply): JSONObject = JSONObject().apply {
@@ -123,14 +184,18 @@ class AgentRunner(
         }
     }
 
-    private fun execute(call: ToolCall): String = try {
+    // ==================== 工具执行 ====================
+
+    private fun execute(call: ToolCall): String {
         val args = runCatching { JSONObject(call.arguments.ifBlank { "{}" }) }.getOrElse { JSONObject() }
-        when (call.name) {
+        return try {
+            when (call.name) {
             "get_screen" -> AzAccessibilityService.instance?.dumpScreenJson()
-                ?: err("无障碍服务未开启，请在设置中开启 AzCode Screen Control")
+                ?: err("无障碍服务未开启，无法读取屏幕。请到「设置 → 设备能力 → 无障碍设置」开启 AzCode Screen Control 后重试。")
 
             "tap" -> {
-                val svc = AzAccessibilityService.instance ?: error("无障碍服务未开启")
+                val svc = AzAccessibilityService.instance
+                    ?: return err("无障碍服务未开启，无法点击。请到「设置 → 设备能力 → 无障碍设置」开启后重试。")
                 when {
                     args.has("text") ->
                         if (svc.tapText(args.getString("text"))) ok() else err("未找到文本：${args.getString("text")}")
@@ -142,7 +207,8 @@ class AgentRunner(
             }
 
             "swipe" -> {
-                val svc = AzAccessibilityService.instance ?: error("无障碍服务未开启")
+                val svc = AzAccessibilityService.instance
+                    ?: return err("无障碍服务未开启，无法滑动。请到「设置 → 设备能力 → 无障碍设置」开启后重试。")
                 val okSwipe = svc.dispatchSwipe(
                     args.getDouble("x1").toFloat(),
                     args.getDouble("y1").toFloat(),
@@ -154,7 +220,8 @@ class AgentRunner(
             }
 
             "global" -> {
-                val svc = AzAccessibilityService.instance ?: error("无障碍服务未开启")
+                val svc = AzAccessibilityService.instance
+                    ?: return err("无障碍服务未开启，无法执行系统导航。请到「设置 → 设备能力 → 无障碍设置」开启后重试。")
                 if (svc.globalAction(args.optString("action"))) ok() else err("未知动作")
             }
 
@@ -167,9 +234,10 @@ class AgentRunner(
             "finish" -> JSONObject().put("ok", true).put("summary", args.optString("summary")).toString()
 
             else -> err("未知工具 ${call.name}")
+            }
+        } catch (e: Exception) {
+            err(e.message ?: "执行异常")
         }
-    } catch (e: Exception) {
-        err(e.message ?: "执行异常")
     }
 
     private fun ok() = """{"ok":true}"""
@@ -193,7 +261,7 @@ class AgentRunner(
         fun str(desc: String) = JSONObject().put("type", "string").put("description", desc)
 
         return JSONArray().apply {
-            put(fn("get_screen", "读取当前屏幕可见节点（文本、坐标、可点击性）。", JSONObject(), emptyList()))
+            put(fn("get_screen", "读取当前屏幕可见节点（文本、坐标、可点击性）。仅在需要观察屏幕内容或定位控件时调用，无需每一步都读取。", JSONObject(), emptyList()))
             put(fn("tap", "点击屏幕，可用坐标或文本二者之一。", JSONObject()
                 .put("x", num("X 物理像素"))
                 .put("y", num("Y 物理像素"))
@@ -216,16 +284,35 @@ class AgentRunner(
         }
     }
 
+    // ==================== 系统提示词 ====================
+
     private fun buildSystemPrompt(): String {
         val base = AgentConfig.systemPrompt(ctx).ifBlank { AgentConfig.DEFAULT_SYSTEM_PROMPT }
-        val skills = SkillStore.enabled(ctx)
-        if (skills.isEmpty()) return base
         val sb = StringBuilder(base)
-        sb.append("\n\n你可以运用以下技能，按需遵循其中的步骤：")
-        skills.forEach { s ->
-            sb.append("\n\n### ").append(s.name)
-            if (s.description.isNotBlank()) sb.append("\n").append(s.description)
-            sb.append("\n").append(s.content.trim())
+
+        val skills = SkillStore.enabled(ctx)
+        if (skills.isNotEmpty()) {
+            sb.append("\n\n你可以运用以下技能，按需遵循其中的步骤：")
+            skills.forEach { s ->
+                sb.append("\n\n### ").append(s.name)
+                if (s.description.isNotBlank()) sb.append("\n").append(s.description)
+                sb.append("\n").append(s.content.trim())
+            }
+        }
+
+        val memory = MemoryStore.enabled(ctx)
+        if (memory.isNotEmpty()) {
+            sb.append("\n\n以下是用户要求你记住的信息，请在相关任务中遵循或直接使用：")
+            MemoryCategory.entries.forEach { cat ->
+                val items = memory.filter { it.category == cat }
+                if (items.isEmpty()) return@forEach
+                sb.append("\n\n【").append(cat.label).append("】")
+                items.forEach { m ->
+                    sb.append("\n- ")
+                    if (m.title.isNotBlank()) sb.append(m.title).append("：")
+                    sb.append(m.content.trim())
+                }
+            }
         }
         return sb.toString()
     }

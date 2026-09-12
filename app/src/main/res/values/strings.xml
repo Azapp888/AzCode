@@ -80,4 +80,31 @@
     <string name="warn_need_accessibility">请先在设置中开启无障碍服务</string>
     <string name="warn_need_apikey">请先在设置中填写 API Key</string>
     <string name="error_prefix">出错：%1$s</string>
+
+    <string name="title_sessions">任务历史</string>
+    <string name="session_default_title">新任务</string>
+    <string name="btn_new_session">新建任务</string>
+    <string name="sessions_empty">还没有任务。点右上角「+」新建一个任务。</string>
+    <string name="session_meta">%1$d 条消息 · %2$s</string>
+    <string name="delete_session_title">删除任务</string>
+    <string name="delete_session_msg">确定删除「%1$s」？该任务的聊天记录也会一并删除。</string>
+
+    <string name="section_memory">记忆</string>
+    <string name="memory_entry">记忆（共 %1$d 条）</string>
+    <string name="title_memory">记忆</string>
+    <string name="btn_add_memory">添加记忆</string>
+    <string name="memory_empty">还没有记忆。点右上角「+」分条保存 token、习惯或技能方法。</string>
+    <string name="memory_category_label">分类</string>
+    <string name="memory_title_label">标题（可选）</string>
+    <string name="memory_content_label">内容</string>
+    <string name="memory_hint_title">标题</string>
+    <string name="memory_hint_content">要记住的内容</string>
+    <string name="memory_dialog_title">添加记忆</string>
+    <string name="memory_saved">已保存</string>
+    <string name="memory_content_required">请输入内容</string>
+    <string name="memory_hint_normal">启用后注入 Agent 上下文</string>
+    <string name="memory_hint_tap_reveal">敏感信息已打码，点击显示</string>
+    <string name="memory_hint_tap_hide">点击隐藏</string>
+    <string name="delete_memory_title">删除记忆</string>
+    <string name="delete_memory_msg">确定删除「%1$s」？</string>
 </resources>

@@ -21,9 +21,10 @@ import org.json.JSONObject
 
 /**
  * 聊天式主界面（DeepSeek 风格）：
+ *  - 支持多个任务会话，聊天记录按会话持久化，可从历史中切换
  *  - 用户/助手消息以气泡呈现，支持图片与文档附件
  *  - 工具调用以可折叠卡片呈现，默认收起，失败时自动展开
- *  - 所有配置与设备能力入口收敛到 SettingsActivity
+ *  - 所有配置、技能与记忆入口收敛到 SettingsActivity
  */
 class MainActivity : Activity() {
 
@@ -35,6 +36,7 @@ class MainActivity : Activity() {
     private lateinit var btnAttach: ImageButton
     private lateinit var dotStatus: View
     private lateinit var tvHeaderStatus: TextView
+    private lateinit var tvHeaderTitle: TextView
     private lateinit var svAttachments: HorizontalScrollView
     private lateinit var attachmentsRow: LinearLayout
 
@@ -42,6 +44,8 @@ class MainActivity : Activity() {
     private var worker: Thread? = null
     @Volatile private var destroyed = false
 
+    private lateinit var session: ChatSession
+    private var lastLoadedId: String? = null
     private var typingView: View? = null
     private var activeTool: ToolCard? = null
     private var welcomeView: View? = null
@@ -74,9 +78,13 @@ class MainActivity : Activity() {
         btnAttach = findViewById(R.id.btnAttach)
         dotStatus = findViewById(R.id.dotStatus)
         tvHeaderStatus = findViewById(R.id.tvHeaderStatus)
+        tvHeaderTitle = findViewById(R.id.tvHeaderTitle)
         svAttachments = findViewById(R.id.svAttachments)
         attachmentsRow = findViewById(R.id.attachmentsRow)
 
+        findViewById<View>(R.id.btnSessions).setOnClickListener {
+            startActivity(Intent(this, SessionsActivity::class.java))
+        }
         findViewById<View>(R.id.btnSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
@@ -85,13 +93,23 @@ class MainActivity : Activity() {
         btnAttach.setOnClickListener { pickAttachments() }
 
         runCatching { rikka.shizuku.Shizuku.addRequestPermissionResultListener(shizukuPermissionListener) }
-        showWelcome()
+        session = SessionStore.current(this)
+        lastLoadedId = session.id
+        renderSession()
         refreshAttachments()
     }
 
     override fun onResume() {
         super.onResume()
         refreshHeaderStatus()
+        val currentId = SessionStore.current(this).id
+        if (currentId != lastLoadedId && runner == null) {
+            session = SessionStore.get(this, currentId) ?: SessionStore.current(this)
+            lastLoadedId = session.id
+            renderSession()
+        } else {
+            updateHeaderTitle()
+        }
     }
 
     override fun onDestroy() {
@@ -99,6 +117,44 @@ class MainActivity : Activity() {
         runner?.cancel()
         runCatching { rikka.shizuku.Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener) }
         super.onDestroy()
+    }
+
+    // ==================== 会话渲染 ====================
+
+    private fun renderSession() {
+        chatContainer.removeAllViews()
+        typingView = null
+        activeTool = null
+        welcomeView = null
+        updateHeaderTitle()
+
+        if (session.turns.isEmpty()) {
+            showWelcome()
+            return
+        }
+        session.turns.forEach { renderTurn(it) }
+        scrollToBottom()
+    }
+
+    private fun renderTurn(turn: ChatTurn) {
+        when (turn.kind) {
+            "user" -> addUserMessage(turn.text, turn.attachments, persist = false)
+            "assistant" -> addAssistantMessage(turn.text, persist = false)
+            "notice" -> addNotice(turn.text, persist = false)
+            "error" -> addError(turn.text, persist = false)
+            "tool" -> {
+                startToolCard(turn.toolName, turn.toolArgs, persist = false)
+                finishToolCard(turn.toolOk, turn.toolResult, persist = false)
+            }
+        }
+    }
+
+    private fun updateHeaderTitle() {
+        tvHeaderTitle.text = session.title.ifBlank { getString(R.string.session_default_title) }
+    }
+
+    private fun persistSession() {
+        SessionStore.save(this, session)
     }
 
     // ==================== 欢迎区 ====================
@@ -204,10 +260,6 @@ class MainActivity : Activity() {
             Toast.makeText(this, R.string.warn_need_task, Toast.LENGTH_SHORT).show()
             return
         }
-        if (!AzAccessibilityService.isEnabled()) {
-            Toast.makeText(this, R.string.warn_need_accessibility, Toast.LENGTH_LONG).show()
-            return
-        }
         if (AgentConfig.apiKey(this).isBlank()) {
             Toast.makeText(this, R.string.warn_need_apikey, Toast.LENGTH_LONG).show()
             return
@@ -224,6 +276,7 @@ class MainActivity : Activity() {
 
         val r = AgentRunner(this) { event -> runOnUiThread { handleEvent(event) } }
         runner = r
+        val runningSession = session
         setRunning(true)
 
         worker = Thread({
@@ -237,10 +290,11 @@ class MainActivity : Activity() {
                         return@Thread
                     }
                 }
-                r.run(displayTask, prepared)
+                r.run(displayTask, prepared, runningSession)
             } catch (e: Exception) {
                 runOnUiThread { handleEvent(AgentEvent.Failure(e.message ?: "任务异常结束")) }
             } finally {
+                SessionStore.save(this, runningSession)
                 runOnUiThread {
                     if (!destroyed) {
                         runner = null
@@ -263,6 +317,7 @@ class MainActivity : Activity() {
         btnStop.isEnabled = running
         btnAttach.isEnabled = !running
         etTask.isEnabled = !running
+        findViewById<View>(R.id.btnSessions).isEnabled = !running
     }
 
     // ==================== 事件处理 ====================
@@ -306,7 +361,17 @@ class MainActivity : Activity() {
 
     // ==================== 消息渲染 ====================
 
-    private fun addUserMessage(text: String, attachmentNames: List<String> = emptyList()) {
+    private fun appendTurn(turn: ChatTurn) {
+        session.turns.add(turn)
+        // 首条用户消息用于生成会话标题
+        if (turn.kind == "user" && (session.title.isBlank() || session.title == getString(R.string.session_default_title))) {
+            session.title = SessionStore.deriveTitle(turn.text)
+            updateHeaderTitle()
+        }
+        persistSession()
+    }
+
+    private fun addUserMessage(text: String, attachmentNames: List<String> = emptyList(), persist: Boolean = true) {
         val v = layoutInflater.inflate(R.layout.item_msg_user, chatContainer, false)
         v.findViewById<TextView>(R.id.tvMsg).text = text
         if (attachmentNames.isNotEmpty()) {
@@ -315,31 +380,35 @@ class MainActivity : Activity() {
             tvAtt.text = "附件：" + attachmentNames.joinToString("、")
         }
         chatContainer.addView(v)
+        if (persist) appendTurn(ChatTurn(kind = "user", text = text, attachments = attachmentNames))
         scrollToBottom()
     }
 
-    private fun addAssistantMessage(text: String) {
+    private fun addAssistantMessage(text: String, persist: Boolean = true) {
         val v = layoutInflater.inflate(R.layout.item_msg_assistant, chatContainer, false)
         v.findViewById<TextView>(R.id.tvMsg).text = text
         chatContainer.addView(v)
+        if (persist) appendTurn(ChatTurn(kind = "assistant", text = text))
         scrollToBottom()
     }
 
-    private fun addNotice(text: String) {
+    private fun addNotice(text: String, persist: Boolean = true) {
         val v = layoutInflater.inflate(R.layout.item_msg_system, chatContainer, false)
         v.findViewById<TextView>(R.id.tvMsg).text = text
         chatContainer.addView(v)
+        if (persist) appendTurn(ChatTurn(kind = "notice", text = text))
         scrollToBottom()
     }
 
-    private fun addError(text: String) {
+    private fun addError(text: String, persist: Boolean = true) {
         val v = layoutInflater.inflate(R.layout.item_msg_error, chatContainer, false)
         v.findViewById<TextView>(R.id.tvMsg).text = text
         chatContainer.addView(v)
+        if (persist) appendTurn(ChatTurn(kind = "error", text = text))
         scrollToBottom()
     }
 
-    private fun startToolCard(name: String, argsRaw: String) {
+    private fun startToolCard(name: String, argsRaw: String, persist: Boolean = true) {
         activeTool = null
         val v = layoutInflater.inflate(R.layout.item_msg_tool, chatContainer, false)
         val card = ToolCard(v)
@@ -349,16 +418,26 @@ class MainActivity : Activity() {
         card.args.text = prettyArgs(argsRaw)
         v.findViewById<View>(R.id.toolHeader).setOnClickListener { card.toggle() }
         chatContainer.addView(v)
+        card.turnName = name
+        card.turnArgs = argsRaw
         activeTool = card
+        if (persist) appendTurn(ChatTurn(kind = "tool", toolName = name, toolArgs = argsRaw))
         scrollToBottom()
     }
 
-    private fun finishToolCard(ok: Boolean, output: String) {
+    private fun finishToolCard(ok: Boolean, output: String, persist: Boolean = true) {
         val card = activeTool ?: return
         card.status.text = getString(if (ok) R.string.tool_ok else R.string.tool_fail)
         card.status.setTextColor(if (ok) colorOk else colorFail)
         card.result.text = truncate(prettyResult(output), 3000)
         if (!ok) card.expand()
+        if (persist) {
+            val last = session.turns.lastOrNull()
+            if (last != null && last.kind == "tool") {
+                session.turns[session.turns.lastIndex] = last.copy(toolOk = ok, toolResult = output)
+                persistSession()
+            }
+        }
         activeTool = null
         scrollToBottom()
     }
@@ -367,6 +446,8 @@ class MainActivity : Activity() {
         val status: TextView = root.findViewById(R.id.tvToolStatus)
         val args: TextView = root.findViewById(R.id.tvToolArgs)
         val result: TextView = root.findViewById(R.id.tvToolResult)
+        var turnName: String = ""
+        var turnArgs: String = ""
         private val body: View = root.findViewById(R.id.toolBody)
         private val chevron: ImageView = root.findViewById(R.id.ivChevron)
         private var expanded = false

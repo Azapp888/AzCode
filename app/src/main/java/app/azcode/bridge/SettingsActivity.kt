@@ -23,6 +23,7 @@ class SettingsActivity : Activity() {
     private lateinit var etSystemPrompt: EditText
     private lateinit var tvStatus: TextView
     private lateinit var tvSkillsEntry: TextView
+    private lateinit var tvMemoryEntry: TextView
     private lateinit var btnBridge: Button
 
     private val shizukuPermissionListener =
@@ -48,6 +49,7 @@ class SettingsActivity : Activity() {
         etSystemPrompt = findViewById(R.id.etSystemPrompt)
         tvStatus = findViewById(R.id.tvStatus)
         tvSkillsEntry = findViewById(R.id.tvSkillsEntry)
+        tvMemoryEntry = findViewById(R.id.tvMemoryEntry)
         btnBridge = findViewById(R.id.btnBridge)
 
         etKey.setText(AgentConfig.apiKey(this))
@@ -60,6 +62,9 @@ class SettingsActivity : Activity() {
         findViewById<View>(R.id.btnSave).setOnClickListener { saveConfig() }
         tvSkillsEntry.setOnClickListener {
             startActivity(Intent(this, SkillsActivity::class.java))
+        }
+        tvMemoryEntry.setOnClickListener {
+            startActivity(Intent(this, MemoryActivity::class.java))
         }
         findViewById<View>(R.id.btnAccessibility).setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -140,6 +145,8 @@ class SettingsActivity : Activity() {
         val total = SkillStore.count(this)
         val enabled = SkillStore.enabled(this).size
         tvSkillsEntry.text = getString(R.string.skills_entry, enabled, total)
+
+        tvMemoryEntry.text = getString(R.string.memory_entry, MemoryStore.count(this))
     }
 
     private fun maybeRequestNotificationPermission() {
