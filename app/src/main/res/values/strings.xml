@@ -1,37 +1,65 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">AzCode</string>
+    <string name="app_subtitle">手机自动化助手</string>
     <string name="accessibility_label">AzCode Screen Control</string>
     <string name="accessibility_desc">允许 AzCode 读取屏幕节点并按文本/坐标点击，用于自动化操作。</string>
 
     <string name="notif_channel_bridge">设备桥接</string>
     <string name="notif_title">AzCode 桥接运行中</string>
 
-    <string name="section_config">模型配置</string>
-    <string name="section_task">任务</string>
-    <string name="section_capabilities">设备能力</string>
-    <string name="section_log">运行日志</string>
+    <string name="chat_empty_title">有什么可以帮你的？</string>
+    <string name="chat_empty_hint">用自然语言描述要在手机上完成的任务，AzCode 会一步步操作。</string>
+    <string name="chat_example_1">打开设置查看 Android 版本号</string>
+    <string name="chat_example_2">打开微信，进入「我」页面对比截图</string>
+    <string name="hint_task">发消息，描述要完成的任务…</string>
+    <string name="btn_send">发送</string>
+    <string name="btn_stop">停止</string>
+    <string name="typing">正在思考…</string>
+    <string name="stopping">正在停止…</string>
 
+    <string name="title_settings">设置</string>
+    <string name="section_model">模型</string>
     <string name="hint_api_key">DeepSeek API Key</string>
-    <string name="hint_base_url">Base URL（默认 https://api.deepseek.com/v1）</string>
-    <string name="hint_model">模型（默认 deepseek-chat）</string>
-    <string name="hint_task">用自然语言描述要手机完成的任务，例如：打开设置查看 Android 版本号</string>
+    <string name="hint_base_url">Base URL</string>
+    <string name="hint_model">模型名</string>
+    <string name="hint_max_steps">最大步数</string>
+    <string name="btn_save_config">保存配置</string>
+    <string name="toast_saved">配置已保存</string>
+
+    <string name="section_capabilities">设备能力</string>
+    <string name="btn_open_accessibility">无障碍设置</string>
+    <string name="btn_request_shizuku">Shizuku 授权</string>
+    <string name="btn_start_bridge">启动桥接</string>
+    <string name="btn_stop_bridge">停止桥接</string>
+    <string name="btn_cycle_mode">切换权限模式</string>
+    <string name="section_about">关于</string>
+    <string name="about_desc">AzCode 是一款运行在本机的 Android 自动化助手，通过无障碍服务读取屏幕并执行操作，可选 Shizuku/Root 提升命令执行权限。遇到问题请先到「设备能力」检查状态。</string>
 
     <string name="status_bridge_off">桥接：已停止</string>
     <string name="status_bridge_on">桥接：127.0.0.1:%1$d</string>
-    <string name="status_accessibility_on">无障碍：已开启</string>
-    <string name="status_accessibility_off">无障碍：未开启</string>
-    <string name="status_shizuku_on">Shizuku：已授权</string>
-    <string name="status_shizuku_off">Shizuku：不可用</string>
-    <string name="status_root_on">Root：可用</string>
-    <string name="status_root_off">Root：不可用</string>
+    <string name="status_accessibility_on">无障碍已开启</string>
+    <string name="status_accessibility_off">无障碍未开启</string>
+    <string name="status_shizuku_on">Shizuku 已授权</string>
+    <string name="status_shizuku_off">Shizuku 不可用</string>
+    <string name="status_root_on">Root 可用</string>
+    <string name="status_root_off">Root 不可用</string>
 
-    <string name="btn_save_config">保存配置</string>
-    <string name="btn_run">运行任务</string>
-    <string name="btn_stop">停止</string>
-    <string name="btn_start_bridge">启动桥接</string>
-    <string name="btn_stop_bridge">停止桥接</string>
-    <string name="btn_open_accessibility">无障碍设置</string>
-    <string name="btn_request_shizuku">Shizuku 授权</string>
-    <string name="btn_cycle_mode">切换模式</string>
+    <string name="tool_params">参数</string>
+    <string name="tool_result">结果</string>
+    <string name="tool_running">执行中</string>
+    <string name="tool_ok">成功</string>
+    <string name="tool_fail">失败</string>
+
+    <string name="tool_name_get_screen">读取屏幕</string>
+    <string name="tool_name_tap">点击</string>
+    <string name="tool_name_swipe">滑动</string>
+    <string name="tool_name_global">系统导航</string>
+    <string name="tool_name_shell">执行命令</string>
+    <string name="tool_name_finish">完成任务</string>
+
+    <string name="warn_need_task">请输入任务</string>
+    <string name="warn_need_accessibility">请先在设置中开启无障碍服务</string>
+    <string name="warn_need_apikey">请先在设置中填写 API Key</string>
+    <string name="error_prefix">出错：%1$s</string>
 </resources>

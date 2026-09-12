@@ -6,10 +6,17 @@ Android 原生端独立应用：在手机上输入自然语言任务，内置 De
 
 ## 独立运行（主要用法）
 
-1. 打开无障碍服务：应用内「无障碍设置」→ 系统设置里开启 **AzCode Screen Control**。
-2. 填写 **DeepSeek API Key**（Base URL 与模型有默认值，可改），点「保存配置」。
-3. 输入任务（如「打开设置查看 Android 版本号」），点「运行任务」，日志区实时显示决策与执行。
-4. 需要 shell 能力时：安装 Shizuku 并授权，或用「切换模式」切到 ROOT；平时 NORMAL 模式仅用无障碍能力。
+1. 打开无障碍服务：点右上角齿轮进入「设置」→「无障碍设置」→ 在系统设置里开启 **AzCode Screen Control**。
+2. 在「设置」里填写 **DeepSeek API Key**（Base URL 与模型有默认值，可改），点「保存配置」。
+3. 返回聊天界面，输入任务（如「打开设置查看 Android 版本号」）并发送。
+4. 需要 shell 能力时：安装 Shizuku 并授权，或在「设置」里用「切换权限模式」切到 ROOT；平时 NORMAL 模式仅用无障碍能力。
+
+### 界面
+
+- **聊天式对话**：用户消息靠右（蓝色气泡），助手回复靠左（灰色气泡）。
+- **工具调用折叠框**：每一步实际执行的工具（读屏、点击、滑动、命令等）以可折叠卡片展示，默认收起；点击标题展开查看参数与结果，执行失败时自动展开。
+- **思考指示器**：等待模型响应时显示「正在思考…」。
+- **设置页**：模型配置、无障碍/Shizuku/Root 状态与开关、桥接启停、权限模式切换全部收敛到设置页，主界面保持纯净。
 
 Agent 工具集（与 Windows 端一致）：
 
@@ -70,14 +77,16 @@ gradle assembleDebug
 
 ```
 app/src/main/java/app/azcode/bridge/
-  MainActivity.kt            模型配置 + 任务输入 + 运行日志 + 能力开关
-  AgentRunner.kt             设备端 Agent 决策循环与工具执行
+  MainActivity.kt            聊天界面：气泡消息 + 可折叠工具卡片
+  SettingsActivity.kt        设置页：模型配置 + 设备能力 + 桥接/权限模式
+  AgentRunner.kt             设备端 Agent 决策循环，向 UI 输出结构化事件
   DeepSeekClient.kt          DeepSeek function calling（JDK 标准库）
   AgentConfig.kt             API Key / Base URL / 模型配置持久化
   AzAccessibilityService.kt  读屏 / 点击 / 滑动 / 全局动作
   DeviceControl.kt           权限模式 + Shizuku/Root shell 执行
   AgentBridge.kt             127.0.0.1:8848 环回 HTTP 能力桥（供 Windows 端）
   BridgeService.kt           specialUse 前台服务保活桥接
+app/src/main/res/layout/     聊天页 / 设置页 / 各类消息卡片
 app/src/main/res/xml/azcode_accessibility_service.xml
 .github/workflows/android.yml
 ```
