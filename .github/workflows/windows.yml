@@ -1,0 +1,49 @@
+name: windows-build
+
+on:
+  push:
+    branches: [main, "260912-feat-windows-client"]
+    tags: ["windows-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore src/AzCode.Desktop/AzCode.Desktop.csproj
+
+      - name: Build
+        run: dotnet build src/AzCode.Desktop/AzCode.Desktop.csproj -c Release --no-restore
+
+      - name: Publish (win-x64, self-contained single file)
+        run: dotnet publish src/AzCode.Desktop/AzCode.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: azcode-console-win-x64
+          path: dist/**
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/windows-v')
+    runs-on: windows-latest
+    needs: [build]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: azcode-console-win-x64
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**
+          generate_release_notes: true
