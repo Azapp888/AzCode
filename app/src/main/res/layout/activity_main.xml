@@ -102,10 +102,78 @@
         android:background="@color/divider" />
 
     <LinearLayout
+        android:id="@+id/composer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="8dp">
+        android:background="@color/background"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="14dp">
+
+        <LinearLayout
+            android:id="@+id/modelPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_composer_bubble"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/model_panel_model"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <Spinner
+                android:id="@+id/spModel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/model_panel_depth"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:id="@+id/depthRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:layout_marginBottom="6dp">
+
+            <TextView
+                android:id="@+id/btnModelBox"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_chip"
+                android:clickable="true"
+                android:focusable="true"
+                android:drawableEnd="@drawable/ic_chevron"
+                android:drawablePadding="2dp"
+                android:gravity="center_vertical"
+                android:paddingStart="12dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
 
         <HorizontalScrollView
             android:id="@+id/svAttachments"
@@ -123,43 +191,46 @@
         </HorizontalScrollView>
 
         <LinearLayout
+            android:id="@+id/inputBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:background="@drawable/bg_composer_bubble"
+            android:elevation="3dp"
+            android:gravity="bottom"
             android:orientation="horizontal"
-            android:gravity="bottom">
-
-            <ImageButton
-                android:id="@+id/btnAttach"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_attach"
-                android:contentDescription="@string/btn_attach" />
+            android:padding="4dp">
 
             <EditText
                 android:id="@+id/etTask"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="4dp"
-                android:background="@drawable/bg_input"
+                android:background="@null"
                 android:hint="@string/hint_task"
                 android:inputType="textMultiLine|textCapSentences"
                 android:maxLines="5"
                 android:minHeight="44dp"
                 android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
                 android:textColor="@color/text_primary"
                 android:textColorHint="@color/text_secondary"
                 android:textSize="15sp" />
 
             <ImageButton
+                android:id="@+id/btnAttach"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_plus"
+                android:contentDescription="@string/btn_attach" />
+
+            <ImageButton
                 android:id="@+id/btnSend"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="2dp"
                 android:background="@drawable/bg_circle_primary"
                 android:src="@drawable/ic_send"
                 android:contentDescription="@string/btn_send" />
@@ -168,7 +239,7 @@
                 android:id="@+id/btnStop"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="2dp"
                 android:background="@drawable/bg_circle_stop"
                 android:src="@drawable/ic_stop"
                 android:visibility="gone"

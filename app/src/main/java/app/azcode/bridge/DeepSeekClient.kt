@@ -21,8 +21,11 @@ object DeepSeekClient {
         model: String,
         messages: JSONArray,
         tools: JSONArray,
+        reasoningEffort: String? = null,
     ): AssistantReply {
-        val body = JSONObject().apply {
+        val url = baseUrl.trimEnd('/') + "/chat/completions"
+
+        fun buildBody(withEffort: Boolean): JSONObject = JSONObject().apply {
             put("model", model)
             put("temperature", 0.2)
             put("messages", messages)
@@ -30,9 +33,24 @@ object DeepSeekClient {
                 put("tools", tools)
                 put("tool_choice", "auto")
             }
+            if (withEffort && reasoningEffort != null) put("reasoning_effort", reasoningEffort)
         }
 
-        val conn = (URL(baseUrl.trimEnd('/') + "/chat/completions").openConnection() as HttpURLConnection).apply {
+        val first = buildBody(true)
+        val (code, text) = post(url, apiKey, first)
+
+        // 部分网关不识别 reasoning_effort，遇到此类错误时去掉该参数重试一次。
+        if (code !in 200..299 && reasoningEffort != null && text.contains("reasoning_effort")) {
+            val (retryCode, retryText) = post(url, apiKey, buildBody(false))
+            if (retryCode !in 200..299) throw RuntimeException("DeepSeek HTTP $retryCode: ${retryText.take(400)}")
+            return parse(retryText)
+        }
+        if (code !in 200..299) throw RuntimeException("DeepSeek HTTP $code: ${text.take(400)}")
+        return parse(text)
+    }
+
+    private fun post(url: String, apiKey: String, body: JSONObject): Pair<Int, String> {
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 15_000
             readTimeout = 120_000
@@ -41,12 +59,13 @@ object DeepSeekClient {
             setRequestProperty("Authorization", "Bearer $apiKey")
         }
         conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-
         val code = conn.responseCode
         val stream = if (code in 200..299) conn.inputStream else conn.errorStream
         val text = stream?.bufferedReader()?.use { it.readText() } ?: ""
-        if (code !in 200..299) throw RuntimeException("DeepSeek HTTP $code: ${text.take(400)}")
+        return code to text
+    }
 
+    private fun parse(text: String): AssistantReply {
         val message = JSONObject(text)
             .getJSONArray("choices").getJSONObject(0).getJSONObject("message")
         val content = if (message.isNull("content")) null else message.optString("content").ifEmpty { null }

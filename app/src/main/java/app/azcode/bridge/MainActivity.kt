@@ -8,13 +8,17 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.view.Gravity
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONObject
@@ -39,6 +43,11 @@ class MainActivity : Activity() {
     private lateinit var tvHeaderTitle: TextView
     private lateinit var svAttachments: HorizontalScrollView
     private lateinit var attachmentsRow: LinearLayout
+    private lateinit var modelPanel: View
+    private lateinit var btnModelBox: TextView
+    private lateinit var spModel: Spinner
+    private lateinit var depthRow: LinearLayout
+    private var updatingModelSpinner = false
 
     @Volatile private var runner: AgentRunner? = null
     private var worker: Thread? = null
@@ -81,6 +90,10 @@ class MainActivity : Activity() {
         tvHeaderTitle = findViewById(R.id.tvHeaderTitle)
         svAttachments = findViewById(R.id.svAttachments)
         attachmentsRow = findViewById(R.id.attachmentsRow)
+        modelPanel = findViewById(R.id.modelPanel)
+        btnModelBox = findViewById(R.id.btnModelBox)
+        spModel = findViewById(R.id.spModel)
+        depthRow = findViewById(R.id.depthRow)
 
         findViewById<View>(R.id.btnSessions).setOnClickListener {
             startActivity(Intent(this, SessionsActivity::class.java))
@@ -93,6 +106,7 @@ class MainActivity : Activity() {
         btnAttach.setOnClickListener { pickAttachments() }
 
         runCatching { rikka.shizuku.Shizuku.addRequestPermissionResultListener(shizukuPermissionListener) }
+        setupModelSelector()
         session = SessionStore.current(this)
         lastLoadedId = session.id
         renderSession()
@@ -102,6 +116,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         refreshHeaderStatus()
+        syncModelSelector()
         val currentId = SessionStore.current(this).id
         if (currentId != lastLoadedId && runner == null) {
             session = SessionStore.get(this, currentId) ?: SessionStore.current(this)
@@ -155,6 +170,98 @@ class MainActivity : Activity() {
 
     private fun persistSession() {
         SessionStore.save(this, session)
+    }
+
+    // ==================== 模型 / 思考深度 ====================
+
+    private var modelList: List<String> = emptyList()
+
+    private fun setupModelSelector() {
+        val current = AgentConfig.model(this)
+        modelList = LinkedHashSet<String>().apply {
+            addAll(AgentConfig.MODEL_PRESETS)
+            add(current)
+        }.toList()
+
+        updatingModelSpinner = true
+        spModel.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, modelList)
+        spModel.setSelection(modelList.indexOf(current).coerceAtLeast(0), false)
+        updatingModelSpinner = false
+        spModel.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (updatingModelSpinner) return
+                AgentConfig.setModel(this@MainActivity, modelList[position])
+                updateModelBox()
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        depthRow.removeAllViews()
+        ThinkingDepth.entries.forEach { depth ->
+            val chip = TextView(this).apply {
+                text = depth.label
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setPadding(dp(14), dp(6), dp(14), dp(6))
+                setOnClickListener {
+                    AgentConfig.setThinkingDepth(this@MainActivity, depth)
+                    updateDepthChips()
+                    updateModelBox()
+                }
+            }
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+            lp.marginEnd = dp(8)
+            depthRow.addView(chip, lp)
+        }
+
+        btnModelBox.setOnClickListener {
+            modelPanel.visibility = if (modelPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
+        updateDepthChips()
+        updateModelBox()
+    }
+
+    private fun syncModelSelector() {
+        val current = AgentConfig.model(this)
+        val adapter = spModel.adapter
+        if (adapter != null && current !in modelList) {
+            setupModelSelector()
+            return
+        }
+        if (adapter != null) {
+            for (i in 0 until adapter.count) {
+                if (adapter.getItem(i) == current) {
+                    updatingModelSpinner = true
+                    spModel.setSelection(i, false)
+                    updatingModelSpinner = false
+                    break
+                }
+            }
+        }
+        updateDepthChips()
+        updateModelBox()
+    }
+
+    private fun updateDepthChips() {
+        val current = AgentConfig.thinkingDepth(this)
+        for (i in 0 until depthRow.childCount) {
+            val chip = depthRow.getChildAt(i) as TextView
+            val selected = ThinkingDepth.entries[i] == current
+            chip.background = getDrawable(if (selected) R.drawable.bg_chip_selected else R.drawable.bg_chip)
+            chip.setTextColor(getColor(if (selected) R.color.text_on_primary else R.color.text_secondary))
+        }
+    }
+
+    private fun updateModelBox() {
+        btnModelBox.text = getString(
+            R.string.model_box_format,
+            AgentConfig.model(this),
+            AgentConfig.thinkingDepth(this).label,
+        )
     }
 
     // ==================== 欢迎区 ====================

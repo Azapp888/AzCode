@@ -91,7 +91,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun saveConfig() {
-        val steps = etMaxSteps.text.toString().trim().toIntOrNull()?.coerceIn(1, 100)
+        val steps = etMaxSteps.text.toString().trim().toIntOrNull()?.coerceIn(0, 1000)
             ?: AgentConfig.DEFAULT_MAX_STEPS
         AgentConfig.save(
             this,

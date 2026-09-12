@@ -3,7 +3,22 @@ package app.azcode.bridge
 import android.content.Context
 
 /**
- * Agent 配置：API Key / Base URL / 模型 / 最大步数 / 自定义系统提示词。
+ * 模型的思考深度：映射到请求的 reasoning_effort，并在系统提示词中体现。
+ * OFF 不发送 reasoning_effort。
+ */
+enum class ThinkingDepth(val key: String, val label: String, val effort: String?) {
+    OFF("off", "关闭", null),
+    FAST("fast", "快速", "low"),
+    STANDARD("standard", "标准", "medium"),
+    DEEP("deep", "深度", "high");
+
+    companion object {
+        fun from(key: String?): ThinkingDepth = entries.firstOrNull { it.key == key } ?: STANDARD
+    }
+}
+
+/**
+ * Agent 配置：API Key / Base URL / 模型 / 思考深度 / 最大步数 / 自定义系统提示词。
  * 存于应用私有 SharedPreferences。Key 由用户自行填写，应用不读取任何环境变量。
  */
 object AgentConfig {
@@ -12,12 +27,16 @@ object AgentConfig {
     private const val KEY_API = "api_key"
     private const val KEY_BASE = "base_url"
     private const val KEY_MODEL = "model"
+    private const val KEY_DEPTH = "thinking_depth"
     private const val KEY_MAX_STEPS = "max_steps"
     private const val KEY_SYSTEM_PROMPT = "system_prompt"
 
     const val DEFAULT_BASE = "https://api.deepseek.com/v1"
     const val DEFAULT_MODEL = "deepseek-flash"
-    const val DEFAULT_MAX_STEPS = 25
+    const val DEFAULT_MAX_STEPS = 0 // 0 表示无限步数
+
+    /** 聊天界面右下角快捷选择的内置模型。 */
+    val MODEL_PRESETS = listOf("deepseek-flash", "deepseek-chat", "deepseek-reasoner")
 
     /** 内置默认系统提示词；用户留空时使用。 */
     const val DEFAULT_SYSTEM_PROMPT = """你是 AzCode，一个运行在 Android 手机本地的自动化助手，直接操作用户的手机。
@@ -32,10 +51,20 @@ object AgentConfig {
     fun apiKey(ctx: Context): String = prefs(ctx).getString(KEY_API, "")!!
     fun baseUrl(ctx: Context): String = prefs(ctx).getString(KEY_BASE, DEFAULT_BASE)!!
     fun model(ctx: Context): String = prefs(ctx).getString(KEY_MODEL, DEFAULT_MODEL)!!
+    fun thinkingDepth(ctx: Context): ThinkingDepth =
+        ThinkingDepth.from(prefs(ctx).getString(KEY_DEPTH, ThinkingDepth.STANDARD.key))
     fun maxSteps(ctx: Context): Int = prefs(ctx).getInt(KEY_MAX_STEPS, DEFAULT_MAX_STEPS)
     fun systemPrompt(ctx: Context): String = prefs(ctx).getString(KEY_SYSTEM_PROMPT, "")!!
     fun setSystemPrompt(ctx: Context, value: String) {
         prefs(ctx).edit().putString(KEY_SYSTEM_PROMPT, value).apply()
+    }
+
+    fun setModel(ctx: Context, value: String) {
+        prefs(ctx).edit().putString(KEY_MODEL, value).apply()
+    }
+
+    fun setThinkingDepth(ctx: Context, depth: ThinkingDepth) {
+        prefs(ctx).edit().putString(KEY_DEPTH, depth.key).apply()
     }
 
     fun save(ctx: Context, apiKey: String, baseUrl: String, model: String, maxSteps: Int) {

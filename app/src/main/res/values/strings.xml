@@ -13,6 +13,9 @@
     <string name="chat_example_1">打开设置查看 Android 版本号</string>
     <string name="chat_example_2">打开微信，进入「我」页面对比截图</string>
     <string name="hint_task">发消息，描述要完成的任务…</string>
+    <string name="model_panel_model">模型</string>
+    <string name="model_panel_depth">思考深度</string>
+    <string name="model_box_format">%1$s · %2$s</string>
     <string name="btn_send">发送</string>
     <string name="btn_stop">停止</string>
     <string name="btn_attach">添加附件</string>
@@ -28,7 +31,7 @@
     <string name="hint_api_key">DeepSeek API Key</string>
     <string name="hint_base_url">Base URL</string>
     <string name="hint_model">模型名</string>
-    <string name="hint_max_steps">最大步数</string>
+    <string name="hint_max_steps">最大步数（0 表示无限）</string>
     <string name="hint_system_prompt">系统提示词</string>
     <string name="hint_system_prompt_placeholder">留空使用内置默认提示词；可在此自定义 Agent 的角色与行为</string>
     <string name="btn_save_config">保存配置</string>
