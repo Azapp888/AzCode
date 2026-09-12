@@ -9,6 +9,12 @@
     <AssemblyName>AzCode.Desktop</AssemblyName>
     <RootNamespace>AzCode.Desktop</RootNamespace>
     <Version>0.1.0</Version>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+    <Resource Include="Assets\app.png" />
+  </ItemGroup>
 
 </Project>
