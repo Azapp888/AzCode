@@ -53,6 +53,10 @@ class MainActivity : Activity() {
     private var worker: Thread? = null
     @Volatile private var destroyed = false
 
+    @Volatile private var stoppedByUser = false
+    @Volatile private var taskError: String? = null
+    @Volatile private var lastSummary: String? = null
+
     private lateinit var session: ChatSession
     private var lastLoadedId: String? = null
     private var typingView: View? = null
@@ -381,7 +385,19 @@ class MainActivity : Activity() {
         etTask.setText("")
         addUserMessage(displayTask, attachments.map { it.name })
 
-        val r = AgentRunner(this) { event -> runOnUiThread { handleEvent(event) } }
+        maybeRequestNotificationPermission()
+
+        stoppedByUser = false
+        taskError = null
+        lastSummary = null
+        val r = AgentRunner(this) { event ->
+            when (event) {
+                is AgentEvent.Failure -> taskError = event.message
+                is AgentEvent.AssistantText -> if (event.text.isNotBlank()) lastSummary = event.text
+                else -> {}
+            }
+            runOnUiThread { handleEvent(event) }
+        }
         runner = r
         val runningSession = session
         setRunning(true)
@@ -402,6 +418,8 @@ class MainActivity : Activity() {
                 runOnUiThread { handleEvent(AgentEvent.Failure(e.message ?: "任务异常结束")) }
             } finally {
                 SessionStore.save(this, runningSession)
+                val success = taskError == null && !stoppedByUser
+                TaskNotifier.notifyFinished(this, runningSession.title, lastSummary, success)
                 runOnUiThread {
                     if (!destroyed) {
                         runner = null
@@ -413,9 +431,18 @@ class MainActivity : Activity() {
     }
 
     private fun stopTask() {
+        stoppedByUser = true
         runner?.cancel()
         btnStop.isEnabled = false
         addNotice(getString(R.string.stopping))
+    }
+
+    private fun maybeRequestNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF)
+        }
     }
 
     private fun setRunning(running: Boolean) {
@@ -612,5 +639,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQ_PICK = 2001
+        private const val REQ_NOTIF = 2002
     }
 }

@@ -63,7 +63,6 @@ class AgentRunner(
         }
         val tools = buildTools()
         val depth = AgentConfig.thinkingDepth(ctx)
-        val recentSigs = ArrayDeque<String>()
 
         try {
             var step = 0
@@ -88,18 +87,6 @@ class AgentRunner(
                 }
 
                 if (reply.toolCalls.isEmpty()) return
-
-                // 重复检测：在最近 WINDOW 步内出现 3 次完全相同的输出，判定为原地打转并停止。
-                val sig = buildString {
-                    append(reply.content?.trim().orEmpty())
-                    reply.toolCalls.forEach { append('|').append(it.name).append('(').append(it.arguments).append(')') }
-                }
-                recentSigs.addLast(sig)
-                if (recentSigs.size > LOOP_WINDOW) recentSigs.removeFirst()
-                if (recentSigs.count { it == sig } >= LOOP_REPEAT) {
-                    listener(AgentEvent.Notice("检测到模型重复输出相同内容，已自动停止任务"))
-                    return
-                }
 
                 for (c in reply.toolCalls) {
                     if (cancelled) { listener(AgentEvent.Notice("已停止")); return }
@@ -340,13 +327,5 @@ class AgentRunner(
         sb.append("\n\n思考深度要求：").append(depthHint)
 
         return sb.toString()
-    }
-
-    private companion object {
-        /** 重复检测滑动窗口步数。 */
-        const val LOOP_WINDOW = 10
-
-        /** 同一输出在窗口内出现次数达到该值即判定为重复。 */
-        const val LOOP_REPEAT = 3
     }
 }

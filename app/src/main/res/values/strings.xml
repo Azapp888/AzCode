@@ -7,6 +7,9 @@
 
     <string name="notif_channel_bridge">设备桥接</string>
     <string name="notif_title">AzCode 桥接运行中</string>
+    <string name="notif_channel_task">任务提醒</string>
+    <string name="notif_task_done">任务已完成</string>
+    <string name="notif_task_stopped">任务已停止</string>
 
     <string name="chat_empty_title">有什么可以帮你的？</string>
     <string name="chat_empty_hint">用自然语言描述要在手机上完成的任务，AzCode 会一步步操作。</string>
