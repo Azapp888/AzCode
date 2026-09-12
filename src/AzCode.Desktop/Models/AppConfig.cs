@@ -12,7 +12,7 @@ public sealed class AppConfig
     public string DeepSeekApiKey { get; set; } = "";
     public string DeepSeekBaseUrl { get; set; } = "https://api.deepseek.com/v1";
     public string Model { get; set; } = "deepseek-chat";
-    public int MaxSteps { get; set; } = 25;
+    public int MaxSteps { get; set; } = 0; // 0 表示无限步数，由重复检测兜底
     public double Temperature { get; set; } = 0.2;
 
     private static readonly JsonSerializerOptions Options = new()

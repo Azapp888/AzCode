@@ -84,8 +84,10 @@ public partial class MainWindow : Window
         _cfg.DeepSeekApiKey = TxtKey.Password;
         _cfg.DeepSeekBaseUrl = TxtBase.Text.Trim();
         _cfg.Model = TxtModel.Text.Trim();
-        if (int.TryParse(TxtMaxSteps.Text.Trim(), out var steps) && steps > 0)
+        if (int.TryParse(TxtMaxSteps.Text.Trim(), out var steps) && steps >= 0)
             _cfg.MaxSteps = steps;
+        else
+            _cfg.MaxSteps = 0;
     }
 
     private void AppendLog(string line)

@@ -22,7 +22,7 @@
             <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                 <TextBlock Text="模型:" VerticalAlignment="Center" />
                 <TextBox x:Name="TxtModel" Width="160" Margin="6,0" />
-                <TextBlock Text="最大步数:" VerticalAlignment="Center" Margin="8,0,0,0" />
+                <TextBlock Text="最大步数(0=无限):" VerticalAlignment="Center" Margin="8,0,0,0" />
                 <TextBox x:Name="TxtMaxSteps" Width="60" Margin="6,0" />
                 <Button x:Name="BtnSave" Content="保存配置" Padding="14,2" Margin="12,0,0,0" Click="BtnSave_Click" />
             </StackPanel>

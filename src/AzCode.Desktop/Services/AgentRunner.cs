@@ -20,7 +20,7 @@ public sealed class AgentRunner
 
     private const string SystemPrompt = """
         你是 AzCode，一个运行在 Windows 电脑本地的自动化助手，直接控制这台电脑。
-        每一步先调用 get_screen 观察当前活动窗口的控件树（名称/类型/坐标）与窗口标题，再选择动作。
+        按需调用 get_screen 观察当前活动窗口的控件树（名称/类型/坐标）与窗口标题，只在需要定位控件时读取，不必每一步都读。
         点击优先用 click 的 text 字段匹配控件名称，匹配不到时再用坐标。
         输入文字用 type；组合键用 key（如 "ctrl+s"、"enter"、"alt+f4"）。
         需要执行系统操作（启动程序、文件操作、查询信息）时用 shell（PowerShell）。
@@ -36,10 +36,16 @@ public sealed class AgentRunner
         };
         var tools = BuildTools();
 
-        for (var step = 1; step <= _cfg.MaxSteps; step++)
+        // 重复检测：最近 10 步内出现 3 次完全相同的输出即判定为原地打转。
+        const int loopWindow = 10;
+        const int loopRepeat = 3;
+        var recentSigs = new Queue<string>();
+
+        for (var step = 1; _cfg.MaxSteps <= 0 || step <= _cfg.MaxSteps; step++)
         {
             ct.ThrowIfCancellationRequested();
-            Log?.Invoke($"[step {step}/{_cfg.MaxSteps}] 请求模型…");
+            var limit = _cfg.MaxSteps <= 0 ? "∞" : _cfg.MaxSteps.ToString();
+            Log?.Invoke($"[step {step}/{limit}] 请求模型…");
 
             var msg = await _llm.ChatAsync(_cfg, messages, tools, ct);
             messages.Add(msg);
@@ -47,6 +53,16 @@ public sealed class AgentRunner
             if (msg.ToolCalls is null || msg.ToolCalls.Count == 0)
             {
                 Log?.Invoke($"完成：{msg.Content}");
+                return;
+            }
+
+            var sig = (msg.Content ?? "") + "|" + string.Join("|",
+                msg.ToolCalls.Select(c => $"{c.Function.Name}({c.Function.Arguments})"));
+            recentSigs.Enqueue(sig);
+            while (recentSigs.Count > loopWindow) recentSigs.Dequeue();
+            if (recentSigs.Count(s => s == sig) >= loopRepeat)
+            {
+                Log?.Invoke("检测到模型重复输出相同内容，已自动停止任务。");
                 return;
             }
 
