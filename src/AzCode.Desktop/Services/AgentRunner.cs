@@ -36,11 +36,6 @@ public sealed class AgentRunner
         };
         var tools = BuildTools();
 
-        // 重复检测：最近 10 步内出现 3 次完全相同的输出即判定为原地打转。
-        const int loopWindow = 10;
-        const int loopRepeat = 3;
-        var recentSigs = new Queue<string>();
-
         for (var step = 1; _cfg.MaxSteps <= 0 || step <= _cfg.MaxSteps; step++)
         {
             ct.ThrowIfCancellationRequested();
@@ -53,16 +48,6 @@ public sealed class AgentRunner
             if (msg.ToolCalls is null || msg.ToolCalls.Count == 0)
             {
                 Log?.Invoke($"完成：{msg.Content}");
-                return;
-            }
-
-            var sig = (msg.Content ?? "") + "|" + string.Join("|",
-                msg.ToolCalls.Select(c => $"{c.Function.Name}({c.Function.Arguments})"));
-            recentSigs.Enqueue(sig);
-            while (recentSigs.Count > loopWindow) recentSigs.Dequeue();
-            if (recentSigs.Count(s => s == sig) >= loopRepeat)
-            {
-                Log?.Invoke("检测到模型重复输出相同内容，已自动停止任务。");
                 return;
             }
 
