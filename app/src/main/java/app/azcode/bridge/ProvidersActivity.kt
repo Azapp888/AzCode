@@ -74,12 +74,19 @@ class ProvidersActivity : Activity() {
     private fun summary(account: ProviderAccount): String {
         val lines = mutableListOf(
             getString(R.string.provider_summary_protocol, account.protocol.label),
-            getString(R.string.provider_summary_model, account.model.ifBlank { "-" }),
+            getString(R.string.provider_summary_model, account.model.ifBlank { "-" }, account.allModels.size),
         )
-        lines.add(
-            if (account.hasImage) getString(R.string.provider_summary_image, account.imageModel)
-            else getString(R.string.provider_summary_image_off)
-        )
+        if (account.hasImage) {
+            lines.add(
+                getString(
+                    R.string.provider_summary_image,
+                    account.imageModel,
+                    account.allImageModels.size,
+                )
+            )
+        } else {
+            lines.add(getString(R.string.provider_summary_image_off))
+        }
         if (account.apiKey.isBlank()) lines.add(getString(R.string.provider_summary_no_key))
         return lines.joinToString("\n")
     }

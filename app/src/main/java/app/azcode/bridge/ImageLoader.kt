@@ -1,8 +1,12 @@
 package app.azcode.bridge
 
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.ImageView
 import java.io.File
 import java.net.HttpURLConnection
@@ -44,6 +48,32 @@ object ImageLoader {
     private fun download(uri: String): Bitmap? {
         val bytes = readBytes(uri) ?: return null
         return decode(bytes)
+    }
+
+    /** 下载图片并保存到系统相册（Pictures/AzCode）。供后台线程调用，返回是否成功。 */
+    fun saveToGallery(ctx: Context, uri: String, name: String? = null): Boolean {
+        val bytes = readBytes(uri) ?: return false
+        val resolve = { ctx.contentResolver }
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, name ?: "azcode_${System.currentTimeMillis()}.png")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/AzCode")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+        }
+        val item = resolve().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return false
+        return runCatching {
+            resolve().openOutputStream(item)?.use { it.write(bytes) }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val done = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
+                resolve().update(item, done, null, null)
+            }
+            true
+        }.getOrElse {
+            runCatching { resolve().delete(item, null, null) }
+            false
+        }
     }
 
     private fun readBytes(uri: String): ByteArray? {

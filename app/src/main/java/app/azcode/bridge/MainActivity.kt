@@ -2,6 +2,7 @@ package app.azcode.bridge
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.Dialog
 import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -14,6 +15,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.HorizontalScrollView
@@ -339,38 +341,73 @@ class MainActivity : Activity() {
 
     // ==================== 模型 / 思考深度 ====================
 
-    private var providerOptions: List<ProviderAccount> = emptyList()
+    private var providerOptions: List<Pair<ProviderAccount, String>> = emptyList()
     private var providersSignature = ""
 
     private fun allProvidersSignature(): String = AgentConfig.providers(this)
-        .joinToString("|") { "${it.id}:${it.name}:${it.model}:${it.enabled}:${it.protocol.key}" }
+        .joinToString("|") { "${it.id}:${it.name}:${it.enabled}:${it.allModels.joinToString(",")}" }
 
-    private fun accountLabel(account: ProviderAccount): String =
-        if (account.model.isBlank()) account.name else "${account.name} · ${account.model}"
+    /** 展开每个提供商下的全部语言模型，同一提供商的模型相邻，形成分组效果。 */
+    private fun buildModelOptions(all: List<ProviderAccount>): List<Pair<ProviderAccount, String>> {
+        val enabled = all.filter { it.enabled }.ifEmpty { all }
+        val out = mutableListOf<Pair<ProviderAccount, String>>()
+        enabled.forEach { account ->
+            val models = account.allModels.ifEmpty { listOf(account.model.ifBlank { "" }) }
+            models.forEach { out.add(account to it) }
+        }
+        return out
+    }
+
+    private fun modelOptionLabel(account: ProviderAccount, model: String): String =
+        if (model.isBlank()) account.name else "${account.name} · $model"
+
+    private fun buildModelAdapter(): ArrayAdapter<String> {
+        return object : ArrayAdapter<String>(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            providerOptions.map { modelOptionLabel(it.first, it.second) },
+        ) {
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                val v = super.getView(position, convertView, parent)
+                (v as? TextView)?.textSize = 13f
+                return v
+            }
+
+            override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                val v = super.getDropDownView(position, convertView, parent)
+                (v as? TextView)?.textSize = 13f
+                return v
+            }
+        }
+    }
 
     private fun setupModelSelector() {
         val all = AgentConfig.providers(this)
         providersSignature = all.joinToString("|") {
-            "${it.id}:${it.name}:${it.model}:${it.enabled}:${it.protocol.key}"
+            "${it.id}:${it.name}:${it.enabled}:${it.allModels.joinToString(",")}"
         }
-        providerOptions = all.filter { it.enabled }.ifEmpty { all }
-        val activeId = AgentConfig.activeProvider(this)?.id
+        providerOptions = buildModelOptions(all)
+        val active = AgentConfig.activeProvider(this)
+        val activeId = active?.id
+        val activeModel = active?.model
 
         updatingModelSpinner = true
-        spModel.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            providerOptions.map { accountLabel(it) },
-        )
-        val index = providerOptions.indexOfFirst { it.id == activeId }.coerceAtLeast(0)
+        spModel.adapter = buildModelAdapter()
+        val index = providerOptions
+            .indexOfFirst { it.first.id == activeId && it.second == activeModel }
+            .let { if (it >= 0) it else providerOptions.indexOfFirst { it.first.id == activeId } }
+            .coerceAtLeast(0)
         spModel.setSelection(index, false)
         updatingModelSpinner = false
         spModel.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 if (updatingModelSpinner) return
-                val account = providerOptions.getOrNull(position) ?: return
+                val (account, model) = providerOptions.getOrNull(position) ?: return
                 if (account.id != AgentConfig.activeId(this@MainActivity)) {
                     AgentConfig.setActiveId(this@MainActivity, account.id)
+                }
+                if (model.isNotBlank() && model != account.model) {
+                    AgentConfig.setActiveModel(this@MainActivity, account.id, model)
                 }
                 updateModelBox()
             }
@@ -411,8 +448,12 @@ class MainActivity : Activity() {
             setupModelSelector()
             return
         }
-        val activeId = AgentConfig.activeProvider(this)?.id
-        val index = providerOptions.indexOfFirst { it.id == activeId }
+        val active = AgentConfig.activeProvider(this)
+        val activeId = active?.id
+        val activeModel = active?.model
+        val index = providerOptions
+            .indexOfFirst { it.first.id == activeId && it.second == activeModel }
+            .let { if (it >= 0) it else providerOptions.indexOfFirst { it.first.id == activeId } }
         if (index >= 0 && index != spModel.selectedItemPosition) {
             updatingModelSpinner = true
             spModel.setSelection(index, false)
@@ -713,7 +754,9 @@ class MainActivity : Activity() {
         if (urls.isEmpty()) return
         urls.forEach { url ->
             val v = layoutInflater.inflate(R.layout.item_msg_image, chatContainer, false)
-            ImageLoader.load(v.findViewById(R.id.ivImage), url)
+            val iv = v.findViewById<ImageView>(R.id.ivImage)
+            ImageLoader.load(iv, url)
+            iv.setOnClickListener { showImageDialog(url) }
             chatContainer.addView(v)
         }
         if (persist) {
@@ -721,6 +764,51 @@ class MainActivity : Activity() {
             appendTurn(ChatTurn(kind = "image", images = stored))
         }
         scrollToBottom()
+    }
+
+    /** 全屏查看图片，并提供保存到相册的入口。 */
+    private fun showImageDialog(url: String) {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(24), dp(16), dp(24))
+            setBackgroundColor(Color.BLACK)
+        }
+        val iv = ImageView(this).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
+        container.addView(
+            iv,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f),
+        )
+        val btn = Button(this).apply { text = getString(R.string.image_download) }
+        container.addView(
+            btn,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = dp(12)
+            },
+        )
+
+        val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        dialog.setContentView(container)
+        ImageLoader.load(iv, url)
+
+        btn.setOnClickListener {
+            Toast.makeText(this, R.string.image_downloading, Toast.LENGTH_SHORT).show()
+            Thread {
+                val ok = ImageLoader.saveToGallery(this, url)
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        if (ok) R.string.image_saved else R.string.image_save_failed,
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    if (ok) dialog.dismiss()
+                }
+            }.start()
+        }
+        dialog.show()
     }
 
     private fun addNotice(text: String, persist: Boolean = true) {

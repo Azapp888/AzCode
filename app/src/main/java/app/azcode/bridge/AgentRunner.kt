@@ -63,6 +63,10 @@ class AgentRunner(
 ) {
     @Volatile private var cancelled = false
 
+    /** 本次任务选定的生图提供商与模型（用户要求生成图片时解析）。 */
+    private var selectedImageProvider: ProviderAccount? = null
+    private var selectedImageModel: String? = null
+
     private companion object {
         /** 上下文估算字符数超过该阈值时触发压缩。 */
         const val COMPACT_THRESHOLD = 40000
@@ -82,8 +86,11 @@ class AgentRunner(
         }
         val maxSteps = AgentConfig.maxSteps(ctx)
 
+        // 用户明确要求生成图片时，提前解析并选定生图模型（多个则询问用户）。
+        val imageHint = resolveImageIntent(task)
+
         var messages = JSONArray().apply {
-            put(JSONObject().put("role", "system").put("content", buildSystemPrompt()))
+            put(JSONObject().put("role", "system").put("content", buildSystemPrompt(imageHint)))
             appendHistory(session)
             put(JSONObject().put("role", "user").put("content", DeepSeekClient.buildUserContent(task, attachments)))
         }
@@ -279,13 +286,16 @@ class AgentRunner(
 
             "generate_image" -> {
                 val prompt = args.optString("prompt")
-                val imageProvider = AgentConfig.imageProvider(ctx)
+                val imageProvider = selectedImageProvider ?: AgentConfig.imageProvider(ctx)
                 when {
                     prompt.isBlank() -> err("缺少 prompt")
                     imageProvider == null -> err("当前未配置文生图，请在「设置 → 模型管理」中为某个提供商开启生图模型")
                     else -> {
+                        val model = selectedImageModel
+                            ?.takeIf { imageProvider.allImageModels.contains(it) }
+                            ?: imageProvider.imageModel
                         val urls = DeepSeekClient.generateImage(
-                            provider = imageProvider,
+                            provider = imageProvider.copy(imageModel = model),
                             prompt = prompt,
                             size = args.optString("size", "1024x1024"),
                             count = args.optInt("count", 1),
@@ -319,6 +329,49 @@ class AgentRunner(
     private fun ok() = """{"ok":true}"""
 
     private fun err(message: String) = JSONObject().put("ok", false).put("error", message).toString()
+
+    // ==================== 生图意图解析 ====================
+
+    /** 判断用户的话是否在要求生成图片（而非分析已有图片）。 */
+    private fun looksLikeImageRequest(task: String): Boolean {
+        val t = task.lowercase()
+        if (t.contains("生图") || t.contains("文生图") || t.contains("generate image")) return true
+        val verbs = listOf("生成", "画一", "画个", "画张", "画只", "绘制", "制作", "设计", "做一张", "来一张", "帮我画", "create", "generate", "draw")
+        val nouns = listOf("图片", "图像", "海报", "插画", "logo", "图标", "表情包", "头像", "image", "picture", "poster", "illustration")
+        return verbs.any { t.contains(it) } && nouns.any { t.contains(it) }
+    }
+
+    /**
+     * 用户要求生成图片且存在可用生图模型时，选定本次使用的模型。
+     * 存在多个候选时通过 ask_question_for_user 让用户选择。返回给模型的提示文本。
+     */
+    private fun resolveImageIntent(task: String): String? {
+        if (!looksLikeImageRequest(task)) return null
+        val candidates = AgentConfig.imageCandidates(ctx)
+        if (candidates.isEmpty()) return null
+
+        val chosen: Pair<ProviderAccount, String> = if (candidates.size == 1) {
+            candidates.first()
+        } else {
+            val handler = askUser ?: return null
+            val options = candidates.map { "${it.first.name} · ${it.second}" }
+            val answer = handler(
+                AgentQuestion(
+                    question = "检测到多个可用的生图模型，请选择用于本次生成图片的模型：",
+                    options = options,
+                    allowMultiple = false,
+                    allowCustom = false,
+                )
+            )
+            val idx = options.indexOf(answer)
+            if (idx in candidates.indices) candidates[idx] else return null
+        }
+
+        selectedImageProvider = chosen.first
+        selectedImageModel = chosen.second
+        return "用户本次要求生成图片，请直接调用 generate_image 工具，prompt 使用用户的描述。" +
+            "本次使用生图模型：${chosen.first.name} · ${chosen.second}。"
+    }
 
     // ==================== 向用户提问 / 模型配置工具 ====================
 
@@ -392,13 +445,21 @@ class AgentRunner(
     private fun saveModelProvider(args: JSONObject): String {
         val protocol = ProviderProtocol.from(args.optString("protocol", "openai"))
         val baseUrl = args.optString("baseUrl")
-        val model = args.optString("model")
+        val models = stringArray(args.optJSONArray("models")).ifEmpty {
+            listOfNotNull(args.optString("model").takeIf { it.isNotBlank() })
+        }
         if (baseUrl.isBlank()) return err("缺少 baseUrl")
-        if (model.isBlank()) return err("缺少 model")
+        if (models.isEmpty()) return err("缺少 model/models")
         val imageEnabled = args.optBoolean("imageEnabled", false) && protocol.supportsImage
-        val imageModel = if (imageEnabled) args.optString("imageModel") else ""
-        if (imageEnabled && imageModel.isBlank()) return err("已开启生图但缺少 imageModel")
+        val imageModels = if (imageEnabled) {
+            stringArray(args.optJSONArray("imageModels")).ifEmpty {
+                listOfNotNull(args.optString("imageModel").takeIf { it.isNotBlank() })
+            }
+        } else emptyList()
+        if (imageEnabled && imageModels.isEmpty()) return err("已开启生图但缺少 imageModel/imageModels")
 
+        val model = args.optString("model").takeIf { it.isNotBlank() } ?: models.first()
+        val imageModel = imageModels.firstOrNull().orEmpty()
         val name = args.optString("name").ifBlank { protocol.label }
         val existingId = args.optString("id")
         val existing = AgentConfig.providers(ctx).firstOrNull { it.id == existingId }
@@ -411,12 +472,14 @@ class AgentRunner(
             baseUrl = baseUrl,
             apiKey = args.optString("apiKey").ifBlank { existing?.apiKey ?: "" },
             enabled = args.optBoolean("enabled", true),
+            models = models,
             model = model,
             supportsReasoningEffort = args.optBoolean(
                 "supportsReasoningEffort",
                 existing?.supportsReasoningEffort ?: (protocol == ProviderProtocol.OPENAI && baseUrl.contains("deepseek")),
             ),
             imageEnabled = imageEnabled,
+            imageModels = imageModels,
             imageModel = imageModel,
         )
         AgentConfig.upsertProvider(ctx, account)
@@ -426,7 +489,19 @@ class AgentRunner(
         return JSONObject().put("ok", true)
             .put("id", account.id)
             .put("name", account.name)
+            .put("models", account.models.size)
+            .put("imageModels", account.imageModels.size)
             .toString()
+    }
+
+    private fun stringArray(arr: JSONArray?): List<String> {
+        if (arr == null) return emptyList()
+        val out = LinkedHashSet<String>()
+        for (i in 0 until arr.length()) {
+            val s = arr.optString(i).trim()
+            if (s.isNotEmpty()) out.add(s)
+        }
+        return out.toList()
     }
 
     private fun removeModelProvider(args: JSONObject): String {
@@ -632,13 +707,21 @@ class AgentRunner(
                     .put("protocol", str("协议：openai / anthropic / gemini，默认 openai"))
                     .put("baseUrl", str("Base URL"))
                     .put("apiKey", str("API Key"))
-                    .put("model", str("语言模型名"))
+                    .put("model", str("语言模型名（单个）"))
+                    .put("models", JSONObject()
+                        .put("type", "array")
+                        .put("description", "该平台可用的语言模型名列表（可多个）")
+                        .put("items", JSONObject().put("type", "string")))
                     .put("enabled", JSONObject().put("type", "boolean").put("description", "是否启用，默认 true"))
                     .put("setActive", JSONObject().put("type", "boolean").put("description", "是否设为当前使用，默认 false"))
                     .put("supportsReasoningEffort", JSONObject().put("type", "boolean").put("description", "是否支持 reasoning_effort"))
                     .put("imageEnabled", JSONObject().put("type", "boolean").put("description", "是否加入生图模型"))
-                    .put("imageModel", str("生图模型名，仅当 imageEnabled 为 true 时必填")),
-                listOf("name", "baseUrl", "model"),
+                    .put("imageModel", str("生图模型名（单个）"))
+                    .put("imageModels", JSONObject()
+                        .put("type", "array")
+                        .put("description", "该平台可用的生图模型名列表（可多个）")
+                        .put("items", JSONObject().put("type", "string"))),
+                listOf("name", "baseUrl"),
             ))
 
             put(fn(
@@ -661,7 +744,7 @@ class AgentRunner(
 
     // ==================== 系统提示词 ====================
 
-    private fun buildSystemPrompt(): String {
+    private fun buildSystemPrompt(imageHint: String? = null): String {
         val base = AgentConfig.systemPrompt(ctx).ifBlank { AgentConfig.DEFAULT_SYSTEM_PROMPT }
         val sb = StringBuilder(base)
 
@@ -701,10 +784,15 @@ class AgentRunner(
         sb.append(
             "\n\n模型配置能力：用户让你「增加/修改模型」时，先用 ask_question_for_user 询问平台名称、Base URL 与 API Key；" +
                 "拿到后调用 fetch_models 拉取可用模型列表并让用户选择，再调用 save_model_provider 保存。" +
+                "同一平台可能有多个语言模型，请用 models 数组传全部需要的模型名。" +
                 "随后询问用户是否加入生图模型：若需要，再用 ask_question_for_user 询问生图模型所在的平台地址、密钥与模型名，" +
-                "然后调用 save_model_provider 并设置 imageEnabled=true 与 imageModel（生图与语言模型同平台时可复用同一提供商，跨平台则新建一个提供商）。" +
+                "然后调用 save_model_provider 并设置 imageEnabled=true 与 imageModels 数组（生图与语言模型同平台时可复用同一提供商，跨平台则新建一个提供商）。" +
                 "所有配置都会写入本地，无需用户手动进设置页。修改后用 list_model_providers 复核结果。"
         )
+
+        if (!imageHint.isNullOrBlank()) {
+            sb.append("\n\n本次生图安排：").append(imageHint)
+        }
 
         return sb.toString()
     }

@@ -37,7 +37,12 @@
     <string name="hint_api_key">API Key</string>
     <string name="hint_base_url">Base URL</string>
     <string name="hint_model">模型名</string>
+    <string name="hint_models">语言模型（可多个）</string>
+    <string name="hint_models_placeholder">每行一个模型名</string>
+    <string name="hint_models_desc">支持填写多个模型，在聊天界面的模型选择里按提供商分组切换。</string>
+    <string name="hint_image_models">生图模型（可多个）</string>
     <string name="hint_image_model">文生图模型名（留空则关闭文生图功能）</string>
+    <string name="hint_image_model_name">生图模型名</string>
     <string name="hint_max_steps">最大步数（0 表示无限）</string>
     <string name="hint_system_prompt">系统提示词</string>
     <string name="hint_system_prompt_placeholder">留空使用内置默认提示词；可在此自定义 Agent 的角色与行为</string>
@@ -59,8 +64,8 @@
     <string name="provider_custom">自定义</string>
     <string name="dialog_add_provider_title">选择平台</string>
     <string name="provider_summary_protocol">协议：%1$s</string>
-    <string name="provider_summary_model">语言模型：%1$s</string>
-    <string name="provider_summary_image">生图：%1$s</string>
+    <string name="provider_summary_model">语言模型：%1$s（共 %2$d 个）</string>
+    <string name="provider_summary_image">生图：%1$s（共 %2$d 个）</string>
     <string name="provider_summary_image_off">生图：未开启</string>
     <string name="provider_summary_no_key">未填写 API Key</string>
     <string name="btn_edit">编辑</string>
@@ -75,7 +80,6 @@
     <string name="hint_add_image">加入生图模型</string>
     <string name="hint_add_image_desc">开启后可填写该平台的文生图模型，并让 AI 调用 generate_image。</string>
     <string name="hint_add_image_unsupported">当前协议暂不支持文生图，仅 OpenAI 兼容协议可用。</string>
-    <string name="hint_image_model_name">生图模型名</string>
     <string name="btn_delete_provider">删除此提供商</string>
     <string name="delete_provider_title">删除提供商</string>
     <string name="delete_provider_msg">确定删除「%1$s」？</string>
@@ -134,6 +138,10 @@
     <string name="tool_name_import_md">导入模型文档</string>
     <string name="tool_name_finish">完成任务</string>
     <string name="image_placeholder">图片</string>
+    <string name="image_download">保存到相册</string>
+    <string name="image_downloading">正在保存…</string>
+    <string name="image_saved">已保存到相册（Pictures/AzCode）</string>
+    <string name="image_save_failed">保存失败，请重试</string>
 
     <string name="notif_question">需要你的选择</string>
     <string name="btn_confirm">确定</string>

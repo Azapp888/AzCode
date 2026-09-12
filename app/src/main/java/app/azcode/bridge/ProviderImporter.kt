@@ -18,7 +18,9 @@ object ProviderImporter {
 - baseUrl: API 基础地址（字符串）
 - apiKey: API 密钥（字符串，没有则留空）
 - model: 默认语言模型名（字符串）
+- models: 该平台可用的语言模型名数组（字符串数组）
 - imageModel: 文生图模型名（字符串，没有则留空）
+- imageModels: 该平台可用的文生图模型名数组（字符串数组，没有则省略）
 - supportsReasoningEffort: 是否支持 reasoning_effort（布尔，默认 false）
 若文档未提供某字段则省略该字段。只输出 JSON 数组本身。"""
 
@@ -38,10 +40,14 @@ object ProviderImporter {
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue
             val baseUrl = o.optString("baseUrl").trim()
-            val model = o.optString("model").trim()
-            if (baseUrl.isBlank() || model.isBlank()) continue
+            val models = stringList(o.optJSONArray("models")).ifEmpty {
+                listOfNotNull(o.optString("model").trim().takeIf { it.isNotBlank() })
+            }
+            if (baseUrl.isBlank() || models.isEmpty()) continue
             val protocol = ProviderProtocol.from(o.optString("protocol"))
-            val imageModel = o.optString("imageModel").trim()
+            val imageModels = stringList(o.optJSONArray("imageModels")).ifEmpty {
+                listOfNotNull(o.optString("imageModel").trim().takeIf { it.isNotBlank() })
+            }
             val apiKey = o.optString("apiKey").trim()
             accounts.add(
                 ProviderAccount(
@@ -51,13 +57,15 @@ object ProviderImporter {
                     baseUrl = baseUrl,
                     apiKey = apiKey,
                     enabled = true,
-                    model = model,
+                    models = models,
+                    model = models.first(),
                     supportsReasoningEffort = o.optBoolean(
                         "supportsReasoningEffort",
                         protocol == ProviderProtocol.OPENAI && baseUrl.contains("deepseek"),
                     ),
-                    imageEnabled = protocol.supportsImage && imageModel.isNotBlank(),
-                    imageModel = imageModel,
+                    imageEnabled = protocol.supportsImage && imageModels.isNotEmpty(),
+                    imageModels = imageModels,
+                    imageModel = imageModels.firstOrNull().orEmpty(),
                 )
             )
         }
@@ -70,5 +78,15 @@ object ProviderImporter {
         val end = text.lastIndexOf(']')
         if (start in 0 until end) return text.substring(start, end + 1)
         throw RuntimeException("未能从模型输出中解析出 JSON")
+    }
+
+    private fun stringList(arr: JSONArray?): List<String> {
+        if (arr == null) return emptyList()
+        val out = LinkedHashSet<String>()
+        for (i in 0 until arr.length()) {
+            val s = arr.optString(i).trim()
+            if (s.isNotEmpty()) out.add(s)
+        }
+        return out.toList()
     }
 }

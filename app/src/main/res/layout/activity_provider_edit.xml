@@ -88,13 +88,29 @@
                 android:hint="@string/hint_api_key"
                 android:inputType="textPassword" />
 
-            <TextView style="@style/SettingLabel" android:text="@string/hint_model" />
+            <TextView style="@style/SettingLabel" android:text="@string/hint_models" />
 
             <EditText
-                android:id="@+id/etModel"
-                style="@style/SettingInput"
-                android:hint="@string/hint_model"
-                android:inputType="text" />
+                android:id="@+id/etModels"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_field"
+                android:gravity="top"
+                android:hint="@string/hint_models_placeholder"
+                android:inputType="textMultiLine"
+                android:minLines="3"
+                android:padding="12dp"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/hint_models_desc"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -189,13 +205,21 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <TextView style="@style/SettingLabel" android:text="@string/hint_image_model_name" />
+                <TextView style="@style/SettingLabel" android:text="@string/hint_image_models" />
 
                 <EditText
-                    android:id="@+id/etImageModel"
-                    style="@style/SettingInput"
-                    android:hint="@string/hint_image_model_name"
-                    android:inputType="text" />
+                    android:id="@+id/etImageModels"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_field"
+                    android:gravity="top"
+                    android:hint="@string/hint_models_placeholder"
+                    android:inputType="textMultiLine"
+                    android:minLines="2"
+                    android:padding="12dp"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_secondary"
+                    android:textSize="13sp" />
             </LinearLayout>
 
             <Button

@@ -99,6 +99,20 @@ object AgentConfig {
         prefs(ctx).edit().putString(KEY_ACTIVE, id).apply()
     }
 
+    /** 设置某个提供商当前使用的语言模型（若该模型不在列表中则自动加入）。 */
+    fun setActiveModel(ctx: Context, providerId: String, model: String) {
+        val account = providers(ctx).firstOrNull { it.id == providerId } ?: return
+        val models = LinkedHashSet(account.models).apply { add(model) }.toList()
+        upsertProvider(ctx, account.copy(model = model, models = models))
+    }
+
+    /** 设置某个提供商当前使用的生图模型（若该模型不在列表中则自动加入）。 */
+    fun setActiveImageModel(ctx: Context, providerId: String, imageModel: String) {
+        val account = providers(ctx).firstOrNull { it.id == providerId } ?: return
+        val models = LinkedHashSet(account.imageModels).apply { add(imageModel) }.toList()
+        upsertProvider(ctx, account.copy(imageModel = imageModel, imageModels = models))
+    }
+
     /** 当前用于聊天的账号：优先取「当前使用」；否则取第一个启用的账号。 */
     fun activeProvider(ctx: Context): ProviderAccount? {
         val list = providers(ctx)
@@ -115,6 +129,18 @@ object AgentConfig {
         return list.firstOrNull { it.enabled && it.hasImage }
     }
 
+    /**
+     * 全部可选的生图模型，按「提供商 + 模型名」展开。
+     * 用于用户要求生成图片、且存在多个生图模型时让用户选择。
+     */
+    fun imageCandidates(ctx: Context): List<Pair<ProviderAccount, String>> {
+        val out = mutableListOf<Pair<ProviderAccount, String>>()
+        providers(ctx).filter { it.enabled && it.hasImage }.forEach { account ->
+            account.allImageModels.forEach { out.add(account to it) }
+        }
+        return out
+    }
+
     fun newAccountId(): String = UUID.randomUUID().toString()
 
     fun accountFromTemplate(tpl: ProviderTemplate): ProviderAccount = ProviderAccount(
@@ -124,10 +150,12 @@ object AgentConfig {
         baseUrl = tpl.baseUrl,
         apiKey = "",
         enabled = false,
-        model = tpl.model,
+        models = tpl.models,
+        model = tpl.models.firstOrNull().orEmpty(),
         supportsReasoningEffort = tpl.supportsReasoningEffort,
-        imageEnabled = tpl.imageModel.isNotBlank(),
-        imageModel = tpl.imageModel,
+        imageEnabled = tpl.imageModels.isNotEmpty(),
+        imageModels = tpl.imageModels,
+        imageModel = tpl.imageModels.firstOrNull().orEmpty(),
     )
 
     // ==================== 兼容访问器（取当前账号） ====================
@@ -183,9 +211,11 @@ object AgentConfig {
                 baseUrl = base.ifBlank { DEFAULT_BASE },
                 apiKey = api,
                 enabled = true,
+                models = listOf(model.ifBlank { DEFAULT_MODEL }),
                 model = model.ifBlank { DEFAULT_MODEL },
                 supportsReasoningEffort = true,
                 imageEnabled = imageModel.isNotBlank(),
+                imageModels = if (imageModel.isNotBlank()) listOf(imageModel) else emptyList(),
                 imageModel = imageModel,
             )
         )

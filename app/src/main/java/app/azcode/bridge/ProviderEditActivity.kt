@@ -28,8 +28,8 @@ class ProviderEditActivity : Activity() {
     private lateinit var etName: EditText
     private lateinit var etBase: EditText
     private lateinit var etApiKey: EditText
-    private lateinit var etModel: EditText
-    private lateinit var etImageModel: EditText
+    private lateinit var etModels: EditText
+    private lateinit var etImageModels: EditText
     private lateinit var swReasoning: Switch
     private lateinit var swImage: Switch
     private lateinit var imageModelBox: View
@@ -50,8 +50,8 @@ class ProviderEditActivity : Activity() {
         etName = findViewById(R.id.etName)
         etBase = findViewById(R.id.etBase)
         etApiKey = findViewById(R.id.etApiKey)
-        etModel = findViewById(R.id.etModel)
-        etImageModel = findViewById(R.id.etImageModel)
+        etModels = findViewById(R.id.etModels)
+        etImageModels = findViewById(R.id.etImageModels)
         swReasoning = findViewById(R.id.swReasoning)
         swImage = findViewById(R.id.swImage)
         imageModelBox = findViewById(R.id.imageModelBox)
@@ -86,9 +86,11 @@ class ProviderEditActivity : Activity() {
             baseUrl = "",
             apiKey = "",
             enabled = false,
+            models = emptyList(),
             model = "",
             supportsReasoningEffort = false,
             imageEnabled = false,
+            imageModels = emptyList(),
             imageModel = "",
         )
     }
@@ -97,11 +99,21 @@ class ProviderEditActivity : Activity() {
         etName.setText(account.name)
         etBase.setText(account.baseUrl)
         etApiKey.setText(account.apiKey)
-        etModel.setText(account.model)
-        etImageModel.setText(account.imageModel)
+        etModels.setText(account.allModels.joinToString("\n"))
+        etImageModels.setText(account.allImageModels.joinToString("\n"))
         swReasoning.isChecked = account.supportsReasoningEffort
         swImage.isChecked = account.imageEnabled
         updateImageSection()
+    }
+
+    /** 按行解析多模型输入，去重并保持顺序。 */
+    private fun parseLines(text: String): List<String> {
+        val out = LinkedHashSet<String>()
+        text.split('\n', ',', '，', ';', '；').forEach { line ->
+            val s = line.trim()
+            if (s.isNotEmpty()) out.add(s)
+        }
+        return out.toList()
     }
 
     private fun setupProtocolSelector() {
@@ -141,26 +153,31 @@ class ProviderEditActivity : Activity() {
     private fun save() {
         val protocol = selectedProtocol()
         val imageEnabled = protocol.supportsImage && swImage.isChecked
-        val model = etModel.text.toString().trim()
-        val imageModel = if (imageEnabled) etImageModel.text.toString().trim() else ""
-        if (model.isBlank()) {
+        val models = parseLines(etModels.text.toString())
+        val imageModels = if (imageEnabled) parseLines(etImageModels.text.toString()) else emptyList()
+        if (models.isEmpty()) {
             Toast.makeText(this, R.string.warn_need_model, Toast.LENGTH_SHORT).show()
             return
         }
-        if (imageEnabled && imageModel.isBlank()) {
+        if (imageEnabled && imageModels.isEmpty()) {
             Toast.makeText(this, R.string.warn_need_image_model, Toast.LENGTH_SHORT).show()
             return
         }
+        val activeModel = account.model.takeIf { it in models } ?: models.first()
+        val activeImageModel = account.imageModel.takeIf { it in imageModels }
+            ?: imageModels.firstOrNull().orEmpty()
 
         val updated = account.copy(
             name = etName.text.toString().trim().ifBlank { protocol.label },
             protocol = protocol,
             baseUrl = etBase.text.toString().trim(),
             apiKey = etApiKey.text.toString().trim(),
-            model = model,
+            models = models,
+            model = activeModel,
             supportsReasoningEffort = swReasoning.isChecked,
             imageEnabled = imageEnabled,
-            imageModel = imageModel,
+            imageModels = imageModels,
+            imageModel = activeImageModel,
             enabled = if (isNew) true else account.enabled,
         )
         AgentConfig.upsertProvider(this, updated)
