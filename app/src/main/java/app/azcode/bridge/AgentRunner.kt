@@ -37,36 +37,59 @@ sealed interface AgentEvent {
 }
 
 /**
+ * Agent 向用户提出的选择题。UI 以弹窗呈现，并同步发送通知栏提醒。
+ * [allowMultiple] 允许多选，[allowCustom] 允许用户手动输入答案。
+ */
+data class AgentQuestion(
+    val question: String,
+    val options: List<String>,
+    val allowMultiple: Boolean = false,
+    val allowCustom: Boolean = true,
+)
+
+/**
  * 设备端 Agent 决策循环：按需读取屏幕 → 交 DeepSeek 决策 → 直接调用本机无障碍/Shizuku 执行 → 回灌结果。
  *
  * 会话续接：每个任务的上下文（历史消息）保存在 [ChatSession.agentMessages] 中，
  * 下一轮请求会在系统提示词之后接续这些历史，从而让同一会话里的多轮对话保持连贯。
  * 系统提示词不持久化，每次根据最新的技能/记忆重新构建。
+ *
+ * [askUser] 在工作线程上调用并阻塞，直到用户在弹窗中作答（返回 null 表示未作答）。
  */
 class AgentRunner(
     private val ctx: Context,
+    private val askUser: ((AgentQuestion) -> String?)? = null,
     private val listener: (AgentEvent) -> Unit,
 ) {
     @Volatile private var cancelled = false
+
+    private companion object {
+        /** 上下文估算字符数超过该阈值时触发压缩。 */
+        const val COMPACT_THRESHOLD = 40000
+        /** 压缩时保留最近若干个 user 轮次不参与摘要。 */
+        const val KEEP_USER_TURNS = 4
+    }
 
     fun cancel() {
         cancelled = true
     }
 
     fun run(task: String, attachments: List<AttachmentReader.Prepared> = emptyList(), session: ChatSession? = null) {
-        val apiKey = AgentConfig.apiKey(ctx)
-        val baseUrl = AgentConfig.baseUrl(ctx)
-        val model = AgentConfig.model(ctx)
+        val provider = AgentConfig.activeProvider(ctx)
+        if (provider == null) {
+            listener(AgentEvent.Failure("尚未配置模型提供商，请到「设置 → 模型管理」添加并启用一个提供商"))
+            return
+        }
         val maxSteps = AgentConfig.maxSteps(ctx)
 
-        val messages = JSONArray().apply {
+        var messages = JSONArray().apply {
             put(JSONObject().put("role", "system").put("content", buildSystemPrompt()))
             appendHistory(session)
             put(JSONObject().put("role", "user").put("content", DeepSeekClient.buildUserContent(task, attachments)))
         }
         val tools = buildTools()
         val depth = AgentConfig.thinkingDepth(ctx)
-        val effort = if (AgentConfig.provider(ctx).supportsReasoningEffort) depth.effort else null
+        val effort = if (provider.supportsReasoningEffort) depth.effort else null
 
         try {
             var step = 0
@@ -75,8 +98,10 @@ class AgentRunner(
                 if (cancelled) { listener(AgentEvent.Notice("已停止")); return }
                 listener(AgentEvent.Thinking)
 
+                messages = compactIfNeeded(messages, provider)
+
                 val reply = try {
-                    DeepSeekClient.chat(baseUrl, apiKey, model, messages, tools, effort)
+                    DeepSeekClient.chat(provider, messages, tools, effort)
                 } catch (e: Exception) {
                     if (cancelled) listener(AgentEvent.Notice("已停止"))
                     else listener(AgentEvent.Failure(e.message ?: "请求模型失败"))
@@ -254,17 +279,13 @@ class AgentRunner(
 
             "generate_image" -> {
                 val prompt = args.optString("prompt")
-                val imageModel = AgentConfig.imageModel(ctx).ifBlank {
-                    AgentConfig.provider(ctx).imageModel
-                }
+                val imageProvider = AgentConfig.imageProvider(ctx)
                 when {
                     prompt.isBlank() -> err("缺少 prompt")
-                    imageModel.isBlank() -> err("当前未配置文生图模型，请在「设置 → 模型」填写图像模型名")
+                    imageProvider == null -> err("当前未配置文生图，请在「设置 → 模型管理」中为某个提供商开启生图模型")
                     else -> {
                         val urls = DeepSeekClient.generateImage(
-                            baseUrl = AgentConfig.baseUrl(ctx),
-                            apiKey = AgentConfig.apiKey(ctx),
-                            imageModel = imageModel,
+                            provider = imageProvider,
                             prompt = prompt,
                             size = args.optString("size", "1024x1024"),
                             count = args.optInt("count", 1),
@@ -276,6 +297,18 @@ class AgentRunner(
 
             "finish" -> JSONObject().put("ok", true).put("summary", args.optString("summary")).toString()
 
+            "ask_question_for_user" -> askQuestion(args)
+
+            "list_model_providers" -> listModelProviders()
+
+            "fetch_models" -> fetchModels(args)
+
+            "save_model_provider" -> saveModelProvider(args)
+
+            "remove_model_provider" -> removeModelProvider(args)
+
+            "import_providers_md" -> importProvidersMd(args)
+
             else -> err("未知工具 ${call.name}")
             }
         } catch (e: Exception) {
@@ -286,6 +319,227 @@ class AgentRunner(
     private fun ok() = """{"ok":true}"""
 
     private fun err(message: String) = JSONObject().put("ok", false).put("error", message).toString()
+
+    // ==================== 向用户提问 / 模型配置工具 ====================
+
+    private fun askQuestion(args: JSONObject): String {
+        val question = args.optString("question")
+        if (question.isBlank()) return err("缺少 question")
+        val options = mutableListOf<String>()
+        args.optJSONArray("options")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val s = arr.optString(i).trim()
+                if (s.isNotEmpty()) options.add(s)
+            }
+        }
+        val handler = askUser ?: return err("当前环境无法向用户提问")
+        val answer = handler(
+            AgentQuestion(
+                question = question,
+                options = options,
+                allowMultiple = args.optBoolean("allow_multiple", false),
+                allowCustom = args.optBoolean("allow_custom", true),
+            )
+        )
+        return if (answer.isNullOrBlank()) {
+            JSONObject().put("ok", false).put("error", "用户未作答").toString()
+        } else {
+            JSONObject().put("ok", true).put("answer", answer).toString()
+        }
+    }
+
+    private fun listModelProviders(): String {
+        val list = AgentConfig.providers(ctx)
+        val active = AgentConfig.activeId(ctx)
+        val arr = JSONArray()
+        list.forEach { p ->
+            arr.put(JSONObject().apply {
+                put("id", p.id)
+                put("name", p.name)
+                put("protocol", p.protocol.key)
+                put("baseUrl", p.baseUrl)
+                put("model", p.model)
+                put("enabled", p.enabled)
+                put("active", p.id == active)
+                put("imageEnabled", p.hasImage)
+                put("imageModel", p.imageModel)
+                put("hasApiKey", p.apiKey.isNotBlank())
+            })
+        }
+        return JSONObject().put("ok", true).put("providers", arr).toString()
+    }
+
+    private fun fetchModels(args: JSONObject): String {
+        val baseUrl = args.optString("baseUrl").ifBlank {
+            AgentConfig.activeProvider(ctx)?.baseUrl ?: ""
+        }
+        val apiKey = args.optString("apiKey").ifBlank {
+            AgentConfig.activeProvider(ctx)?.apiKey ?: ""
+        }
+        val protocol = ProviderProtocol.from(
+            args.optString("protocol").ifBlank {
+                AgentConfig.activeProvider(ctx)?.protocol?.key
+            }
+        )
+        if (baseUrl.isBlank()) return err("缺少 baseUrl")
+        val models = DeepSeekClient.listModels(protocol, baseUrl, apiKey)
+        return JSONObject().put("ok", true)
+            .put("models", JSONArray(models))
+            .put("count", models.size)
+            .toString()
+    }
+
+    private fun saveModelProvider(args: JSONObject): String {
+        val protocol = ProviderProtocol.from(args.optString("protocol", "openai"))
+        val baseUrl = args.optString("baseUrl")
+        val model = args.optString("model")
+        if (baseUrl.isBlank()) return err("缺少 baseUrl")
+        if (model.isBlank()) return err("缺少 model")
+        val imageEnabled = args.optBoolean("imageEnabled", false) && protocol.supportsImage
+        val imageModel = if (imageEnabled) args.optString("imageModel") else ""
+        if (imageEnabled && imageModel.isBlank()) return err("已开启生图但缺少 imageModel")
+
+        val name = args.optString("name").ifBlank { protocol.label }
+        val existingId = args.optString("id")
+        val existing = AgentConfig.providers(ctx).firstOrNull { it.id == existingId }
+            ?: AgentConfig.providers(ctx).firstOrNull { it.name == name && it.baseUrl == baseUrl }
+
+        val account = ProviderAccount(
+            id = existing?.id ?: AgentConfig.newAccountId(),
+            name = name,
+            protocol = protocol,
+            baseUrl = baseUrl,
+            apiKey = args.optString("apiKey").ifBlank { existing?.apiKey ?: "" },
+            enabled = args.optBoolean("enabled", true),
+            model = model,
+            supportsReasoningEffort = args.optBoolean(
+                "supportsReasoningEffort",
+                existing?.supportsReasoningEffort ?: (protocol == ProviderProtocol.OPENAI && baseUrl.contains("deepseek")),
+            ),
+            imageEnabled = imageEnabled,
+            imageModel = imageModel,
+        )
+        AgentConfig.upsertProvider(ctx, account)
+        if (args.optBoolean("setActive", false) || AgentConfig.activeProvider(ctx) == null) {
+            AgentConfig.setActiveId(ctx, account.id)
+        }
+        return JSONObject().put("ok", true)
+            .put("id", account.id)
+            .put("name", account.name)
+            .toString()
+    }
+
+    private fun removeModelProvider(args: JSONObject): String {
+        val id = args.optString("id")
+        val name = args.optString("name")
+        val target = AgentConfig.providers(ctx).firstOrNull {
+            (id.isNotBlank() && it.id == id) || (name.isNotBlank() && it.name == name)
+        } ?: return err("未找到该提供商")
+        AgentConfig.removeProvider(ctx, target.id)
+        return JSONObject().put("ok", true).put("name", target.name).toString()
+    }
+
+    private fun importProvidersMd(args: JSONObject): String {
+        val content = args.optString("content")
+        if (content.isBlank()) return err("缺少 content")
+        val accounts = ProviderImporter.parse(ctx, content)
+        if (accounts.isEmpty()) return err("未从文档中解析出任何提供商")
+        accounts.forEach { AgentConfig.upsertProvider(ctx, it) }
+        val names = JSONArray()
+        accounts.forEach { names.put(it.name) }
+        return JSONObject().put("ok", true)
+            .put("imported", accounts.size)
+            .put("names", names)
+            .toString()
+    }
+
+    // ==================== 上下文压缩 ====================
+
+    /**
+     * 当上下文过大时，把较早的对话（按 user 轮次切分，保证 tool 调用与结果不被拆散）
+     * 交给模型压缩成一段摘要，替换掉原始消息，从而在长任务中继续推进。
+     */
+    private fun compactIfNeeded(messages: JSONArray, provider: ProviderAccount): JSONArray {
+        if (estimateChars(messages) < COMPACT_THRESHOLD) return messages
+        if (messages.length() <= 1) return messages
+
+        val userIndices = mutableListOf<Int>()
+        for (i in 1 until messages.length()) {
+            if (messages.optJSONObject(i)?.optString("role") == "user") userIndices.add(i)
+        }
+        if (userIndices.size <= KEEP_USER_TURNS) return messages
+        val boundary = userIndices[userIndices.size - KEEP_USER_TURNS]
+        if (boundary <= 1) return messages
+
+        val older = JSONArray()
+        for (i in 1 until boundary) older.put(messages.getJSONObject(i))
+
+        val summary = summarize(older, provider)
+        val rebuilt = JSONArray()
+        rebuilt.put(messages.getJSONObject(0))
+        rebuilt.put(JSONObject().put("role", "user").put(
+            "content",
+            "[上下文摘要] 以下是本次任务较早阶段的要点，请据此继续：\n${summary.ifBlank { "（较早对话已省略）" }}"
+        ))
+        for (i in boundary until messages.length()) rebuilt.put(messages.getJSONObject(i))
+        listener(AgentEvent.Notice("上下文过长，已自动压缩历史"))
+        return rebuilt
+    }
+
+    private fun summarize(older: JSONArray, provider: ProviderAccount): String {
+        val sb = StringBuilder()
+        for (i in 0 until older.length()) {
+            val m = older.optJSONObject(i) ?: continue
+            val role = m.optString("role")
+            val content = when (val c = m.opt("content")) {
+                is String -> c
+                is JSONArray -> (0 until c.length()).joinToString(" ") {
+                    c.optJSONObject(it)?.optString("text").orEmpty()
+                }
+                else -> ""
+            }
+            if (content.isNotBlank()) sb.append(role).append(": ").append(content.take(800)).append("\n")
+            m.optJSONArray("tool_calls")?.let { arr ->
+                for (j in 0 until arr.length()) {
+                    val fn = arr.optJSONObject(j)?.optJSONObject("function") ?: continue
+                    sb.append("tool_call: ").append(fn.optString("name"))
+                        .append(" ").append(fn.optString("arguments").take(200)).append("\n")
+                }
+            }
+            if (role == "tool") {
+                sb.append("tool_result: ").append(content.take(300)).append("\n")
+            }
+        }
+        val prompt = JSONArray().apply {
+            put(JSONObject().put("role", "system").put(
+                "content",
+                "你是上下文压缩器。把给定的对话历史压缩成简洁的中文要点，保留用户目标、已完成的操作、关键结论、待办与失败原因，省略寒暄。只输出要点正文。"
+            ))
+            put(JSONObject().put("role", "user").put("content", sb.toString().take(12000)))
+        }
+        return runCatching {
+            DeepSeekClient.chat(provider, prompt, JSONArray(), null).content?.trim().orEmpty()
+        }.getOrDefault("")
+    }
+
+    private fun estimateChars(messages: JSONArray): Int {
+        var total = 0
+        for (i in 0 until messages.length()) {
+            val m = messages.optJSONObject(i) ?: continue
+            when (val c = m.opt("content")) {
+                is String -> total += c.length
+                is JSONArray -> for (j in 0 until c.length()) {
+                    total += c.optJSONObject(j)?.optString("text")?.length ?: 0
+                }
+            }
+            m.optJSONArray("tool_calls")?.let { arr ->
+                for (j in 0 until arr.length()) {
+                    total += arr.optJSONObject(j)?.optJSONObject("function")?.optString("arguments")?.length ?: 0
+                }
+            }
+        }
+        return total
+    }
 
     private fun buildTools(): JSONArray {
         fun fn(name: String, desc: String, props: JSONObject, required: List<String>): JSONObject = JSONObject().apply {
@@ -323,8 +577,8 @@ class AgentRunner(
             put(fn("shell", "以 Shizuku/Root 身份执行 shell 命令（需高权限模式）。", JSONObject()
                 .put("cmd", str("要执行的命令")), listOf("cmd")))
 
-            val imageModel = AgentConfig.imageModel(ctx).ifBlank { AgentConfig.provider(ctx).imageModel }
-            if (imageModel.isNotBlank()) {
+            val imageModel = AgentConfig.imageProvider(ctx)
+            if (imageModel != null) {
                 put(fn(
                     "generate_image",
                     "根据文字描述生成图片（文生图）。当用户要求画图、生成图片、制作海报或配图时调用，生成结果会自动展示给用户。",
@@ -338,6 +592,70 @@ class AgentRunner(
 
             put(fn("finish", "任务结束并给出总结。", JSONObject()
                 .put("summary", str("结果总结")), listOf("summary")))
+
+            put(fn(
+                "ask_question_for_user",
+                "当需要用户补充信息或做选择时，向用户弹出一个选择题。会同时发送通知栏提醒。用于需求不明确、需要用户提供地址/密钥、或需要用户确认选项的场景。",
+                JSONObject()
+                    .put("question", str("要询问用户的问题"))
+                    .put("options", JSONObject()
+                        .put("type", "array")
+                        .put("description", "可选项列表；留空则要求用户手动输入")
+                        .put("items", JSONObject().put("type", "string")))
+                    .put("allow_multiple", JSONObject().put("type", "boolean").put("description", "是否允许多选，默认 false"))
+                    .put("allow_custom", JSONObject().put("type", "boolean").put("description", "是否允许用户手动输入，默认 true")),
+                listOf("question"),
+            ))
+
+            put(fn(
+                "list_model_providers",
+                "列出本机已配置的模型提供商（名称、协议、地址、语言模型、生图模型、是否启用/使用中）。在帮用户增加或修改模型前先调用它了解现状。",
+                JSONObject(), emptyList(),
+            ))
+
+            put(fn(
+                "fetch_models",
+                "从某个提供商的 /models 接口拉取可用的模型列表。默认使用当前使用中的提供商与密钥。",
+                JSONObject()
+                    .put("protocol", str("协议：openai / anthropic / gemini，默认沿用当前提供商"))
+                    .put("baseUrl", str("Base URL，默认沿用当前提供商"))
+                    .put("apiKey", str("API Key，默认沿用当前提供商")),
+                emptyList(),
+            ))
+
+            put(fn(
+                "save_model_provider",
+                "新增或更新一个模型提供商并写入本地配置。当用户让你增加模型时，先用 ask_question_for_user 询问平台、地址与密钥，用 fetch_models 拉取模型列表，再调用本工具保存。",
+                JSONObject()
+                    .put("id", str("已有提供商的 id（更新时传），新增可省略"))
+                    .put("name", str("平台名称"))
+                    .put("protocol", str("协议：openai / anthropic / gemini，默认 openai"))
+                    .put("baseUrl", str("Base URL"))
+                    .put("apiKey", str("API Key"))
+                    .put("model", str("语言模型名"))
+                    .put("enabled", JSONObject().put("type", "boolean").put("description", "是否启用，默认 true"))
+                    .put("setActive", JSONObject().put("type", "boolean").put("description", "是否设为当前使用，默认 false"))
+                    .put("supportsReasoningEffort", JSONObject().put("type", "boolean").put("description", "是否支持 reasoning_effort"))
+                    .put("imageEnabled", JSONObject().put("type", "boolean").put("description", "是否加入生图模型"))
+                    .put("imageModel", str("生图模型名，仅当 imageEnabled 为 true 时必填")),
+                listOf("name", "baseUrl", "model"),
+            ))
+
+            put(fn(
+                "remove_model_provider",
+                "删除一个已配置的模型提供商。",
+                JSONObject()
+                    .put("id", str("提供商 id"))
+                    .put("name", str("提供商名称")),
+                emptyList(),
+            ))
+
+            put(fn(
+                "import_providers_md",
+                "从 Markdown/文本内容中批量解析并导入模型提供商配置。当用户提供或附带了一个描述多个平台的 md 文件时调用。",
+                JSONObject().put("content", str("md/文本的完整内容")),
+                listOf("content"),
+            ))
         }
     }
 
@@ -379,6 +697,14 @@ class AgentRunner(
             ThinkingDepth.DEEP -> "请充分分析当前界面与任务，确认每一步的后果后再行动。"
         }
         sb.append("\n\n思考深度要求：").append(depthHint)
+
+        sb.append(
+            "\n\n模型配置能力：用户让你「增加/修改模型」时，先用 ask_question_for_user 询问平台名称、Base URL 与 API Key；" +
+                "拿到后调用 fetch_models 拉取可用模型列表并让用户选择，再调用 save_model_provider 保存。" +
+                "随后询问用户是否加入生图模型：若需要，再用 ask_question_for_user 询问生图模型名（地址与密钥可沿用同一提供商），" +
+                "然后再次调用 save_model_provider 并设置 imageEnabled=true 与 imageModel。" +
+                "所有配置都会写入本地，无需用户手动进设置页。修改后用 list_model_providers 复核结果。"
+        )
 
         return sb.toString()
     }

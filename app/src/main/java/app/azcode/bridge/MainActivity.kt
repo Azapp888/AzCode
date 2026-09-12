@@ -1,6 +1,7 @@
 package app.azcode.bridge
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -8,20 +9,26 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONObject
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 聊天式主界面（DeepSeek 风格）：
@@ -63,6 +70,8 @@ class MainActivity : Activity() {
     private var activeTool: ToolCard? = null
     private var welcomeView: View? = null
     private val pending = mutableListOf<AttachmentReader.Pending>()
+    @Volatile private var pendingQuestionLatch: CountDownLatch? = null
+    private var lastBackPress = 0L
 
     private val colorRunning = Color.parseColor("#6B7280")
     private val colorOk = Color.parseColor("#16A34A")
@@ -133,9 +142,160 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         destroyed = true
+        pendingQuestionLatch?.countDown()
         runner?.cancel()
         runCatching { rikka.shizuku.Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener) }
         super.onDestroy()
+    }
+
+    /** 返回手势（含侧滑）默认会直接退出应用，改为两秒内二次返回才退出，避免误触。 */
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        val now = System.currentTimeMillis()
+        if (now - lastBackPress < 2000) {
+            @Suppress("DEPRECATION")
+            super.onBackPressed()
+        } else {
+            lastBackPress = now
+            Toast.makeText(this, R.string.back_again_to_exit, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // ==================== 向用户提问 ====================
+
+    /**
+     * 在工作线程上阻塞，等待用户在弹窗中作答；同时发送通知栏提醒。
+     * 返回 null 表示未作答或界面已销毁。
+     */
+    private fun askUserBlocking(question: AgentQuestion): String? {
+        TaskNotifier.notifyQuestion(this, question.question)
+        val latch = CountDownLatch(1)
+        val answer = AtomicReference<String?>(null)
+        pendingQuestionLatch = latch
+        runOnUiThread {
+            if (destroyed) {
+                latch.countDown()
+                return@runOnUiThread
+            }
+            showQuestionDialog(question) { result ->
+                answer.set(result)
+                latch.countDown()
+            }
+        }
+        runCatching { latch.await() }
+        pendingQuestionLatch = null
+        return answer.get()
+    }
+
+    private fun showQuestionDialog(question: AgentQuestion, onResult: (String?) -> Unit) {
+        val density = resources.displayMetrics.density
+        val pad = (20 * density).toInt()
+
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+        }
+
+        if (question.options.isNotEmpty()) {
+            if (question.allowMultiple) {
+                val boxes = mutableListOf<CheckBox>()
+                question.options.forEach { option ->
+                    val cb = CheckBox(this).apply {
+                        text = option
+                        textSize = 15f
+                        setTextColor(getColor(R.color.text_primary))
+                    }
+                    boxes.add(cb)
+                    layout.addView(cb)
+                }
+                val et = EditText(this).apply {
+                    hint = getString(R.string.question_custom_hint)
+                    inputType = InputType.TYPE_CLASS_TEXT
+                    visibility = if (question.allowCustom) View.VISIBLE else View.GONE
+                }
+                if (question.allowCustom) {
+                    layout.addView(et)
+                }
+                var submitted = false
+                val dialog = AlertDialog.Builder(this)
+                    .setTitle(question.question)
+                    .setView(ScrollView(this).apply { addView(layout) })
+                    .setPositiveButton(R.string.btn_confirm) { _, _ ->
+                        submitted = true
+                        val picks = boxes.filter { it.isChecked }.map { it.text.toString() }.toMutableList()
+                        val custom = et.text.toString().trim()
+                        if (custom.isNotEmpty()) picks.add(custom)
+                        onResult(picks.joinToString("、").ifBlank { null })
+                    }
+                    .setNegativeButton(R.string.btn_cancel) { _, _ -> onResult(null) }
+                    .setOnCancelListener { if (!submitted) onResult(null) }
+                    .create()
+                dialog.show()
+                return
+            } else {
+                val group = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
+                if (question.allowCustom) group.addView(RadioButton(this).apply {
+                    id = View.generateViewId()
+                    text = getString(R.string.question_custom_option)
+                    textSize = 15f
+                    setTextColor(getColor(R.color.text_primary))
+                })
+                question.options.forEach { option ->
+                    group.addView(RadioButton(this).apply {
+                        id = View.generateViewId()
+                        text = option
+                        textSize = 15f
+                        setTextColor(getColor(R.color.text_primary))
+                    })
+                }
+                if (question.options.isNotEmpty()) {
+                    (group.getChildAt(if (question.allowCustom) 1 else 0) as RadioButton).isChecked = true
+                }
+                layout.addView(group)
+                val et = EditText(this).apply {
+                    hint = getString(R.string.question_custom_hint)
+                    inputType = InputType.TYPE_CLASS_TEXT
+                    visibility = if (question.allowCustom) View.VISIBLE else View.GONE
+                }
+                if (question.allowCustom) layout.addView(et)
+
+                AlertDialog.Builder(this)
+                    .setTitle(question.question)
+                    .setView(ScrollView(this).apply { addView(layout) })
+                    .setPositiveButton(R.string.btn_confirm) { _, _ ->
+                        val checkedId = group.checkedRadioButtonId
+                        val selectedView = group.findViewById<RadioButton>(checkedId)
+                        val custom = et.text.toString().trim()
+                        val isCustom = selectedView != null &&
+                            selectedView.text.toString() == getString(R.string.question_custom_option)
+                        val result = if (isCustom || checkedId == -1) custom else {
+                            if (custom.isNotEmpty()) "${selectedView?.text}；$custom" else selectedView?.text?.toString()
+                        }
+                        onResult(result?.ifBlank { null })
+                    }
+                    .setNegativeButton(R.string.btn_cancel) { _, _ -> onResult(null) }
+                    .setOnCancelListener { onResult(null) }
+                    .create()
+                    .show()
+                return
+            }
+        }
+
+        val et = EditText(this).apply {
+            hint = getString(R.string.question_custom_hint)
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        layout.addView(et)
+        AlertDialog.Builder(this)
+            .setTitle(question.question)
+            .setView(ScrollView(this).apply { addView(layout) })
+            .setPositiveButton(R.string.btn_confirm) { _, _ ->
+                onResult(et.text.toString().trim().ifBlank { null })
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> onResult(null) }
+            .setOnCancelListener { onResult(null) }
+            .create()
+            .show()
     }
 
     // ==================== 会话渲染 ====================
@@ -179,24 +339,39 @@ class MainActivity : Activity() {
 
     // ==================== 模型 / 思考深度 ====================
 
-    private var modelList: List<String> = emptyList()
+    private var providerOptions: List<ProviderAccount> = emptyList()
+    private var providersSignature = ""
+
+    private fun allProvidersSignature(): String = AgentConfig.providers(this)
+        .joinToString("|") { "${it.id}:${it.name}:${it.model}:${it.enabled}:${it.protocol.key}" }
+
+    private fun accountLabel(account: ProviderAccount): String =
+        if (account.model.isBlank()) account.name else "${account.name} · ${account.model}"
 
     private fun setupModelSelector() {
-        val current = AgentConfig.model(this)
-        val presets = AgentConfig.provider(this).chatModels.ifEmpty { AgentConfig.MODEL_PRESETS }
-        modelList = LinkedHashSet<String>().apply {
-            addAll(presets)
-            add(current)
-        }.toList()
+        val all = AgentConfig.providers(this)
+        providersSignature = all.joinToString("|") {
+            "${it.id}:${it.name}:${it.model}:${it.enabled}:${it.protocol.key}"
+        }
+        providerOptions = all.filter { it.enabled }.ifEmpty { all }
+        val activeId = AgentConfig.activeProvider(this)?.id
 
         updatingModelSpinner = true
-        spModel.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, modelList)
-        spModel.setSelection(modelList.indexOf(current).coerceAtLeast(0), false)
+        spModel.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            providerOptions.map { accountLabel(it) },
+        )
+        val index = providerOptions.indexOfFirst { it.id == activeId }.coerceAtLeast(0)
+        spModel.setSelection(index, false)
         updatingModelSpinner = false
         spModel.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 if (updatingModelSpinner) return
-                AgentConfig.setModel(this@MainActivity, modelList[position])
+                val account = providerOptions.getOrNull(position) ?: return
+                if (account.id != AgentConfig.activeId(this@MainActivity)) {
+                    AgentConfig.setActiveId(this@MainActivity, account.id)
+                }
                 updateModelBox()
             }
 
@@ -232,21 +407,16 @@ class MainActivity : Activity() {
     }
 
     private fun syncModelSelector() {
-        val current = AgentConfig.model(this)
-        val adapter = spModel.adapter
-        if (adapter != null && current !in modelList) {
+        if (allProvidersSignature() != providersSignature) {
             setupModelSelector()
             return
         }
-        if (adapter != null) {
-            for (i in 0 until adapter.count) {
-                if (adapter.getItem(i) == current) {
-                    updatingModelSpinner = true
-                    spModel.setSelection(i, false)
-                    updatingModelSpinner = false
-                    break
-                }
-            }
+        val activeId = AgentConfig.activeProvider(this)?.id
+        val index = providerOptions.indexOfFirst { it.id == activeId }
+        if (index >= 0 && index != spModel.selectedItemPosition) {
+            updatingModelSpinner = true
+            spModel.setSelection(index, false)
+            updatingModelSpinner = false
         }
         updateDepthChips()
         updateModelBox()
@@ -263,9 +433,11 @@ class MainActivity : Activity() {
     }
 
     private fun updateModelBox() {
+        val provider = AgentConfig.activeProvider(this)
+        val model = provider?.model?.takeIf { it.isNotBlank() } ?: getString(R.string.model_box_unset)
         btnModelBox.text = getString(
             R.string.model_box_format,
-            AgentConfig.model(this),
+            model,
             AgentConfig.thinkingDepth(this).label,
         )
     }
@@ -392,7 +564,7 @@ class MainActivity : Activity() {
         stoppedByUser = false
         taskError = null
         lastSummary = null
-        val r = AgentRunner(this) { event ->
+        val r = AgentRunner(this, { question -> askUserBlocking(question) }) { event ->
             when (event) {
                 is AgentEvent.Failure -> taskError = event.message
                 is AgentEvent.AssistantText -> if (event.text.isNotBlank()) lastSummary = event.text
@@ -631,6 +803,12 @@ class MainActivity : Activity() {
         "global" -> getString(R.string.tool_name_global)
         "shell" -> getString(R.string.tool_name_shell)
         "generate_image" -> getString(R.string.tool_name_generate_image)
+        "ask_question_for_user" -> getString(R.string.tool_name_ask)
+        "list_model_providers" -> getString(R.string.tool_name_list_providers)
+        "fetch_models" -> getString(R.string.tool_name_fetch_models)
+        "save_model_provider" -> getString(R.string.tool_name_save_provider)
+        "remove_model_provider" -> getString(R.string.tool_name_remove_provider)
+        "import_providers_md" -> getString(R.string.tool_name_import_md)
         "finish" -> getString(R.string.tool_name_finish)
         else -> name
     }

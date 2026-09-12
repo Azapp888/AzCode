@@ -18,6 +18,7 @@ object TaskNotifier {
 
     private const val CHANNEL_ID = "azcode_task"
     private const val NOTIF_ID = 8849
+    private const val NOTIF_QUESTION_ID = 8850
 
     fun ensureChannel(context: Context) {
         val mgr = context.getSystemService(NotificationManager::class.java) ?: return
@@ -68,5 +69,30 @@ object TaskNotifier {
             .build()
 
         context.getSystemService(NotificationManager::class.java)?.notify(NOTIF_ID, notification)
+    }
+
+    /** Agent 需要用户做选择时提醒，点击回到应用查看弹窗。 */
+    fun notifyQuestion(context: Context, question: String) {
+        if (!canNotify(context)) return
+        ensureChannel(context)
+
+        val pending = PendingIntent.getActivity(
+            context, 1,
+            Intent(context, MainActivity::class.java).addFlags(
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP,
+            ),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val notification = Notification.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat)
+            .setContentTitle(context.getString(R.string.notif_question))
+            .setContentText(question)
+            .setStyle(Notification.BigTextStyle().bigText(question))
+            .setAutoCancel(true)
+            .setContentIntent(pending)
+            .build()
+
+        context.getSystemService(NotificationManager::class.java)?.notify(NOTIF_QUESTION_ID, notification)
     }
 }

@@ -1,19 +1,82 @@
 package app.azcode.bridge
 
+import org.json.JSONObject
+
 /**
- * 模型提供商预设：预设 base URL、聊天模型列表、以及可选的文生图模型名。
- * 选择预设后自动回填设置项，同时保留自定义填写能力。
- *
- * 火山方舟（豆包）走 OpenAI 兼容协议，聊天与 images/generations 共用同一 base URL。
+ * 模型提供商的 API 协议。决定请求地址、鉴权头与消息体格式。
+ * 目前支持三种主流协议；OpenAI 兼容覆盖 DeepSeek、火山方舟、硅基流动等绝大多数平台。
  */
-data class ProviderPreset(
+enum class ProviderProtocol(
+    val key: String,
+    val label: String,
+    /** 该协议是否支持 OpenAI 风格的图像生成接口（images/generations）。 */
+    val supportsImage: Boolean,
+) {
+    OPENAI("openai", "OpenAI 兼容", true),
+    ANTHROPIC("anthropic", "Anthropic Messages", false),
+    GEMINI("gemini", "Google Gemini", false);
+
+    companion object {
+        fun from(key: String?): ProviderProtocol = entries.firstOrNull { it.key == key } ?: OPENAI
+    }
+}
+
+/**
+ * 一个用户配置的模型提供商账号：独立的协议、地址、Key、语言模型与可选生图模型。
+ * 每个账号可单独启用/停用，聊天时只会用到「当前使用」的账号。
+ */
+data class ProviderAccount(
     val id: String,
     val name: String,
+    val protocol: ProviderProtocol,
     val baseUrl: String,
-    val chatModels: List<String>,
-    /** 文生图模型名；为空表示该提供商预设未配文生图，需用户自行填写。 */
+    val apiKey: String,
+    val enabled: Boolean,
+    val model: String,
+    val supportsReasoningEffort: Boolean,
+    val imageEnabled: Boolean,
     val imageModel: String,
-    /** 是否支持 reasoning_effort 参数（目前仅 DeepSeek）。 */
+) {
+    /** 该账号是否具备可用的文生图配置。 */
+    val hasImage: Boolean get() = imageEnabled && imageModel.isNotBlank()
+
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("id", id)
+        put("name", name)
+        put("protocol", protocol.key)
+        put("baseUrl", baseUrl)
+        put("apiKey", apiKey)
+        put("enabled", enabled)
+        put("model", model)
+        put("supportsReasoningEffort", supportsReasoningEffort)
+        put("imageEnabled", imageEnabled)
+        put("imageModel", imageModel)
+    }
+
+    companion object {
+        fun fromJson(o: JSONObject): ProviderAccount = ProviderAccount(
+            id = o.optString("id"),
+            name = o.optString("name"),
+            protocol = ProviderProtocol.from(o.optString("protocol")),
+            baseUrl = o.optString("baseUrl"),
+            apiKey = o.optString("apiKey"),
+            enabled = o.optBoolean("enabled", true),
+            model = o.optString("model"),
+            supportsReasoningEffort = o.optBoolean("supportsReasoningEffort", false),
+            imageEnabled = o.optBoolean("imageEnabled", false),
+            imageModel = o.optString("imageModel"),
+        )
+    }
+}
+
+/** 平台预设模板，用于「添加提供商」时快速回填。 */
+data class ProviderTemplate(
+    val id: String,
+    val name: String,
+    val protocol: ProviderProtocol,
+    val baseUrl: String,
+    val model: String,
+    val imageModel: String,
     val supportsReasoningEffort: Boolean = false,
 )
 
@@ -21,44 +84,57 @@ object ModelProviders {
 
     const val CUSTOM_ID = "custom"
 
-    val ALL: List<ProviderPreset> = listOf(
-        ProviderPreset(
+    val TEMPLATES: List<ProviderTemplate> = listOf(
+        ProviderTemplate(
             id = "deepseek",
             name = "DeepSeek",
+            protocol = ProviderProtocol.OPENAI,
             baseUrl = "https://api.deepseek.com/v1",
-            chatModels = listOf("deepseek-flash", "deepseek-chat", "deepseek-reasoner"),
+            model = "deepseek-chat",
             imageModel = "",
             supportsReasoningEffort = true,
         ),
-        ProviderPreset(
+        ProviderTemplate(
             id = "volcengine",
             name = "火山方舟（豆包）",
+            protocol = ProviderProtocol.OPENAI,
             baseUrl = "https://ark.cn-beijing.volces.com/api/v3",
-            chatModels = listOf("doubao-seed-1-6-250615", "doubao-1-5-pro-32k-250115"),
+            model = "doubao-seed-1-6-250615",
             imageModel = "doubao-seedream-3-0-t2i-250415",
         ),
-        ProviderPreset(
+        ProviderTemplate(
             id = "siliconflow",
             name = "硅基流动 SiliconFlow",
+            protocol = ProviderProtocol.OPENAI,
             baseUrl = "https://api.siliconflow.cn/v1",
-            chatModels = listOf("deepseek-ai/DeepSeek-V3", "Qwen/Qwen2.5-72B-Instruct"),
+            model = "deepseek-ai/DeepSeek-V3",
             imageModel = "Kwai-Kolors/Kolors",
         ),
-        ProviderPreset(
+        ProviderTemplate(
             id = "openai",
             name = "OpenAI",
+            protocol = ProviderProtocol.OPENAI,
             baseUrl = "https://api.openai.com/v1",
-            chatModels = listOf("gpt-4o", "gpt-4o-mini"),
+            model = "gpt-4o",
             imageModel = "gpt-image-1",
         ),
-        ProviderPreset(
-            id = CUSTOM_ID,
-            name = "自定义",
-            baseUrl = "",
-            chatModels = emptyList(),
+        ProviderTemplate(
+            id = "anthropic",
+            name = "Anthropic Claude",
+            protocol = ProviderProtocol.ANTHROPIC,
+            baseUrl = "https://api.anthropic.com/v1",
+            model = "claude-3-5-sonnet-latest",
+            imageModel = "",
+        ),
+        ProviderTemplate(
+            id = "gemini",
+            name = "Google Gemini",
+            protocol = ProviderProtocol.GEMINI,
+            baseUrl = "https://generativelanguage.googleapis.com/v1beta",
+            model = "gemini-2.0-flash",
             imageModel = "",
         ),
     )
 
-    fun byId(id: String?): ProviderPreset = ALL.firstOrNull { it.id == id } ?: ALL.first()
+    fun templateById(id: String?): ProviderTemplate? = TEMPLATES.firstOrNull { it.id == id }
 }
