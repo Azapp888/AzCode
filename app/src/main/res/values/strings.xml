@@ -15,6 +15,11 @@
     <string name="hint_task">发消息，描述要完成的任务…</string>
     <string name="btn_send">发送</string>
     <string name="btn_stop">停止</string>
+    <string name="btn_attach">添加附件</string>
+    <string name="btn_back">返回</string>
+    <string name="btn_delete">删除</string>
+    <string name="btn_cancel">取消</string>
+    <string name="btn_install">安装</string>
     <string name="typing">正在思考…</string>
     <string name="stopping">正在停止…</string>
 
@@ -24,8 +29,21 @@
     <string name="hint_base_url">Base URL</string>
     <string name="hint_model">模型名</string>
     <string name="hint_max_steps">最大步数</string>
+    <string name="hint_system_prompt">系统提示词</string>
+    <string name="hint_system_prompt_placeholder">留空使用内置默认提示词；可在此自定义 Agent 的角色与行为</string>
     <string name="btn_save_config">保存配置</string>
     <string name="toast_saved">配置已保存</string>
+
+    <string name="section_skills">技能管理</string>
+    <string name="skills_entry">技能管理（已启用 %1$d / 共 %2$d）</string>
+    <string name="title_skills">技能管理</string>
+    <string name="skills_empty">还没有技能。点右上角「+」从 GitHub 安装 SKILL.md。</string>
+    <string name="btn_add_skill">安装技能</string>
+    <string name="dialog_add_skill_title">从 GitHub 安装技能</string>
+    <string name="dialog_add_skill_msg">支持 SKILL.md 文件链接、仓库目录或 raw 链接，例如：\nhttps://github.com/owner/repo</string>
+    <string name="skill_installing">正在下载并解析技能…</string>
+    <string name="skill_installed">已安装：%1$s</string>
+    <string name="skill_install_failed">安装失败：%1$s</string>
 
     <string name="section_capabilities">设备能力</string>
     <string name="btn_open_accessibility">无障碍设置</string>

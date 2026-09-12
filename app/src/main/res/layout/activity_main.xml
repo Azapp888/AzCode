@@ -93,45 +93,75 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="bottom"
+        android:orientation="vertical"
         android:padding="8dp">
 
-        <EditText
-            android:id="@+id/etTask"
-            android:layout_width="0dp"
+        <HorizontalScrollView
+            android:id="@+id/svAttachments"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@drawable/bg_input"
-            android:hint="@string/hint_task"
-            android:inputType="textMultiLine|textCapSentences"
-            android:maxLines="5"
-            android:minHeight="44dp"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:paddingTop="10dp"
-            android:paddingBottom="10dp"
-            android:textColor="@color/text_primary"
-            android:textColorHint="@color/text_secondary"
-            android:textSize="15sp" />
+            android:layout_marginBottom="6dp"
+            android:scrollbars="none"
+            android:visibility="gone">
 
-        <ImageButton
-            android:id="@+id/btnSend"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_circle_primary"
-            android:src="@drawable/ic_send"
-            android:contentDescription="@string/btn_send" />
+            <LinearLayout
+                android:id="@+id/attachmentsRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
 
-        <ImageButton
-            android:id="@+id/btnStop"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_circle_stop"
-            android:src="@drawable/ic_stop"
-            android:visibility="gone"
-            android:contentDescription="@string/btn_stop" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="bottom">
+
+            <ImageButton
+                android:id="@+id/btnAttach"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_attach"
+                android:contentDescription="@string/btn_attach" />
+
+            <EditText
+                android:id="@+id/etTask"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:background="@drawable/bg_input"
+                android:hint="@string/hint_task"
+                android:inputType="textMultiLine|textCapSentences"
+                android:maxLines="5"
+                android:minHeight="44dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="15sp" />
+
+            <ImageButton
+                android:id="@+id/btnSend"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_circle_primary"
+                android:src="@drawable/ic_send"
+                android:contentDescription="@string/btn_send" />
+
+            <ImageButton
+                android:id="@+id/btnStop"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_circle_stop"
+                android:src="@drawable/ic_stop"
+                android:visibility="gone"
+                android:contentDescription="@string/btn_stop" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

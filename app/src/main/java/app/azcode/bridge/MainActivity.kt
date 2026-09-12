@@ -1,12 +1,16 @@
 package app.azcode.bridge
 
 import android.app.Activity
+import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.view.View
 import android.widget.EditText
+import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -17,7 +21,7 @@ import org.json.JSONObject
 
 /**
  * 聊天式主界面（DeepSeek 风格）：
- *  - 用户/助手消息以气泡呈现
+ *  - 用户/助手消息以气泡呈现，支持图片与文档附件
  *  - 工具调用以可折叠卡片呈现，默认收起，失败时自动展开
  *  - 所有配置与设备能力入口收敛到 SettingsActivity
  */
@@ -28,8 +32,11 @@ class MainActivity : Activity() {
     private lateinit var etTask: EditText
     private lateinit var btnSend: ImageButton
     private lateinit var btnStop: ImageButton
+    private lateinit var btnAttach: ImageButton
     private lateinit var dotStatus: View
     private lateinit var tvHeaderStatus: TextView
+    private lateinit var svAttachments: HorizontalScrollView
+    private lateinit var attachmentsRow: LinearLayout
 
     @Volatile private var runner: AgentRunner? = null
     private var worker: Thread? = null
@@ -38,6 +45,7 @@ class MainActivity : Activity() {
     private var typingView: View? = null
     private var activeTool: ToolCard? = null
     private var welcomeView: View? = null
+    private val pending = mutableListOf<AttachmentReader.Pending>()
 
     private val colorRunning = Color.parseColor("#6B7280")
     private val colorOk = Color.parseColor("#16A34A")
@@ -63,17 +71,22 @@ class MainActivity : Activity() {
         etTask = findViewById(R.id.etTask)
         btnSend = findViewById(R.id.btnSend)
         btnStop = findViewById(R.id.btnStop)
+        btnAttach = findViewById(R.id.btnAttach)
         dotStatus = findViewById(R.id.dotStatus)
         tvHeaderStatus = findViewById(R.id.tvHeaderStatus)
+        svAttachments = findViewById(R.id.svAttachments)
+        attachmentsRow = findViewById(R.id.attachmentsRow)
 
         findViewById<View>(R.id.btnSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
         btnSend.setOnClickListener { sendTask() }
         btnStop.setOnClickListener { stopTask() }
+        btnAttach.setOnClickListener { pickAttachments() }
 
         runCatching { rikka.shizuku.Shizuku.addRequestPermissionResultListener(shizukuPermissionListener) }
         showWelcome()
+        refreshAttachments()
     }
 
     override fun onResume() {
@@ -109,11 +122,85 @@ class MainActivity : Activity() {
         welcomeView = null
     }
 
+    // ==================== 附件 ====================
+
+    private fun pickAttachments() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, AttachmentReader.PICK_MIME_TYPES)
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        }
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent, REQ_PICK)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_PICK || resultCode != RESULT_OK || data == null) return
+
+        val uris = mutableListOf<Uri>()
+        data.clipData?.let { clip: ClipData ->
+            for (i in 0 until clip.itemCount) uris.add(clip.getItemAt(i).uri)
+        } ?: data.data?.let { uris.add(it) }
+
+        var rejected = 0
+        uris.forEach { uri ->
+            runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            val name = queryName(uri)
+            val mime = contentResolver.getType(uri).orEmpty()
+            try {
+                val kind = AttachmentReader.kindOf(name, mime)
+                if (pending.any { it.uri == uri }) return@forEach
+                pending.add(AttachmentReader.Pending(uri, name, mime, kind))
+            } catch (e: AttachmentReader.UnsupportedException) {
+                rejected++
+                Toast.makeText(this, e.message, Toast.LENGTH_SHORT).show()
+            }
+        }
+        if (uris.isNotEmpty() && rejected == 0) refreshAttachments()
+    }
+
+    private fun refreshAttachments() {
+        attachmentsRow.removeAllViews()
+        svAttachments.visibility = if (pending.isEmpty()) View.GONE else View.VISIBLE
+        pending.forEach { p ->
+            val chip = layoutInflater.inflate(R.layout.item_attachment_chip, attachmentsRow, false) as TextView
+            chip.text = p.name
+            chip.setOnClickListener {
+                pending.remove(p)
+                refreshAttachments()
+            }
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+            lp.marginEnd = dp(6)
+            chip.layoutParams = lp
+            attachmentsRow.addView(chip)
+        }
+    }
+
+    private fun queryName(uri: Uri): String {
+        runCatching {
+            contentResolver.query(uri, null, null, null, null)?.use { c ->
+                val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0 && c.moveToFirst()) {
+                    return c.getString(idx) ?: "附件"
+                }
+            }
+        }
+        return uri.lastPathSegment?.substringAfterLast('/').orEmpty().ifEmpty { "附件" }
+    }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
     // ==================== 任务运行 ====================
 
     private fun sendTask() {
         val task = etTask.text.toString().trim()
-        if (task.isEmpty()) {
+        if (task.isEmpty() && pending.isEmpty()) {
             Toast.makeText(this, R.string.warn_need_task, Toast.LENGTH_SHORT).show()
             return
         }
@@ -126,9 +213,14 @@ class MainActivity : Activity() {
             return
         }
 
+        val attachments = pending.toList()
+        val displayTask = task.ifEmpty { "（见附件）" }
+        pending.clear()
+        refreshAttachments()
+
         dismissWelcome()
         etTask.setText("")
-        addUserMessage(task)
+        addUserMessage(displayTask, attachments.map { it.name })
 
         val r = AgentRunner(this) { event -> runOnUiThread { handleEvent(event) } }
         runner = r
@@ -136,7 +228,16 @@ class MainActivity : Activity() {
 
         worker = Thread({
             try {
-                r.run(task)
+                val prepared = ArrayList<AttachmentReader.Prepared>()
+                for (p in attachments) {
+                    try {
+                        prepared.addAll(AttachmentReader.prepareAll(this, p))
+                    } catch (e: Exception) {
+                        runOnUiThread { handleEvent(AgentEvent.Failure("附件「${p.name}」读取失败：${e.message}")) }
+                        return@Thread
+                    }
+                }
+                r.run(displayTask, prepared)
             } catch (e: Exception) {
                 runOnUiThread { handleEvent(AgentEvent.Failure(e.message ?: "任务异常结束")) }
             } finally {
@@ -160,6 +261,7 @@ class MainActivity : Activity() {
         btnSend.visibility = if (running) View.GONE else View.VISIBLE
         btnStop.visibility = if (running) View.VISIBLE else View.GONE
         btnStop.isEnabled = running
+        btnAttach.isEnabled = !running
         etTask.isEnabled = !running
     }
 
@@ -204,9 +306,14 @@ class MainActivity : Activity() {
 
     // ==================== 消息渲染 ====================
 
-    private fun addUserMessage(text: String) {
+    private fun addUserMessage(text: String, attachmentNames: List<String> = emptyList()) {
         val v = layoutInflater.inflate(R.layout.item_msg_user, chatContainer, false)
         v.findViewById<TextView>(R.id.tvMsg).text = text
+        if (attachmentNames.isNotEmpty()) {
+            val tvAtt = v.findViewById<TextView>(R.id.tvAttachments)
+            tvAtt.visibility = View.VISIBLE
+            tvAtt.text = "附件：" + attachmentNames.joinToString("、")
+        }
         chatContainer.addView(v)
         scrollToBottom()
     }
@@ -313,5 +420,9 @@ class MainActivity : Activity() {
         dotStatus.setBackgroundResource(if (on) R.drawable.dot_on else R.drawable.dot_off)
         tvHeaderStatus.text =
             getString(if (on) R.string.status_accessibility_on else R.string.status_accessibility_off)
+    }
+
+    companion object {
+        private const val REQ_PICK = 2001
     }
 }

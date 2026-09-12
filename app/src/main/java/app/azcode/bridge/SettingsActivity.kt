@@ -20,7 +20,9 @@ class SettingsActivity : Activity() {
     private lateinit var etBase: EditText
     private lateinit var etModel: EditText
     private lateinit var etMaxSteps: EditText
+    private lateinit var etSystemPrompt: EditText
     private lateinit var tvStatus: TextView
+    private lateinit var tvSkillsEntry: TextView
     private lateinit var btnBridge: Button
 
     private val shizukuPermissionListener =
@@ -43,16 +45,22 @@ class SettingsActivity : Activity() {
         etBase = findViewById(R.id.etBase)
         etModel = findViewById(R.id.etModel)
         etMaxSteps = findViewById(R.id.etMaxSteps)
+        etSystemPrompt = findViewById(R.id.etSystemPrompt)
         tvStatus = findViewById(R.id.tvStatus)
+        tvSkillsEntry = findViewById(R.id.tvSkillsEntry)
         btnBridge = findViewById(R.id.btnBridge)
 
         etKey.setText(AgentConfig.apiKey(this))
         etBase.setText(AgentConfig.baseUrl(this))
         etModel.setText(AgentConfig.model(this))
         etMaxSteps.setText(AgentConfig.maxSteps(this).toString())
+        etSystemPrompt.setText(AgentConfig.systemPrompt(this))
 
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<View>(R.id.btnSave).setOnClickListener { saveConfig() }
+        tvSkillsEntry.setOnClickListener {
+            startActivity(Intent(this, SkillsActivity::class.java))
+        }
         findViewById<View>(R.id.btnAccessibility).setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
@@ -87,6 +95,7 @@ class SettingsActivity : Activity() {
             model = etModel.text.toString().trim().ifBlank { AgentConfig.DEFAULT_MODEL },
             maxSteps = steps,
         )
+        AgentConfig.setSystemPrompt(this, etSystemPrompt.text.toString().trim())
         etMaxSteps.setText(steps.toString())
         Toast.makeText(this, R.string.toast_saved, Toast.LENGTH_SHORT).show()
         refreshStatus()
@@ -127,6 +136,10 @@ class SettingsActivity : Activity() {
         btnBridge.setText(
             if (AgentBridge.isRunning) R.string.btn_stop_bridge else R.string.btn_start_bridge
         )
+
+        val total = SkillStore.count(this)
+        val enabled = SkillStore.enabled(this).size
+        tvSkillsEntry.text = getString(R.string.skills_entry, enabled, total)
     }
 
     private fun maybeRequestNotificationPermission() {

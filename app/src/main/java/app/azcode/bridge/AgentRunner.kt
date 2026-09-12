@@ -47,15 +47,15 @@ class AgentRunner(
         cancelled = true
     }
 
-    fun run(task: String) {
+    fun run(task: String, attachments: List<AttachmentReader.Prepared> = emptyList()) {
         val apiKey = AgentConfig.apiKey(ctx)
         val baseUrl = AgentConfig.baseUrl(ctx)
         val model = AgentConfig.model(ctx)
         val maxSteps = AgentConfig.maxSteps(ctx)
 
         val messages = JSONArray().apply {
-            put(JSONObject().put("role", "system").put("content", SYSTEM_PROMPT))
-            put(JSONObject().put("role", "user").put("content", task))
+            put(JSONObject().put("role", "system").put("content", buildSystemPrompt()))
+            put(JSONObject().put("role", "user").put("content", DeepSeekClient.buildUserContent(task, attachments)))
         }
         val tools = buildTools()
 
@@ -216,12 +216,17 @@ class AgentRunner(
         }
     }
 
-    companion object {
-        private const val SYSTEM_PROMPT = """你是 AzCode，一个运行在 Android 手机本地的自动化助手，直接操作用户的手机。
-每一步先调用 get_screen 观察当前界面，再选择动作。坐标使用屏幕物理像素。
-优先按文本点击（tap 的 text 字段）以提高鲁棒性；无法定位文本时再用坐标。
-执行 shell 前确认任务确实需要；NORMAL 模式下 shell 会失败，此时改用无障碍能力。
-面向用户的文字要简洁、口语化，直接说明你正在做什么或最终结果，不要输出 JSON、代码块或工具参数。
-任务完成或无法继续时，调用 finish，并在 summary 里用一两句话向用户总结结果。"""
+    private fun buildSystemPrompt(): String {
+        val base = AgentConfig.systemPrompt(ctx).ifBlank { AgentConfig.DEFAULT_SYSTEM_PROMPT }
+        val skills = SkillStore.enabled(ctx)
+        if (skills.isEmpty()) return base
+        val sb = StringBuilder(base)
+        sb.append("\n\n你可以运用以下技能，按需遵循其中的步骤：")
+        skills.forEach { s ->
+            sb.append("\n\n### ").append(s.name)
+            if (s.description.isNotBlank()) sb.append("\n").append(s.description)
+            sb.append("\n").append(s.content.trim())
+        }
+        return sb.toString()
     }
 }

@@ -87,6 +87,22 @@
                 android:hint="@string/hint_max_steps"
                 android:inputType="number" />
 
+            <TextView style="@style/SettingLabel" android:text="@string/hint_system_prompt" />
+
+            <EditText
+                android:id="@+id/etSystemPrompt"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_field"
+                android:gravity="top"
+                android:hint="@string/hint_system_prompt_placeholder"
+                android:inputType="textMultiLine"
+                android:minLines="4"
+                android:padding="12dp"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="13sp" />
+
             <Button
                 android:id="@+id/btnSave"
                 android:layout_width="match_parent"
@@ -96,6 +112,22 @@
                 android:text="@string/btn_save_config"
                 android:textColor="@color/text_on_primary"
                 android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/tvSkillsEntry"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/bg_field"
+                android:clickable="true"
+                android:focusable="true"
+                android:drawableEnd="@drawable/ic_chevron_right"
+                android:drawablePadding="8dp"
+                android:gravity="center_vertical"
+                android:padding="14dp"
+                android:text="@string/section_skills"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp" />
 
             <View
                 android:layout_width="match_parent"

@@ -7,18 +7,34 @@
     android:paddingTop="6dp"
     android:paddingBottom="2dp">
 
-    <TextView
-        android:id="@+id/tvMsg"
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:orientation="vertical"
         android:maxWidth="300dp"
         android:background="@drawable/bg_bubble_user"
         android:paddingStart="14dp"
         android:paddingEnd="14dp"
         android:paddingTop="10dp"
-        android:paddingBottom="10dp"
-        android:textColor="@color/text_on_primary"
-        android:textSize="15sp"
-        android:textIsSelectable="true"
-        android:lineSpacingExtra="2dp" />
+        android:paddingBottom="10dp">
+
+        <TextView
+            android:id="@+id/tvAttachments"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:drawablePadding="4dp"
+            android:textColor="#DCE4FF"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/tvMsg"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_on_primary"
+            android:textSize="15sp"
+            android:textIsSelectable="true"
+            android:lineSpacingExtra="2dp" />
+    </LinearLayout>
 </LinearLayout>
