@@ -4,27 +4,26 @@ using AzCode.Desktop.Models;
 namespace AzCode.Desktop.Services;
 
 /// <summary>
-/// Agent 决策循环：读取屏幕 → 交给 DeepSeek 决策 → 经能力桥执行 → 回灌结果，直至结束或达最大步数。
+/// Agent 决策循环：读取本机桌面控件树 → 交给 DeepSeek 决策 → 执行鼠标/键盘/命令 → 回灌结果。
 /// </summary>
 public sealed class AgentRunner
 {
     private readonly AppConfig _cfg;
-    private readonly DeviceBridgeClient _bridge;
     private readonly DeepSeekClient _llm = new();
 
     public event Action<string>? Log;
 
-    public AgentRunner(AppConfig cfg, DeviceBridgeClient bridge)
+    public AgentRunner(AppConfig cfg)
     {
         _cfg = cfg;
-        _bridge = bridge;
     }
 
     private const string SystemPrompt = """
-        你是 AzCode，一个通过 HTTP 能力桥控制 Android 手机的自动化助手。
-        每一步先调用 get_screen 观察当前界面，再选择动作。坐标使用屏幕物理像素。
-        优先按文本点击（tap 的 text 字段）以提高鲁棒性；无法定位文本时再用坐标。
-        执行 shell 前确认任务确实需要；NORMAL 模式下 shell 会失败，此时改用无障碍能力。
+        你是 AzCode，一个运行在 Windows 电脑本地的自动化助手，直接控制这台电脑。
+        每一步先调用 get_screen 观察当前活动窗口的控件树（名称/类型/坐标）与窗口标题，再选择动作。
+        点击优先用 click 的 text 字段匹配控件名称，匹配不到时再用坐标。
+        输入文字用 type；组合键用 key（如 "ctrl+s"、"enter"、"alt+f4"）。
+        需要执行系统操作（启动程序、文件操作、查询信息）时用 shell（PowerShell）。
         任务完成或无法继续时，调用 finish 并给出简短总结。
         """;
 
@@ -54,7 +53,7 @@ public sealed class AgentRunner
             foreach (var call in msg.ToolCalls)
             {
                 ct.ThrowIfCancellationRequested();
-                var result = await ExecuteAsync(call, ct);
+                var result = Execute(call);
                 Log?.Invoke($"  {call.Function.Name} -> {Truncate(result, 500)}");
                 messages.Add(new ChatMessage
                 {
@@ -68,27 +67,69 @@ public sealed class AgentRunner
         Log?.Invoke($"达到最大步数 {_cfg.MaxSteps}，停止。");
     }
 
-    private async Task<string> ExecuteAsync(ToolCall call, CancellationToken ct)
+    private static string Execute(ToolCall call)
     {
         var args = ParseArgs(call.Function.Arguments);
         try
         {
-            return call.Function.Name switch
+            switch (call.Function.Name)
             {
-                "get_screen" => await _bridge.GetAsync("/screen"),
-                "tap" => await _bridge.PostJsonAsync("/tap", args),
-                "swipe" => await _bridge.PostJsonAsync("/swipe", args),
-                "global" => await _bridge.PostJsonAsync("/global", args),
-                "shell" => await _bridge.PostJsonAsync("/shell", args),
-                "finish" => FinishResult(args),
-                _ => $"{{\"ok\":false,\"error\":\"unknown tool {call.Function.Name}\"}}",
-            };
+                case "get_screen":
+                    return WindowsAutomation.DumpScreenJson();
+
+                case "click":
+                {
+                    var text = args["text"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(text))
+                        return WindowsAutomation.ClickByText(text) ? Ok() : Err($"未找到控件：{text}");
+                    if (args["x"] is not null && args["y"] is not null)
+                    {
+                        WindowsAutomation.ClickAt((int)args["x"]!.GetValue<double>(), (int)args["y"]!.GetValue<double>());
+                        return Ok();
+                    }
+                    return Err("需要 text 或 x/y");
+                }
+
+                case "type":
+                {
+                    var text = args["text"]?.ToString();
+                    if (string.IsNullOrEmpty(text)) return Err("缺少 text");
+                    WindowsAutomation.TypeText(text);
+                    return Ok();
+                }
+
+                case "key":
+                {
+                    var keys = args["keys"]?.ToString();
+                    if (string.IsNullOrWhiteSpace(keys)) return Err("缺少 keys");
+                    WindowsAutomation.PressKeys(keys);
+                    return Ok();
+                }
+
+                case "shell":
+                {
+                    var cmd = args["cmd"]?.ToString();
+                    if (string.IsNullOrWhiteSpace(cmd)) return Err("缺少 cmd");
+                    return WindowsAutomation.Shell(cmd);
+                }
+
+                case "finish":
+                    return new JsonObject { ["ok"] = true, ["summary"] = args["summary"]?.ToString() ?? "" }.ToJsonString();
+
+                default:
+                    return Err($"未知工具 {call.Function.Name}");
+            }
         }
         catch (Exception ex)
         {
-            return $"{{\"ok\":false,\"error\":{JsonValue.Create(ex.Message)!.ToJsonString()}}}";
+            return Err(ex.Message);
         }
     }
+
+    private static string Ok() => """{"ok":true}""";
+
+    private static string Err(string message) =>
+        new JsonObject { ["ok"] = false, ["error"] = message }.ToJsonString();
 
     private static JsonObject ParseArgs(string? raw)
     {
@@ -101,16 +142,6 @@ public sealed class AgentRunner
         {
             return new JsonObject();
         }
-    }
-
-    private static string FinishResult(JsonObject args)
-    {
-        var summary = args["summary"]?.ToString() ?? "";
-        return new JsonObject
-        {
-            ["ok"] = true,
-            ["summary"] = summary,
-        }.ToJsonString();
     }
 
     private static string Truncate(string s, int max) =>
@@ -139,31 +170,22 @@ public sealed class AgentRunner
 
         return new JsonArray
         {
-            Fn("get_screen", "读取当前屏幕可见节点（文本、坐标、可点击性）。", new JsonObject(), Array.Empty<string>()),
-            Fn("tap", "点击屏幕。可用坐标或文本二者之一。", new JsonObject
+            Fn("get_screen", "读取当前活动窗口的控件树（名称、类型、坐标）与窗口标题。", new JsonObject(), Array.Empty<string>()),
+            Fn("click", "点击控件或坐标。优先按控件名称。", new JsonObject
             {
-                ["x"] = Num("X 物理像素"),
-                ["y"] = Num("Y 物理像素"),
-                ["text"] = Str("要点击的文本"),
+                ["text"] = Str("要点击的控件名称（包含匹配）"),
+                ["x"] = Num("X 屏幕坐标"),
+                ["y"] = Num("Y 屏幕坐标"),
             }, Array.Empty<string>()),
-            Fn("swipe", "从 (x1,y1) 滑动到 (x2,y2)。", new JsonObject
+            Fn("type", "向当前焦点输入文本。", new JsonObject
             {
-                ["x1"] = Num("起点 X"),
-                ["y1"] = Num("起点 Y"),
-                ["x2"] = Num("终点 X"),
-                ["y2"] = Num("终点 Y"),
-                ["duration"] = Num("持续毫秒，默认 300"),
-            }, new[] { "x1", "y1", "x2", "y2" }),
-            Fn("global", "系统导航动作。", new JsonObject
+                ["text"] = Str("要输入的文本"),
+            }, new[] { "text" }),
+            Fn("key", "按下组合键，如 ctrl+s、enter、alt+f4、win。", new JsonObject
             {
-                ["action"] = new JsonObject
-                {
-                    ["type"] = "string",
-                    ["enum"] = new JsonArray("back", "home", "recents", "notifications"),
-                    ["description"] = "导航动作",
-                },
-            }, new[] { "action" }),
-            Fn("shell", "以 Shizuku/Root 身份执行 shell 命令（需高权限模式）。", new JsonObject
+                ["keys"] = Str("组合键"),
+            }, new[] { "keys" }),
+            Fn("shell", "执行 PowerShell 命令。", new JsonObject
             {
                 ["cmd"] = Str("要执行的命令"),
             }, new[] { "cmd" }),

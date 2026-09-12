@@ -1,45 +1,43 @@
 <Window x:Class="AzCode.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="AzCode Console" Height="680" Width="960"
+        Title="AzCode Console" Height="720" Width="980"
         WindowStartupLocation="CenterScreen">
     <Grid Margin="12">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal">
-            <TextBlock Text="adb:" VerticalAlignment="Center" />
-            <TextBox x:Name="TxtAdb" Width="220" Margin="6,0" />
-            <TextBlock Text="端口:" VerticalAlignment="Center" Margin="8,0,0,0" />
-            <TextBox x:Name="TxtPort" Width="70" Margin="6,0" />
-            <Button x:Name="BtnConnect" Content="连接设备" Padding="10,2" Margin="6,0" Click="BtnConnect_Click" />
-            <TextBlock x:Name="TxtConn" VerticalAlignment="Center" Margin="10,0" Foreground="Gray" />
+        <StackPanel Grid.Row="0">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="DeepSeek Key:" VerticalAlignment="Center" />
+                <PasswordBox x:Name="TxtKey" Width="260" Margin="6,0" />
+                <TextBlock Text="Base URL:" VerticalAlignment="Center" Margin="8,0,0,0" />
+                <TextBox x:Name="TxtBase" Width="220" Margin="6,0" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <TextBlock Text="模型:" VerticalAlignment="Center" />
+                <TextBox x:Name="TxtModel" Width="160" Margin="6,0" />
+                <TextBlock Text="最大步数:" VerticalAlignment="Center" Margin="8,0,0,0" />
+                <TextBox x:Name="TxtMaxSteps" Width="60" Margin="6,0" />
+                <Button x:Name="BtnSave" Content="保存配置" Padding="14,2" Margin="12,0,0,0" Click="BtnSave_Click" />
+            </StackPanel>
         </StackPanel>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,0">
-            <TextBlock Text="DeepSeek Key:" VerticalAlignment="Center" />
-            <PasswordBox x:Name="TxtKey" Width="240" Margin="6,0" />
-            <TextBlock Text="模型:" VerticalAlignment="Center" Margin="8,0,0,0" />
-            <TextBox x:Name="TxtModel" Width="150" Margin="6,0" />
-            <Button x:Name="BtnSave" Content="保存配置" Padding="10,2" Margin="6,0" Click="BtnSave_Click" />
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,12,0,8">
+            <TextBlock Text="任务:" VerticalAlignment="Center" />
+            <TextBox x:Name="TxtTask" Width="700" Margin="6,0"
+                     Text="打开记事本，输入一行文字，然后保存到桌面" />
+            <Button x:Name="BtnRun" Content="运行任务" Padding="14,2" Margin="6,0" Click="BtnRun_Click" />
+            <Button x:Name="BtnStop" Content="停止" Padding="14,2" Click="BtnStop_Click" IsEnabled="False" />
         </StackPanel>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,8">
-            <TextBox x:Name="TxtTask" Width="700" Margin="0,0,6,0"
-                     Text="打开设置查看当前 Android 版本号" />
-            <Button x:Name="BtnRun" Content="运行任务" Padding="10,2" Click="BtnRun_Click" />
-            <Button x:Name="BtnStop" Content="停止" Padding="10,2" Margin="6,0"
-                    Click="BtnStop_Click" IsEnabled="False" />
-        </StackPanel>
-
-        <TextBox Grid.Row="3" x:Name="TxtLog" IsReadOnly="True" AcceptsReturn="True"
+        <TextBox Grid.Row="2" x:Name="TxtLog" IsReadOnly="True" AcceptsReturn="True"
                  VerticalScrollBarVisibility="Auto" FontFamily="Consolas" TextWrapping="Wrap" />
 
-        <TextBlock Grid.Row="4" x:Name="TxtStatus" Margin="0,8,0,0" Foreground="Gray" />
+        <TextBlock Grid.Row="3" x:Name="TxtStatus" Margin="0,8,0,0" Foreground="Gray" />
     </Grid>
 </Window>

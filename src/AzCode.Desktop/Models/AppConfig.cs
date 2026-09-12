@@ -12,8 +12,6 @@ public sealed class AppConfig
     public string DeepSeekApiKey { get; set; } = "";
     public string DeepSeekBaseUrl { get; set; } = "https://api.deepseek.com/v1";
     public string Model { get; set; } = "deepseek-chat";
-    public string AdbPath { get; set; } = "adb";
-    public int BridgePort { get; set; } = 8848;
     public int MaxSteps { get; set; } = 25;
     public double Temperature { get; set; } = 0.2;
 
