@@ -10,8 +10,9 @@
     <color name="text_on_primary">#FFFFFF</color>
     <color name="divider">#E5E7EB</color>
 
-    <color name="bubble_assistant">#F3F4F6</color>
-    <color name="input_bg">#F3F4F6</color>
+    <color name="bubble_assistant">#F5F6F8</color>
+    <color name="input_bg">#FBFCFE</color>
+    <color name="input_stroke">#E9ECF1</color>
 
     <color name="tool_bg">#F7F8FA</color>
     <color name="tool_border">#E5E7EB</color>

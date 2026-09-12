@@ -26,6 +26,9 @@ sealed interface AgentEvent {
     /** 工具执行结束。 */
     data class ToolResult(val name: String, val ok: Boolean, val output: String) : AgentEvent
 
+    /** 文生图工具产出的图片地址列表，UI 直接渲染为图片气泡。 */
+    data class Images(val urls: List<String>) : AgentEvent
+
     /** 中性系统提示，如达到步数上限。 */
     data class Notice(val text: String) : AgentEvent
 
@@ -63,6 +66,7 @@ class AgentRunner(
         }
         val tools = buildTools()
         val depth = AgentConfig.thinkingDepth(ctx)
+        val effort = if (AgentConfig.provider(ctx).supportsReasoningEffort) depth.effort else null
 
         try {
             var step = 0
@@ -72,7 +76,7 @@ class AgentRunner(
                 listener(AgentEvent.Thinking)
 
                 val reply = try {
-                    DeepSeekClient.chat(baseUrl, apiKey, model, messages, tools, depth.effort)
+                    DeepSeekClient.chat(baseUrl, apiKey, model, messages, tools, effort)
                 } catch (e: Exception) {
                     if (cancelled) listener(AgentEvent.Notice("已停止"))
                     else listener(AgentEvent.Failure(e.message ?: "请求模型失败"))
@@ -94,12 +98,26 @@ class AgentRunner(
 
                     val result = execute(c)
                     val ok = runCatching { JSONObject(result).optBoolean("ok", false) }.getOrDefault(false)
-                    listener(AgentEvent.ToolResult(c.name, ok, result))
+
+                    // 文生图结果可能包含大体积 base64，仅把图片交给 UI，回灌模型的只保留简短说明。
+                    var modelResult = result
+                    if (c.name == "generate_image" && ok) {
+                        val urls = runCatching {
+                            val arr = JSONObject(result).optJSONArray("images") ?: JSONArray()
+                            (0 until arr.length()).map { arr.getString(it) }
+                        }.getOrDefault(emptyList())
+                        if (urls.isNotEmpty()) listener(AgentEvent.Images(urls))
+                        modelResult = JSONObject()
+                            .put("ok", true)
+                            .put("message", "已生成 ${urls.size} 张图片并展示给用户")
+                            .toString()
+                    }
+                    listener(AgentEvent.ToolResult(c.name, ok, modelResult))
 
                     messages.put(JSONObject().apply {
                         put("role", "tool")
                         put("tool_call_id", c.id)
-                        put("content", result)
+                        put("content", modelResult)
                     })
 
                     if (c.name == "finish") {
@@ -234,6 +252,28 @@ class AgentRunner(
                 else JSONObject().put("ok", true).put("output", DeviceControl.exec(ctx, cmd)).toString()
             }
 
+            "generate_image" -> {
+                val prompt = args.optString("prompt")
+                val imageModel = AgentConfig.imageModel(ctx).ifBlank {
+                    AgentConfig.provider(ctx).imageModel
+                }
+                when {
+                    prompt.isBlank() -> err("缺少 prompt")
+                    imageModel.isBlank() -> err("当前未配置文生图模型，请在「设置 → 模型」填写图像模型名")
+                    else -> {
+                        val urls = DeepSeekClient.generateImage(
+                            baseUrl = AgentConfig.baseUrl(ctx),
+                            apiKey = AgentConfig.apiKey(ctx),
+                            imageModel = imageModel,
+                            prompt = prompt,
+                            size = args.optString("size", "1024x1024"),
+                            count = args.optInt("count", 1),
+                        )
+                        JSONObject().put("ok", true).put("images", JSONArray(urls)).toString()
+                    }
+                }
+            }
+
             "finish" -> JSONObject().put("ok", true).put("summary", args.optString("summary")).toString()
 
             else -> err("未知工具 ${call.name}")
@@ -282,6 +322,20 @@ class AgentRunner(
                     .put("description", "导航动作")), listOf("action")))
             put(fn("shell", "以 Shizuku/Root 身份执行 shell 命令（需高权限模式）。", JSONObject()
                 .put("cmd", str("要执行的命令")), listOf("cmd")))
+
+            val imageModel = AgentConfig.imageModel(ctx).ifBlank { AgentConfig.provider(ctx).imageModel }
+            if (imageModel.isNotBlank()) {
+                put(fn(
+                    "generate_image",
+                    "根据文字描述生成图片（文生图）。当用户要求画图、生成图片、制作海报或配图时调用，生成结果会自动展示给用户。",
+                    JSONObject()
+                        .put("prompt", str("图片内容的详细描述，建议包含主体、风格、构图、色彩"))
+                        .put("size", str("图片尺寸，如 1024x1024；不同提供商支持的尺寸可能不同，可省略"))
+                        .put("count", num("生成张数，默认 1")),
+                    listOf("prompt"),
+                ))
+            }
+
             put(fn("finish", "任务结束并给出总结。", JSONObject()
                 .put("summary", str("结果总结")), listOf("summary")))
         }

@@ -55,6 +55,22 @@
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
+            <TextView style="@style/SettingLabel" android:text="@string/title_provider" />
+
+            <Spinner
+                android:id="@+id/spProvider"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/hint_provider"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp" />
+
             <TextView style="@style/SettingLabel" android:text="@string/hint_api_key" />
 
             <EditText
@@ -77,6 +93,14 @@
                 android:id="@+id/etModel"
                 style="@style/SettingInput"
                 android:hint="@string/hint_model"
+                android:inputType="text" />
+
+            <TextView style="@style/SettingLabel" android:text="@string/hint_image_model" />
+
+            <EditText
+                android:id="@+id/etImageModel"
+                style="@style/SettingInput"
+                android:hint="@string/hint_image_model"
                 android:inputType="text" />
 
             <TextView style="@style/SettingLabel" android:text="@string/hint_max_steps" />

@@ -30,6 +30,8 @@ object AgentConfig {
     private const val KEY_DEPTH = "thinking_depth"
     private const val KEY_MAX_STEPS = "max_steps"
     private const val KEY_SYSTEM_PROMPT = "system_prompt"
+    private const val KEY_PROVIDER = "provider"
+    private const val KEY_IMAGE_MODEL = "image_model"
 
     const val DEFAULT_BASE = "https://api.deepseek.com/v1"
     const val DEFAULT_MODEL = "deepseek-flash"
@@ -51,6 +53,9 @@ object AgentConfig {
     fun apiKey(ctx: Context): String = prefs(ctx).getString(KEY_API, "")!!
     fun baseUrl(ctx: Context): String = prefs(ctx).getString(KEY_BASE, DEFAULT_BASE)!!
     fun model(ctx: Context): String = prefs(ctx).getString(KEY_MODEL, DEFAULT_MODEL)!!
+    fun providerId(ctx: Context): String = prefs(ctx).getString(KEY_PROVIDER, ModelProviders.ALL.first().id)!!
+    fun provider(ctx: Context): ProviderPreset = ModelProviders.byId(providerId(ctx))
+    fun imageModel(ctx: Context): String = prefs(ctx).getString(KEY_IMAGE_MODEL, "")!!
     fun thinkingDepth(ctx: Context): ThinkingDepth =
         ThinkingDepth.from(prefs(ctx).getString(KEY_DEPTH, ThinkingDepth.STANDARD.key))
     fun maxSteps(ctx: Context): Int = prefs(ctx).getInt(KEY_MAX_STEPS, DEFAULT_MAX_STEPS)
@@ -61,6 +66,14 @@ object AgentConfig {
 
     fun setModel(ctx: Context, value: String) {
         prefs(ctx).edit().putString(KEY_MODEL, value).apply()
+    }
+
+    fun setProvider(ctx: Context, id: String) {
+        prefs(ctx).edit().putString(KEY_PROVIDER, id).apply()
+    }
+
+    fun setImageModel(ctx: Context, value: String) {
+        prefs(ctx).edit().putString(KEY_IMAGE_MODEL, value).apply()
     }
 
     fun setThinkingDepth(ctx: Context, depth: ThinkingDepth) {

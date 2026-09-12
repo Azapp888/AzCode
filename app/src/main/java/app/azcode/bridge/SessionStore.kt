@@ -8,7 +8,7 @@ import java.util.UUID
 
 /**
  * 聊天记录中的一个「回合」，用于重建界面。
- * kind ∈ user / assistant / notice / error / tool
+ * kind ∈ user / assistant / notice / error / tool / image
  */
 data class ChatTurn(
     val kind: String,
@@ -18,6 +18,7 @@ data class ChatTurn(
     val toolArgs: String = "",
     val toolOk: Boolean = false,
     val toolResult: String = "",
+    val images: List<String> = emptyList(),
 )
 
 /**
@@ -89,6 +90,7 @@ object SessionStore {
                 put("toolArgs", t.toolArgs)
                 put("toolOk", t.toolOk)
                 put("toolResult", t.toolResult)
+                put("images", JSONArray(t.images))
             })
         }
         val obj = JSONObject().apply {
@@ -107,6 +109,7 @@ object SessionStore {
         val turns = (0 until turnsArr.length()).map { i ->
             val o = turnsArr.getJSONObject(i)
             val atts = o.optJSONArray("attachments")
+            val imgs = o.optJSONArray("images")
             ChatTurn(
                 kind = o.optString("kind"),
                 text = o.optString("text"),
@@ -116,6 +119,8 @@ object SessionStore {
                 toolArgs = o.optString("toolArgs"),
                 toolOk = o.optBoolean("toolOk"),
                 toolResult = o.optString("toolResult"),
+                images = if (imgs == null) emptyList()
+                else (0 until imgs.length()).map { imgs.getString(it) },
             )
         }.toMutableList()
         ChatSession(

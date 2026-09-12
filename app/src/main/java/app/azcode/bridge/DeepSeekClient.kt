@@ -118,4 +118,53 @@ object DeepSeekClient {
         }
         return blocks
     }
+
+    /**
+     * 文生图（OpenAI 兼容 images/generations）。返回图片地址列表，
+     * 远程 URL 或 `data:image/...;base64,...` 形式均可，交由 ImageLoader 展示。
+     */
+    fun generateImage(
+        baseUrl: String,
+        apiKey: String,
+        imageModel: String,
+        prompt: String,
+        size: String = "1024x1024",
+        count: Int = 1,
+    ): List<String> {
+        val url = baseUrl.trimEnd('/') + "/images/generations"
+
+        fun body(format: String): JSONObject = JSONObject().apply {
+            put("model", imageModel)
+            put("prompt", prompt)
+            put("n", count.coerceIn(1, 4))
+            put("size", size)
+            put("response_format", format)
+        }
+
+        val (code, text) = post(url, apiKey, body("url"))
+        if (code in 200..299) return parseImages(text)
+
+        // 部分网关不支持 response_format=url，回退到 b64_json。
+        val (retryCode, retryText) = post(url, apiKey, body("b64_json"))
+        if (retryCode in 200..299) return parseImages(retryText)
+        throw RuntimeException("图像生成 HTTP $code: ${text.take(400)}")
+    }
+
+    private fun parseImages(text: String): List<String> {
+        val data = JSONObject(text).optJSONArray("data")
+            ?: throw RuntimeException("图像生成返回格式异常：${text.take(200)}")
+        val urls = mutableListOf<String>()
+        for (i in 0 until data.length()) {
+            val item = data.optJSONObject(i) ?: continue
+            val remote = item.optString("url")
+            if (remote.isNotBlank()) {
+                urls.add(remote)
+                continue
+            }
+            val b64 = item.optString("b64_json")
+            if (b64.isNotBlank()) urls.add("data:image/png;base64,$b64")
+        }
+        if (urls.isEmpty()) throw RuntimeException("图像生成未返回图片")
+        return urls
+    }
 }

@@ -8,23 +8,30 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
+import android.widget.AdapterView
 import android.widget.Button
 import android.widget.EditText
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 
 /** 设置页：模型配置 + 设备能力，主界面只保留聊天。 */
 class SettingsActivity : Activity() {
 
+    private lateinit var spProvider: Spinner
     private lateinit var etKey: EditText
     private lateinit var etBase: EditText
     private lateinit var etModel: EditText
+    private lateinit var etImageModel: EditText
     private lateinit var etMaxSteps: EditText
     private lateinit var etSystemPrompt: EditText
     private lateinit var tvStatus: TextView
     private lateinit var tvSkillsEntry: TextView
     private lateinit var tvMemoryEntry: TextView
     private lateinit var btnBridge: Button
+
+    private val providers = ModelProviders.ALL
+    private var updatingProvider = false
 
     private val shizukuPermissionListener =
         object : rikka.shizuku.Shizuku.OnRequestPermissionResultListener {
@@ -42,9 +49,11 @@ class SettingsActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
+        spProvider = findViewById(R.id.spProvider)
         etKey = findViewById(R.id.etKey)
         etBase = findViewById(R.id.etBase)
         etModel = findViewById(R.id.etModel)
+        etImageModel = findViewById(R.id.etImageModel)
         etMaxSteps = findViewById(R.id.etMaxSteps)
         etSystemPrompt = findViewById(R.id.etSystemPrompt)
         tvStatus = findViewById(R.id.tvStatus)
@@ -55,8 +64,10 @@ class SettingsActivity : Activity() {
         etKey.setText(AgentConfig.apiKey(this))
         etBase.setText(AgentConfig.baseUrl(this))
         etModel.setText(AgentConfig.model(this))
+        etImageModel.setText(AgentConfig.imageModel(this))
         etMaxSteps.setText(AgentConfig.maxSteps(this).toString())
         etSystemPrompt.setText(AgentConfig.systemPrompt(this))
+        setupProviderSelector()
 
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<View>(R.id.btnSave).setOnClickListener { saveConfig() }
@@ -90,9 +101,37 @@ class SettingsActivity : Activity() {
         super.onDestroy()
     }
 
+    private fun setupProviderSelector() {
+        val names = providers.map { it.name }
+        updatingProvider = true
+        spProvider.adapter = android.widget.ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            names,
+        )
+        val currentId = AgentConfig.providerId(this)
+        val index = providers.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
+        spProvider.setSelection(index, false)
+        updatingProvider = false
+
+        spProvider.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (updatingProvider) return
+                val preset = providers.getOrNull(position) ?: return
+                if (preset.id == ModelProviders.CUSTOM_ID) return
+                etBase.setText(preset.baseUrl)
+                if (preset.chatModels.isNotEmpty()) etModel.setText(preset.chatModels.first())
+                etImageModel.setText(preset.imageModel)
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+    }
+
     private fun saveConfig() {
         val steps = etMaxSteps.text.toString().trim().toIntOrNull()?.coerceIn(0, 1000)
             ?: AgentConfig.DEFAULT_MAX_STEPS
+        val preset = providers.getOrNull(spProvider.selectedItemPosition) ?: providers.first()
         AgentConfig.save(
             this,
             apiKey = etKey.text.toString().trim(),
@@ -100,6 +139,8 @@ class SettingsActivity : Activity() {
             model = etModel.text.toString().trim().ifBlank { AgentConfig.DEFAULT_MODEL },
             maxSteps = steps,
         )
+        AgentConfig.setProvider(this, preset.id)
+        AgentConfig.setImageModel(this, etImageModel.text.toString().trim())
         AgentConfig.setSystemPrompt(this, etSystemPrompt.text.toString().trim())
         etMaxSteps.setText(steps.toString())
         Toast.makeText(this, R.string.toast_saved, Toast.LENGTH_SHORT).show()

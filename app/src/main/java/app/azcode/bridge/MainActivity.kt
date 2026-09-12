@@ -165,6 +165,7 @@ class MainActivity : Activity() {
                 startToolCard(turn.toolName, turn.toolArgs, persist = false)
                 finishToolCard(turn.toolOk, turn.toolResult, persist = false)
             }
+            "image" -> addImages(turn.images, persist = false)
         }
     }
 
@@ -182,8 +183,9 @@ class MainActivity : Activity() {
 
     private fun setupModelSelector() {
         val current = AgentConfig.model(this)
+        val presets = AgentConfig.provider(this).chatModels.ifEmpty { AgentConfig.MODEL_PRESETS }
         modelList = LinkedHashSet<String>().apply {
-            addAll(AgentConfig.MODEL_PRESETS)
+            addAll(presets)
             add(current)
         }.toList()
 
@@ -469,6 +471,10 @@ class MainActivity : Activity() {
                 startToolCard(event.name, event.args)
             }
             is AgentEvent.ToolResult -> finishToolCard(event.ok, event.output)
+            is AgentEvent.Images -> {
+                removeTyping()
+                addImages(event.urls, persist = true)
+            }
             is AgentEvent.Notice -> {
                 removeTyping()
                 addNotice(event.text)
@@ -519,10 +525,29 @@ class MainActivity : Activity() {
     }
 
     private fun addAssistantMessage(text: String, persist: Boolean = true) {
-        val v = layoutInflater.inflate(R.layout.item_msg_assistant, chatContainer, false)
-        v.findViewById<TextView>(R.id.tvMsg).text = text
-        chatContainer.addView(v)
+        val (md, images) = Markdown.extractImages(text)
+        if (md.isNotBlank()) {
+            val v = layoutInflater.inflate(R.layout.item_msg_assistant, chatContainer, false)
+            Markdown.render(v.findViewById(R.id.tvMsg), md)
+            chatContainer.addView(v)
+        }
         if (persist) appendTurn(ChatTurn(kind = "assistant", text = text))
+        addImages(images, persist = false)
+        scrollToBottom()
+    }
+
+    /** 渲染一组图片气泡；persist=true 时把图片地址写入会话以便重建。 */
+    private fun addImages(urls: List<String>, persist: Boolean) {
+        if (urls.isEmpty()) return
+        urls.forEach { url ->
+            val v = layoutInflater.inflate(R.layout.item_msg_image, chatContainer, false)
+            ImageLoader.load(v.findViewById(R.id.ivImage), url)
+            chatContainer.addView(v)
+        }
+        if (persist) {
+            val stored = urls.map { ImageLoader.persist(this, it) }
+            appendTurn(ChatTurn(kind = "image", images = stored))
+        }
         scrollToBottom()
     }
 
@@ -605,6 +630,7 @@ class MainActivity : Activity() {
         "swipe" -> getString(R.string.tool_name_swipe)
         "global" -> getString(R.string.tool_name_global)
         "shell" -> getString(R.string.tool_name_shell)
+        "generate_image" -> getString(R.string.tool_name_generate_image)
         "finish" -> getString(R.string.tool_name_finish)
         else -> name
     }
