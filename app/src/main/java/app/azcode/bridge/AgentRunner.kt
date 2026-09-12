@@ -701,8 +701,8 @@ class AgentRunner(
         sb.append(
             "\n\n模型配置能力：用户让你「增加/修改模型」时，先用 ask_question_for_user 询问平台名称、Base URL 与 API Key；" +
                 "拿到后调用 fetch_models 拉取可用模型列表并让用户选择，再调用 save_model_provider 保存。" +
-                "随后询问用户是否加入生图模型：若需要，再用 ask_question_for_user 询问生图模型名（地址与密钥可沿用同一提供商），" +
-                "然后再次调用 save_model_provider 并设置 imageEnabled=true 与 imageModel。" +
+                "随后询问用户是否加入生图模型：若需要，再用 ask_question_for_user 询问生图模型所在的平台地址、密钥与模型名，" +
+                "然后调用 save_model_provider 并设置 imageEnabled=true 与 imageModel（生图与语言模型同平台时可复用同一提供商，跨平台则新建一个提供商）。" +
                 "所有配置都会写入本地，无需用户手动进设置页。修改后用 list_model_providers 复核结果。"
         )
 
