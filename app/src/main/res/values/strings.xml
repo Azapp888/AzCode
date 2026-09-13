@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">AzCode</string>
+    <string name="app_name">magic</string>
     <string name="app_subtitle">手机自动化助手</string>
-    <string name="accessibility_label">AzCode Screen Control</string>
-    <string name="accessibility_desc">允许 AzCode 读取屏幕节点并按文本/坐标点击，用于自动化操作。</string>
+    <string name="accessibility_label">magic Screen Control</string>
+    <string name="accessibility_desc">允许 magic 读取屏幕节点并按文本/坐标点击，用于自动化操作。</string>
 
     <string name="notif_channel_bridge">设备桥接</string>
-    <string name="notif_title">AzCode 桥接运行中</string>
+    <string name="notif_title">magic 桥接运行中</string>
     <string name="notif_channel_task">任务提醒</string>
     <string name="notif_task_done">任务已完成</string>
     <string name="notif_task_stopped">任务已停止</string>
@@ -99,6 +99,13 @@
     <string name="skill_installing">正在下载并解析技能…</string>
     <string name="skill_installed">已安装：%1$s</string>
     <string name="skill_install_failed">安装失败：%1$s</string>
+    <string name="btn_scan_plugins">扫描热门插件</string>
+    <string name="btn_scan">扫描</string>
+    <string name="dialog_scan_plugins_title">扫描热门开源插件</string>
+    <string name="dialog_scan_plugins_msg">按关键词搜索 GitHub 上 star 较多的 Agent 技能仓库，可留空查看内置精选。</string>
+    <string name="dialog_scan_results_title">找到 %1$d 个插件，点选即可安装</string>
+    <string name="plugin_scanning">正在扫描热门插件…</string>
+    <string name="plugin_scan_empty">没有找到匹配的插件，换个关键词试试。</string>
 
     <string name="section_capabilities">设备能力</string>
     <string name="btn_open_accessibility">无障碍设置</string>

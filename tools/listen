@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# listen —— Android 端命令行（Listen）。通过 adb 转发到 magic App 的本地桥 127.0.0.1:8848。
+#
+# 依赖：adb、curl、python3（仅用于格式化 JSON 输出，可选）。
+# 用法：
+#   listen run "打开设置查看 Android 版本号"
+#   listen screen
+#   listen tap --text "确定"       或   listen tap --x 540 --y 1200
+#   listen swipe --x1 .. --y1 .. --x2 .. --y2 ..
+#   listen global back|home|recents|notifications
+#   listen shell "pm list packages -3"
+#   listen notify --title "提醒" --body "内容"
+#   listen health
+set -euo pipefail
+
+HOST_PORT="${LISTEN_PORT:-8848}"
+BASE="http://127.0.0.1:${HOST_PORT}"
+SERIAL="${LISTEN_SERIAL:-}"
+
+adb_cmd() {
+  if [ -n "$SERIAL" ]; then adb -s "$SERIAL" "$@"; else adb "$@"; fi
+}
+
+ensure_forward() {
+  adb_cmd forward "tcp:${HOST_PORT}" "tcp:${HOST_PORT}" >/dev/null 2>&1 || true
+}
+
+post() {
+  local path="$1" body="$2"
+  ensure_forward
+  curl -fsS --max-time 900 -H 'Content-Type: application/json' -d "$body" "${BASE}${path}"
+}
+
+get() {
+  local path="$1"
+  ensure_forward
+  curl -fsS --max-time 60 "${BASE}${path}"
+}
+
+json_str() {
+  python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"
+}
+
+usage() {
+  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+  exit "${1:-0}"
+}
+
+cmd="${1:-}"
+[ $# -gt 0 ] && shift || true
+
+case "$cmd" in
+  run|task)
+    [ $# -ge 1 ] || { echo "用法：listen run \"任务\"" >&2; exit 2; }
+    task="$*"
+    post /agent "$(python3 -c 'import json,sys; print(json.dumps({"task": sys.argv[1]}))' "$task")"
+    ;;
+  screen)
+    get /screen
+    ;;
+  tap)
+    text=""; x=""; y=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --text) text="$2"; shift 2;;
+        --x) x="$2"; shift 2;;
+        --y) y="$2"; shift 2;;
+        *) shift;;
+      esac
+    done
+    if [ -n "$text" ]; then body="{\"text\":$(json_str "$text")}"; else body="{\"x\":${x:-0},\"y\":${y:-0}}"; fi
+    post /tap "$body"
+    ;;
+  swipe)
+    declare -A a=([x1]=0 [y1]=0 [x2]=0 [y2]=0 [duration]=300)
+    while [ $# -gt 1 ]; do
+      k="${1#--}"; a[$k]="$2"; shift 2
+    done
+    post /swipe "{\"x1\":${a[x1]},\"y1\":${a[y1]},\"x2\":${a[x2]},\"y2\":${a[y2]},\"duration\":${a[duration]}}"
+    ;;
+  global)
+    [ $# -ge 1 ] || { echo "用法：listen global back|home|recents|notifications" >&2; exit 2; }
+    post /global "{\"action\":\"$1\"}"
+    ;;
+  shell)
+    [ $# -ge 1 ] || { echo "用法：listen shell \"命令\"" >&2; exit 2; }
+    post /shell "$(python3 -c 'import json,sys; print(json.dumps({"cmd": sys.argv[1]}))' "$*")"
+    ;;
+  notify)
+    title="magic"; body=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --title) title="$2"; shift 2;;
+        --body) body="$2"; shift 2;;
+        *) shift;;
+      esac
+    done
+    post /notify "$(python3 -c 'import json,sys; print(json.dumps({"title": sys.argv[1], "body": sys.argv[2]}))' "$title" "$body")"
+    ;;
+  health)
+    get /health
+    ;;
+  ""|-h|--help|help)
+    usage
+    ;;
+  *)
+    echo "未知命令：$cmd" >&2
+    usage 2
+    ;;
+esac
+echo

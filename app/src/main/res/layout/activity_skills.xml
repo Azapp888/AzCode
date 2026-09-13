@@ -45,6 +45,18 @@
         android:layout_height="1dp"
         android:background="@color/divider" />
 
+    <Button
+        android:id="@+id/btnScan"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_button_primary"
+        android:text="@string/btn_scan_plugins"
+        android:textColor="@color/text_on_primary"
+        android:textSize="14sp" />
+
     <TextView
         android:id="@+id/tvInstallStatus"
         android:layout_width="match_parent"

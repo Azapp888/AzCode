@@ -1,8 +1,29 @@
-# AzCode (Android)
+# magic (Android)
 
-Android 原生端独立应用：在手机上输入自然语言任务，内置 DeepSeek 决策循环，直接调用本机无障碍 / Shizuku 能力操作手机。**不依赖 Windows 端即可独立运行**。
+Android 原生端独立应用。图形界面叫 **magic**，命令行叫 **Listen**：在手机上输入自然语言任务，内置 DeepSeek 决策循环，直接调用本机无障碍 / Shizuku 能力操作手机。**不依赖其他端即可独立运行**。
 
-同时内置一个仅绑定回环（`127.0.0.1:8848`）的 HTTP 能力桥，Windows 端（独立分支 `260912-feat-windows-client`）可经 `adb forward` 复用同一套设备能力。
+同时内置一个仅绑定回环（`127.0.0.1:8848`）的 HTTP 能力桥，可经 `adb forward` 供 Listen 命令行或其他端复用同一套设备能力。
+
+## Listen 命令行（Android）
+
+电脑上装好 `adb`、连接手机并确保 magic App 前台运行（桥接服务开启）后，一行命令安装：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Azapp888/AzCode/260912-feat-android-native/tools/install.sh | bash
+```
+
+使用：
+
+```bash
+listen run "打开设置查看 Android 版本号"   # 运行完整 Agent 任务
+listen health                              # 能力自检
+listen screen                              # 读取屏幕节点
+listen tap --text "确定"                   # 按文本点击
+listen shell "pm list packages -3"         # 执行命令（需 Shizuku/Root）
+listen notify --title "提醒" --body "内容"
+```
+
+原理：`listen` 通过 `adb forward tcp:8848 tcp:8848` 把 App 的本地桥暴露到电脑，再调用桥的 `/agent`、`/screen` 等接口。相关实现见 `tools/listen` 与 `tools/install.sh`。
 
 ## 独立运行（主要用法）
 
@@ -47,7 +68,13 @@ owner/repo
 
 安装时会解析 SKILL.md 的 YAML frontmatter（`name` / `description`），没有则取首个标题与首行正文。
 
-Agent 工具集（与 Windows 端一致）：
+### 插件市场
+
+- **内置 ponytail**：首次启动写入「拒绝过度设计」技能（`ponytail · 拒绝过度设计`），默认启用，可随时停用。
+- **扫描热门插件**：技能页「扫描热门插件」按钮按关键词搜索 GitHub 上 star 较多的 Agent 技能仓库，点选即可一键安装；可留空查看内置精选。
+- **Agent 自助**：模型也可调用 `search_plugins` / `install_plugin` / `list_installed_plugins` / `set_plugin_enabled` / `remove_plugin` 完成同样的操作。
+
+Agent 工具集：
 
 | 工具 | 说明 |
 | --- | --- |
@@ -56,7 +83,21 @@ Agent 工具集（与 Windows 端一致）：
 | `swipe` | 滑动 |
 | `global` | back / home / recents / notifications |
 | `shell` | 以 Shizuku/Root 身份执行命令（需高权限模式） |
+| `generate_image` | 文生图（需配置生图模型） |
+| `ask_question_for_user` | 在输入框下方问答区向用户提问（支持一次多个问题） |
+| `search_plugins` / `install_plugin` / `list_installed_plugins` / `set_plugin_enabled` / `remove_plugin` | 插件市场 |
+| `list_model_providers` / `fetch_models` / `save_model_provider` / `remove_model_provider` / `import_providers_md` | 模型配置 |
 | `finish` | 结束任务并总结 |
+
+### 降缓存未命中机制
+
+为最大化大模型提供商的前缀缓存命中率（移植自 deepseek-harness）：
+
+- **稳定前缀**：第 0 条 `system` 只放用户长期设置的人设，字节永久不变。
+- **运行时上下文**：技能、记忆、思考深度、生图安排单独成一条 `system` 消息；内容未变时不重复插入，变化时**追加到历史末尾**，绝不重写前缀。
+- **工具定义**顺序固定、不随条件增删（`generate_image` 始终声明，未配置生图模型时调用会返回友好错误）。
+
+支持在任意位置追加 `system` 消息的模型（如 deepseek-flash）会把最新一条视为完整系统提示，旧的那条自然被取代，前缀保持不变。实现见 `PromptCache.kt`。
 
 ## 架构
 
@@ -81,6 +122,7 @@ Android (app.azcode.bridge)
 | POST | `/global` | `{"action":"back"\|"home"\|"recents"\|"notifications"}` |
 | POST | `/shell` | `{"cmd":"pm list packages"}`，需 SHIZUKU 或 ROOT 模式 |
 | POST | `/notify` | `{"title":"..","body":".."}` |
+| POST | `/agent` | `{"task":"..","session":"可选会话 id"}` 运行完整 Agent 任务，返回 `answer` 与 `events` |
 
 ## 权限模式
 
@@ -90,7 +132,7 @@ Android (app.azcode.bridge)
 | SHIZUKU | Shizuku binder，以 adb(uid 2000) 身份执行 | 安装并启动 Shizuku，应用内授权 |
 | ROOT | `su -c`，以 uid 0 执行 | 设备已 Root |
 
-读屏与点击依赖无障碍服务，需在系统设置手动开启「AzCode Screen Control」。
+读屏与点击依赖无障碍服务，需在系统设置手动开启「magic Screen Control」。
 
 ## 构建
 
@@ -108,19 +150,23 @@ gradle assembleDebug
 app/src/main/java/app/azcode/bridge/
   MainActivity.kt            聊天界面：气泡消息 + 可折叠工具卡片 + 附件
   SettingsActivity.kt        设置页：模型/系统提示词 + 设备能力 + 桥接/权限模式
-  SkillsActivity.kt          技能管理：启停、删除、从 GitHub 安装
+  SkillsActivity.kt          技能管理：启停、删除、从 GitHub 安装、扫描热门插件
   AgentRunner.kt             设备端 Agent 决策循环，向 UI 输出结构化事件
+  PromptCache.kt             降缓存未命中：稳定前缀 + 运行时上下文追加 + 工具顺序固定
   DeepSeekClient.kt          DeepSeek function calling + 多模态内容构造
-  AgentConfig.kt             Key / Base URL / 模型 / 最大步数 / 系统提示词持久化
-  SkillStore.kt              技能持久化
+  AgentConfig.kt             多提供商 / 模型 / 最大步数 / 系统提示词持久化
+  SkillStore.kt              技能持久化 + 内置 ponytail
+  PluginCatalog.kt           热门插件扫描（GitHub 搜索）与一键安装
   GitHubSkillFetcher.kt      GitHub SKILL.md 下载与解析
   AttachmentReader.kt        附件读取：图片/PDF/Office/文本
   AzAccessibilityService.kt  读屏 / 点击 / 滑动 / 全局动作
   DeviceControl.kt           权限模式 + Shizuku/Root shell 执行
-  AgentBridge.kt             127.0.0.1:8848 环回 HTTP 能力桥（供 Windows 端）
+  AgentBridge.kt             127.0.0.1:8848 环回 HTTP 能力桥（含 /agent 完整任务）
   BridgeService.kt           specialUse 前台服务保活桥接
 app/src/main/res/layout/     聊天页 / 设置页 / 技能页 / 各类消息卡片
 app/src/main/res/xml/azcode_accessibility_service.xml
+tools/listen                 Listen 命令行（经 adb forward 调用桥）
+tools/install.sh             Listen 一行安装脚本
 .github/workflows/android.yml
 ```
 

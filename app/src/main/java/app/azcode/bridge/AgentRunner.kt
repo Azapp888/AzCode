@@ -55,7 +55,8 @@ data class AgentQuestion(
  *
  * 会话续接：每个任务的上下文（历史消息）保存在 [ChatSession.agentMessages] 中，
  * 下一轮请求会在系统提示词之后接续这些历史，从而让同一会话里的多轮对话保持连贯。
- * 系统提示词不持久化，每次根据最新的技能/记忆重新构建。
+ * 系统提示按 [PromptCache] 拆成稳定前缀与运行时上下文：前缀字节恒定，运行时上下文
+ * 变化时追加到历史末尾而非重写前缀，以最大化提供商前缀缓存命中率。
  *
  * [askUser] 在工作线程上调用并阻塞，直到用户在输入框下方的问答区作答（返回 null 表示未作答）。
  */
@@ -92,9 +93,17 @@ class AgentRunner(
         // 用户明确要求生成图片时，提前解析并选定生图模型（多个则询问用户）。
         val imageHint = resolveImageIntent(task)
 
+        // 前缀稳定：第 0 条 system 只放稳定人设；技能/记忆/深度/生图安排等作为运行时
+        // 上下文，仅在内容变化时追加为新的 system 消息，绝不改写已有前缀，从而命中缓存。
+        val baseSystem = PromptCache.stablePrefix(ctx)
+        val runtime = PromptCache.runtimeContext(ctx, imageHint)
+
         var messages = JSONArray().apply {
-            put(JSONObject().put("role", "system").put("content", buildSystemPrompt(imageHint)))
+            put(JSONObject().put("role", "system").put("content", baseSystem))
             appendHistory(session)
+            if (PromptCache.latestRuntimeContext(this) != runtime) {
+                put(JSONObject().put("role", "system").put("content", runtime))
+            }
             put(JSONObject().put("role", "user").put("content", DeepSeekClient.buildUserContent(task, attachments)))
         }
         val tools = buildTools()
@@ -171,24 +180,29 @@ class AgentRunner(
 
     // ==================== 会话上下文 ====================
 
-    /** 将之前保存的历史消息接续到本轮消息之前（跳过系统提示词）。 */
+    /**
+     * 将之前保存的历史消息接续到稳定前缀之后。
+     * 运行时 system 消息属于历史的一部分：保留它，才能在内容未变时避免重复追加，
+     * 也才能在内容变化时把新版本追加到末尾而不破坏前缀。
+     */
     private fun JSONArray.appendHistory(session: ChatSession?) {
         if (session == null) return
         val prior = runCatching { JSONArray(session.agentMessages) }.getOrNull() ?: return
         for (i in 0 until prior.length()) {
             val m = prior.optJSONObject(i) ?: continue
-            if (m.optString("role") == "system") continue
             put(m)
         }
     }
 
-    /** 把本轮消息写回会话；剥离图片等大体积内容并限制历史长度。 */
+    /**
+     * 把本轮消息写回会话；剥离图片等大体积内容并限制历史长度。
+     * 第 0 条稳定前缀不持久化（每次单独重建）；运行时 system 消息保留在历史中。
+     */
     private fun persistHistory(session: ChatSession, messages: JSONArray) {
         val kept = JSONArray()
         for (i in 0 until messages.length()) {
             val m = messages.optJSONObject(i) ?: continue
-            val role = m.optString("role")
-            if (role == "system") continue
+            if (i == 0 && m.optString("role") == "system") continue
             kept.put(sanitize(m))
         }
         // 仅保留最近一段，避免文件无限增长；裁剪后若以 tool 开头则丢弃这些孤立结果。
@@ -321,6 +335,16 @@ class AgentRunner(
             "remove_model_provider" -> removeModelProvider(args)
 
             "import_providers_md" -> importProvidersMd(args)
+
+            "search_plugins" -> searchPlugins(args)
+
+            "install_plugin" -> installPlugin(args)
+
+            "list_installed_plugins" -> listInstalledPlugins()
+
+            "set_plugin_enabled" -> setPluginEnabled(args)
+
+            "remove_plugin" -> removePlugin(args)
 
             else -> err("未知工具 ${call.name}")
             }
@@ -684,18 +708,17 @@ class AgentRunner(
             put(fn("shell", "以 Shizuku/Root 身份执行 shell 命令（需高权限模式）。", JSONObject()
                 .put("cmd", str("要执行的命令")), listOf("cmd")))
 
-            val imageModel = AgentConfig.imageProvider(ctx)
-            if (imageModel != null) {
-                put(fn(
-                    "generate_image",
-                    "根据文字描述生成图片（文生图）。当用户要求画图、生成图片、制作海报或配图时调用，生成结果会自动展示给用户。",
-                    JSONObject()
-                        .put("prompt", str("图片内容的详细描述，建议包含主体、风格、构图、色彩"))
-                        .put("size", str("图片尺寸，如 1024x1024；不同提供商支持的尺寸可能不同，可省略"))
-                        .put("count", num("生成张数，默认 1")),
-                    listOf("prompt"),
-                ))
-            }
+            // generate_image 始终声明：工具 schema 顺序与集合固定，避免因增删工具
+            // 导致提供商前缀缓存整段失效；未配置生图模型时调用会返回友好错误。
+            put(fn(
+                "generate_image",
+                "根据文字描述生成图片（文生图）。当用户要求画图、生成图片、制作海报或配图时调用，生成结果会自动展示给用户。",
+                JSONObject()
+                    .put("prompt", str("图片内容的详细描述，建议包含主体、风格、构图、色彩"))
+                    .put("size", str("图片尺寸，如 1024x1024；不同提供商支持的尺寸可能不同，可省略"))
+                    .put("count", num("生成张数，默认 1")),
+                listOf("prompt"),
+            ))
 
             put(fn("finish", "任务结束并给出总结。", JSONObject()
                 .put("summary", str("结果总结")), listOf("summary")))
@@ -785,63 +808,112 @@ class AgentRunner(
                 JSONObject().put("content", str("md/文本的完整内容")),
                 listOf("content"),
             ))
+
+            put(fn(
+                "search_plugins",
+                "扫描热门开源仓库，查找可安装的 Agent 插件（技能）。用户想扩展能力、寻找插件或让你「扫描热门插件」时调用。返回候选列表（含 repo、描述、star 数、installUrl），随后用 install_plugin 一键安装。",
+                JSONObject()
+                    .put("keyword", str("搜索关键词，如 代码审查、写测试、ponytail；留空返回内置精选"))
+                    .put("limit", num("最多返回条数，默认 8")),
+                emptyList(),
+            ))
+
+            put(fn(
+                "install_plugin",
+                "一键安装插件：把候选仓库中的 SKILL.md 下载并写入本机技能库。参数用 search_plugins 返回的 installUrl。",
+                JSONObject().put("url", str("插件仓库地址或 installUrl")),
+                listOf("url"),
+            ))
+
+            put(fn(
+                "list_installed_plugins",
+                "列出本机已安装的插件（技能）及其启停状态。",
+                JSONObject(), emptyList(),
+            ))
+
+            put(fn(
+                "set_plugin_enabled",
+                "启用或停用一个已安装插件。",
+                JSONObject()
+                    .put("id", str("插件 id"))
+                    .put("name", str("插件名称（用名称匹配，id 可省略）"))
+                    .put("enabled", JSONObject().put("type", "boolean").put("description", "是否启用")),
+                emptyList(),
+            ))
+
+            put(fn(
+                "remove_plugin",
+                "删除一个已安装插件。",
+                JSONObject()
+                    .put("id", str("插件 id"))
+                    .put("name", str("插件名称（用名称匹配，id 可省略）")),
+                emptyList(),
+            ))
         }
     }
 
-    // ==================== 系统提示词 ====================
+    // ==================== 插件市场 ====================
 
-    private fun buildSystemPrompt(imageHint: String? = null): String {
-        val base = AgentConfig.systemPrompt(ctx).ifBlank { AgentConfig.DEFAULT_SYSTEM_PROMPT }
-        val sb = StringBuilder(base)
+    private fun searchPlugins(args: JSONObject): String {
+        val keyword = args.optString("keyword")
+        val limit = args.optInt("limit", 8)
+        val list = PluginCatalog.search(keyword, limit)
+        return JSONObject().apply {
+            put("ok", true)
+            put("count", list.size)
+            put("plugins", JSONArray().apply { list.forEach { put(it.toJson()) } })
+        }.toString()
+    }
 
-        val skills = SkillStore.enabled(ctx)
-        if (skills.isNotEmpty()) {
-            sb.append("\n\n你可以运用以下技能，按需遵循其中的步骤：")
-            skills.forEach { s ->
-                sb.append("\n\n### ").append(s.name)
-                if (s.description.isNotBlank()) sb.append("\n").append(s.description)
-                sb.append("\n").append(s.content.trim())
-            }
+    private fun installPlugin(args: JSONObject): String {
+        val url = args.optString("url").trim()
+        if (url.isBlank()) return err("缺少 url")
+        return try {
+            val name = PluginCatalog.install(ctx, url)
+            JSONObject().put("ok", true).put("installed", name).toString()
+        } catch (e: Exception) {
+            err(e.message ?: "安装失败")
         }
+    }
 
-        val memory = MemoryStore.enabled(ctx)
-        if (memory.isNotEmpty()) {
-            sb.append("\n\n以下是用户要求你记住的信息，请在相关任务中遵循或直接使用：")
-            MemoryCategory.entries.forEach { cat ->
-                val items = memory.filter { it.category == cat }
-                if (items.isEmpty()) return@forEach
-                sb.append("\n\n【").append(cat.label).append("】")
-                items.forEach { m ->
-                    sb.append("\n- ")
-                    if (m.title.isNotBlank()) sb.append(m.title).append("：")
-                    sb.append(m.content.trim())
+    private fun listInstalledPlugins(): String {
+        val list = SkillStore.all(ctx)
+        return JSONObject().apply {
+            put("ok", true)
+            put("count", list.size)
+            put("plugins", JSONArray().apply {
+                list.forEach { s ->
+                    put(JSONObject()
+                        .put("id", s.id)
+                        .put("name", s.name)
+                        .put("description", s.description)
+                        .put("enabled", s.enabled)
+                        .put("source", s.source.ifBlank { "内置" }))
                 }
-            }
-        }
-
-        val depthHint = when (AgentConfig.thinkingDepth(ctx)) {
-            ThinkingDepth.OFF -> "请直接给出结论与动作，不要展开推理。"
-            ThinkingDepth.FAST -> "请快速判断并行动，推理保持简短。"
-            ThinkingDepth.STANDARD -> "执行前进行必要的判断即可，兼顾速度与准确。"
-            ThinkingDepth.DEEP -> "请充分分析当前界面与任务，确认每一步的后果后再行动。"
-        }
-        sb.append("\n\n思考深度要求：").append(depthHint)
-
-        sb.append(
-            "\n\n向用户提问：需要用户补充信息或做选择时，调用 ask_question_for_user。问题会显示在输入框下方的问答区，并同步发送通知栏提醒；" +
-                "用户可在其中点选选项、多选或手动输入。若需一次询问多个问题，请用 questions 数组传入，界面会逐条询问。" +
-                "\n\n模型配置能力：用户让你「增加/修改模型」时，先用 ask_question_for_user 询问平台名称、Base URL 与 API Key；" +
-                "拿到后调用 fetch_models 拉取可用模型列表并让用户选择，再调用 save_model_provider 保存。" +
-                "同一平台可能有多个语言模型，请用 models 数组传全部需要的模型名。" +
-                "随后询问用户是否加入生图模型：若需要，再用 ask_question_for_user 询问生图模型所在的平台地址、密钥与模型名，" +
-                "然后调用 save_model_provider 并设置 imageEnabled=true 与 imageModels 数组（生图与语言模型同平台时可复用同一提供商，跨平台则新建一个提供商）。" +
-                "所有配置都会写入本地，无需用户手动进设置页。修改后用 list_model_providers 复核结果。"
-        )
-
-        if (!imageHint.isNullOrBlank()) {
-            sb.append("\n\n本次生图安排：").append(imageHint)
-        }
-
-        return sb.toString()
+            })
+        }.toString()
     }
+
+    private fun resolveSkill(args: JSONObject): Skill? {
+        val id = args.optString("id")
+        val name = args.optString("name")
+        val all = SkillStore.all(ctx)
+        return all.firstOrNull { id.isNotBlank() && it.id == id }
+            ?: all.firstOrNull { name.isNotBlank() && it.name == name }
+            ?: all.firstOrNull { name.isNotBlank() && it.name.contains(name) }
+    }
+
+    private fun setPluginEnabled(args: JSONObject): String {
+        val skill = resolveSkill(args) ?: return err("未找到该插件")
+        val enabled = if (args.has("enabled")) args.optBoolean("enabled") else true
+        SkillStore.setEnabled(ctx, skill.id, enabled)
+        return JSONObject().put("ok", true).put("name", skill.name).put("enabled", enabled).toString()
+    }
+
+    private fun removePlugin(args: JSONObject): String {
+        val skill = resolveSkill(args) ?: return err("未找到该插件")
+        SkillStore.remove(ctx, skill.id)
+        return JSONObject().put("ok", true).put("removed", skill.name).toString()
+    }
+
 }

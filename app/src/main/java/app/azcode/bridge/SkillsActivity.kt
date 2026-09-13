@@ -28,6 +28,7 @@ class SkillsActivity : Activity() {
 
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<View>(R.id.btnAdd).setOnClickListener { showAddDialog() }
+        findViewById<View>(R.id.btnScan).setOnClickListener { showScanDialog() }
     }
 
     override fun onResume() {
@@ -94,6 +95,59 @@ class SkillsActivity : Activity() {
             }
             .setNegativeButton(R.string.btn_cancel, null)
             .show()
+    }
+
+    /** 扫描热门开源仓库中的插件，选一个一键安装。 */
+    private fun showScanDialog() {
+        val input = EditText(this).apply {
+            hint = "关键词，如：代码审查、写测试、ponytail（留空看精选）"
+            isSingleLine = true
+            textSize = 14f
+        }
+        val wrap = FrameLayout(this).apply {
+            val pad = (24 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad / 3, pad, 0)
+            addView(input, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+            ))
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.dialog_scan_plugins_title)
+            .setMessage(R.string.dialog_scan_plugins_msg)
+            .setView(wrap)
+            .setPositiveButton(R.string.btn_scan) { _, _ -> scan(input.text.toString().trim()) }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
+    }
+
+    private fun scan(keyword: String) {
+        tvInstallStatus.visibility = View.VISIBLE
+        tvInstallStatus.text = getString(R.string.plugin_scanning)
+        Thread({
+            val plugins = try {
+                PluginCatalog.search(keyword)
+            } catch (e: Exception) {
+                emptyList()
+            }
+            runOnUiThread {
+                tvInstallStatus.visibility = View.GONE
+                if (plugins.isEmpty()) {
+                    toast(getString(R.string.plugin_scan_empty))
+                    return@runOnUiThread
+                }
+                val labels = plugins.map { p ->
+                    val stars = if (p.stars > 0) "  ★${p.stars}" else ""
+                    "${p.name}$stars\n${p.description.take(80)}"
+                }.toTypedArray()
+                AlertDialog.Builder(this)
+                    .setTitle(getString(R.string.dialog_scan_results_title, plugins.size))
+                    .setItems(labels) { _, which -> install(plugins[which].installUrl) }
+                    .setNegativeButton(R.string.btn_cancel, null)
+                    .show()
+            }
+        }, "azcode-plugin-scan").start()
     }
 
     private fun install(url: String) {

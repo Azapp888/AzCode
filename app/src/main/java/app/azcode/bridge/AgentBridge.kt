@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -26,6 +27,7 @@ import java.nio.charset.StandardCharsets
  *   POST /global            → {"action":"back|home|recents|notifications"}
  *   POST /shell             → {"cmd":".."}（需 Shizuku/Root 模式）
  *   POST /notify            → {"title":"..","body":".."}
+ *   POST /agent             → {"task":"..","session":"可选会话 id"} 运行完整 Agent 任务，返回事件
  *
  * ponytail: 仅绑定环回、无鉴权。跨机访问必须经 `adb forward`；若将来暴露到局域网再加 token。
  */
@@ -116,7 +118,66 @@ object AgentBridge {
         method == "POST" && path == "/global" -> global(body)
         method == "POST" && path == "/shell" -> shell(ctx, body)
         method == "POST" && path == "/notify" -> notify(ctx, body)
+        method == "POST" && path == "/agent" -> agent(ctx, body)
         else -> 404 to """{"ok":false,"error":"unknown route"}"""
+    }
+
+    /** 通过 Listen CLI 运行一次完整 Agent 任务，逐条收集事件后一次性返回。 */
+    private fun agent(ctx: Context, body: String): Pair<Int, String> {
+        return try {
+            val obj = JSONObject(body)
+            val task = obj.optString("task").trim()
+            if (task.isBlank()) return 400 to """{"ok":false,"error":"missing task"}"""
+
+            val events = JSONArray()
+            val answer = StringBuilder()
+
+            val listener: (AgentEvent) -> Unit = { e ->
+                when (e) {
+                    is AgentEvent.Thinking -> events.put(JSONObject().put("type", "thinking"))
+                    is AgentEvent.AssistantText -> {
+                        answer.append(e.text).append("\n")
+                        events.put(JSONObject().put("type", "assistant").put("text", e.text))
+                    }
+                    is AgentEvent.ToolStart -> events.put(
+                        JSONObject().put("type", "tool_start").put("name", e.name).put("args", e.args)
+                    )
+                    is AgentEvent.ToolResult -> events.put(
+                        JSONObject().put("type", "tool_result").put("name", e.name)
+                            .put("ok", e.ok).put("output", e.output.take(2000))
+                    )
+                    is AgentEvent.Images -> events.put(
+                        JSONObject().put("type", "images").put("urls", JSONArray(e.urls))
+                    )
+                    is AgentEvent.Notice -> events.put(JSONObject().put("type", "notice").put("text", e.text))
+                    is AgentEvent.Failure -> events.put(JSONObject().put("type", "failure").put("text", e.message))
+                }
+            }
+
+            val session = obj.optString("session").takeIf { it.isNotBlank() }
+                ?.let { SessionStore.get(ctx, it) }
+                ?: SessionStore.create(ctx, SessionStore.deriveTitle(task))
+
+            AgentRunner(
+                ctx = ctx,
+                askUser = { q ->
+                    // 命令行非交互：若模型提问则记录并返回 null，提示用户改用 App 界面作答。
+                    events.put(JSONObject().put("type", "question").put("text", q.question))
+                    null
+                },
+                listener = listener,
+            ).run(task, emptyList(), session)
+
+            SessionStore.save(ctx, session)
+            JSONObject().apply {
+                put("ok", true)
+                put("session", session.id)
+                put("answer", answer.toString().trim())
+                put("events", events)
+            }.toString().let { 200 to it }
+        } catch (e: Exception) {
+            500 to JSONObject().put("ok", false).put("error", e.message ?: "agent failed").toString()
+        }
     }
 
     private fun health(ctx: Context): String = JSONObject().apply {

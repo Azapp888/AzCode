@@ -118,6 +118,7 @@ class MainActivity : Activity() {
         btnStop.setOnClickListener { stopTask() }
         btnAttach.setOnClickListener { pickAttachments() }
 
+        runCatching { SkillStore.seedBuiltins(applicationContext) }
         runCatching { rikka.shizuku.Shizuku.addRequestPermissionResultListener(shizukuPermissionListener) }
         setupModelSelector()
         session = SessionStore.current(this)
