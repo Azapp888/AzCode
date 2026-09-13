@@ -1,8 +1,10 @@
-# magic (Windows)
+# AzCode Console (Windows)
 
-Windows 原生端（.NET 8 / WPF）：运行在本机的自动化 Agent，图形界面叫 **magic**（命令行形态为 **Listen**）。它把自然语言任务交给模型决策，再通过 Windows UI Automation、模拟鼠标键盘与 PowerShell 直接操作这台电脑。
+Windows 原生端（.NET 8 / WPF）：运行在本机的自动化 Agent。它把自然语言任务交给模型决策，再通过 Windows UI Automation、模拟鼠标键盘与 PowerShell 直接操作这台电脑。
 
-其余端位于独立分支、功能对等：Android `260912-feat-android-native`、Linux `260912-feat-linux-native`。三端统一命名：图形界面 = magic，命令行 = Listen。
+应用名称仍为 **AzCode**。图形界面形态打标签 **magic**，命令行形态打标签 **Listen**——标签用于区分形态，不作为应用显示名。
+
+其余端位于独立分支、功能对等：Android `260912-feat-android-native`、Linux `260912-feat-linux-native`。
 
 ## 架构
 
