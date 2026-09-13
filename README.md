@@ -1,12 +1,14 @@
-# magic (Android)
+# AzCode (Android)
 
-Android 原生端独立应用。图形界面叫 **magic**，命令行叫 **Listen**：在手机上输入自然语言任务，内置 DeepSeek 决策循环，直接调用本机无障碍 / Shizuku 能力操作手机。**不依赖其他端即可独立运行**。
+Android 原生端独立应用：在手机上输入自然语言任务，内置 DeepSeek 决策循环，直接调用本机无障碍 / Shizuku 能力操作手机。**不依赖其他端即可独立运行**。
+
+应用名称仍为 **AzCode**。图形界面形态打标签 **magic**，命令行形态打标签 **Listen**——标签用于区分形态，不作为应用显示名。
 
 同时内置一个仅绑定回环（`127.0.0.1:8848`）的 HTTP 能力桥，可经 `adb forward` 供 Listen 命令行或其他端复用同一套设备能力。
 
 ## Listen 命令行（Android）
 
-电脑上装好 `adb`、连接手机并确保 magic App 前台运行（桥接服务开启）后，一行命令安装：
+电脑上装好 `adb`、连接手机并确保 AzCode App 前台运行（桥接服务开启）后，一行命令安装：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Azapp888/AzCode/260912-feat-android-native/tools/install.sh | bash
@@ -132,7 +134,7 @@ Android (app.azcode.bridge)
 | SHIZUKU | Shizuku binder，以 adb(uid 2000) 身份执行 | 安装并启动 Shizuku，应用内授权 |
 | ROOT | `su -c`，以 uid 0 执行 | 设备已 Root |
 
-读屏与点击依赖无障碍服务，需在系统设置手动开启「magic Screen Control」。
+读屏与点击依赖无障碍服务，需在系统设置手动开启「AzCode Screen Control」。
 
 ## 构建
 
