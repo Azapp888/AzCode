@@ -1,7 +1,6 @@
 package app.azcode.bridge
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ClipData
 import android.content.Intent
@@ -10,7 +9,6 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
-import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.widget.AdapterView
@@ -153,6 +151,11 @@ class MainActivity : Activity() {
     /** 返回手势（含侧滑）默认会直接退出应用，改为两秒内二次返回才退出，避免误触。 */
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
+        val panel = findViewById<View>(R.id.questionPanel)
+        if (panel.visibility == View.VISIBLE) {
+            findViewById<TextView>(R.id.btnQuestionCancel).performClick()
+            return
+        }
         val now = System.currentTimeMillis()
         if (now - lastBackPress < 2000) {
             @Suppress("DEPRECATION")
@@ -166,7 +169,7 @@ class MainActivity : Activity() {
     // ==================== 向用户提问 ====================
 
     /**
-     * 在工作线程上阻塞，等待用户在弹窗中作答；同时发送通知栏提醒。
+     * 在工作线程上阻塞，等待用户在输入框下方的问答区作答；同时发送通知栏提醒。
      * 返回 null 表示未作答或界面已销毁。
      */
     private fun askUserBlocking(question: AgentQuestion): String? {
@@ -179,7 +182,7 @@ class MainActivity : Activity() {
                 latch.countDown()
                 return@runOnUiThread
             }
-            showQuestionDialog(question) { result ->
+            showQuestionPanel(question) { result ->
                 answer.set(result)
                 latch.countDown()
             }
@@ -189,115 +192,96 @@ class MainActivity : Activity() {
         return answer.get()
     }
 
-    private fun showQuestionDialog(question: AgentQuestion, onResult: (String?) -> Unit) {
-        val density = resources.displayMetrics.density
-        val pad = (20 * density).toInt()
+    /**
+     * 在输入框下方的问答区展开内容：选择题、多选题或手动输入。
+     * 作答或取消后收起区域并回调结果（null 表示未作答）。
+     */
+    private fun showQuestionPanel(question: AgentQuestion, onResult: (String?) -> Unit) {
+        val panel = findViewById<View>(R.id.questionPanel)
+        val title = findViewById<TextView>(R.id.tvQuestionTitle)
+        val optionsBox = findViewById<LinearLayout>(R.id.questionOptions)
+        val et = findViewById<EditText>(R.id.etQuestionCustom)
+        val btnConfirm = findViewById<TextView>(R.id.btnQuestionConfirm)
+        val btnCancel = findViewById<TextView>(R.id.btnQuestionCancel)
 
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad / 2, pad, 0)
-        }
+        optionsBox.removeAllViews()
+        et.setText("")
+        et.visibility = if (question.allowCustom) View.VISIBLE else View.GONE
 
-        if (question.options.isNotEmpty()) {
-            if (question.allowMultiple) {
-                val boxes = mutableListOf<CheckBox>()
-                question.options.forEach { option ->
-                    val cb = CheckBox(this).apply {
-                        text = option
-                        textSize = 15f
-                        setTextColor(getColor(R.color.text_primary))
-                    }
-                    boxes.add(cb)
-                    layout.addView(cb)
+        val prefix = if (question.total > 1) {
+            getString(R.string.question_progress, question.index, question.total)
+        } else ""
+        title.text = prefix + question.question
+
+        var confirmAction: () -> String? = { null }
+
+        if (question.options.isNotEmpty() && question.allowMultiple) {
+            val boxes = mutableListOf<CheckBox>()
+            question.options.forEach { option ->
+                val cb = CheckBox(this).apply {
+                    text = option
+                    textSize = 14f
+                    setTextColor(getColor(R.color.text_primary))
                 }
-                val et = EditText(this).apply {
-                    hint = getString(R.string.question_custom_hint)
-                    inputType = InputType.TYPE_CLASS_TEXT
-                    visibility = if (question.allowCustom) View.VISIBLE else View.GONE
-                }
-                if (question.allowCustom) {
-                    layout.addView(et)
-                }
-                var submitted = false
-                val dialog = AlertDialog.Builder(this)
-                    .setTitle(question.question)
-                    .setView(ScrollView(this).apply { addView(layout) })
-                    .setPositiveButton(R.string.btn_confirm) { _, _ ->
-                        submitted = true
-                        val picks = boxes.filter { it.isChecked }.map { it.text.toString() }.toMutableList()
-                        val custom = et.text.toString().trim()
-                        if (custom.isNotEmpty()) picks.add(custom)
-                        onResult(picks.joinToString("、").ifBlank { null })
-                    }
-                    .setNegativeButton(R.string.btn_cancel) { _, _ -> onResult(null) }
-                    .setOnCancelListener { if (!submitted) onResult(null) }
-                    .create()
-                dialog.show()
-                return
-            } else {
-                val group = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
-                if (question.allowCustom) group.addView(RadioButton(this).apply {
-                    id = View.generateViewId()
+                boxes.add(cb)
+                optionsBox.addView(cb)
+            }
+            confirmAction = {
+                val picks = boxes.filter { it.isChecked }.map { it.text.toString() }.toMutableList()
+                val custom = et.text.toString().trim()
+                if (custom.isNotEmpty()) picks.add(custom)
+                picks.joinToString("、").ifBlank { null }
+            }
+        } else if (question.options.isNotEmpty()) {
+            val group = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
+            val customId = View.generateViewId()
+            if (question.allowCustom) {
+                group.addView(RadioButton(this).apply {
+                    id = customId
                     text = getString(R.string.question_custom_option)
-                    textSize = 15f
+                    textSize = 14f
                     setTextColor(getColor(R.color.text_primary))
                 })
-                question.options.forEach { option ->
-                    group.addView(RadioButton(this).apply {
-                        id = View.generateViewId()
-                        text = option
-                        textSize = 15f
-                        setTextColor(getColor(R.color.text_primary))
-                    })
-                }
-                if (question.options.isNotEmpty()) {
-                    (group.getChildAt(if (question.allowCustom) 1 else 0) as RadioButton).isChecked = true
-                }
-                layout.addView(group)
-                val et = EditText(this).apply {
-                    hint = getString(R.string.question_custom_hint)
-                    inputType = InputType.TYPE_CLASS_TEXT
-                    visibility = if (question.allowCustom) View.VISIBLE else View.GONE
-                }
-                if (question.allowCustom) layout.addView(et)
-
-                AlertDialog.Builder(this)
-                    .setTitle(question.question)
-                    .setView(ScrollView(this).apply { addView(layout) })
-                    .setPositiveButton(R.string.btn_confirm) { _, _ ->
-                        val checkedId = group.checkedRadioButtonId
-                        val selectedView = group.findViewById<RadioButton>(checkedId)
-                        val custom = et.text.toString().trim()
-                        val isCustom = selectedView != null &&
-                            selectedView.text.toString() == getString(R.string.question_custom_option)
-                        val result = if (isCustom || checkedId == -1) custom else {
-                            if (custom.isNotEmpty()) "${selectedView?.text}；$custom" else selectedView?.text?.toString()
-                        }
-                        onResult(result?.ifBlank { null })
-                    }
-                    .setNegativeButton(R.string.btn_cancel) { _, _ -> onResult(null) }
-                    .setOnCancelListener { onResult(null) }
-                    .create()
-                    .show()
-                return
+                et.hint = getString(R.string.question_custom_hint)
             }
+            question.options.forEach { option ->
+                group.addView(RadioButton(this).apply {
+                    id = View.generateViewId()
+                    text = option
+                    textSize = 14f
+                    setTextColor(getColor(R.color.text_primary))
+                })
+            }
+            (group.getChildAt(if (question.allowCustom) 1 else 0) as RadioButton).isChecked = true
+            optionsBox.addView(group)
+            confirmAction = {
+                val checkedId = group.checkedRadioButtonId
+                val selectedView = group.findViewById<RadioButton>(checkedId)
+                val custom = et.text.toString().trim()
+                val isCustom = checkedId == customId
+                when {
+                    isCustom || checkedId == -1 -> custom.ifBlank { null }
+                    custom.isNotEmpty() -> "${selectedView?.text}；$custom"
+                    else -> selectedView?.text?.toString()?.ifBlank { null }
+                }
+            }
+        } else {
+            confirmAction = { et.text.toString().trim().ifBlank { null } }
         }
 
-        val et = EditText(this).apply {
-            hint = getString(R.string.question_custom_hint)
-            inputType = InputType.TYPE_CLASS_TEXT
-        }
-        layout.addView(et)
-        AlertDialog.Builder(this)
-            .setTitle(question.question)
-            .setView(ScrollView(this).apply { addView(layout) })
-            .setPositiveButton(R.string.btn_confirm) { _, _ ->
-                onResult(et.text.toString().trim().ifBlank { null })
+        var done = false
+        val finish: (String?) -> Unit = { result ->
+            if (!done) {
+                done = true
+                panel.visibility = View.GONE
+                onResult(result)
             }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> onResult(null) }
-            .setOnCancelListener { onResult(null) }
-            .create()
-            .show()
+        }
+        btnConfirm.setOnClickListener { finish(confirmAction()) }
+        btnCancel.setOnClickListener { finish(null) }
+
+        panel.visibility = View.VISIBLE
+        scrollToBottom()
     }
 
     // ==================== 会话渲染 ====================

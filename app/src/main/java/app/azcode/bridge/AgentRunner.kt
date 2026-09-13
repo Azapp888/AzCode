@@ -37,14 +37,17 @@ sealed interface AgentEvent {
 }
 
 /**
- * Agent 向用户提出的选择题。UI 以弹窗呈现，并同步发送通知栏提醒。
+ * Agent 向用户提出的选择题。UI 在输入框下方展开一块区域呈现，并同步发送通知栏提醒。
  * [allowMultiple] 允许多选，[allowCustom] 允许用户手动输入答案。
+ * [index]/[total] 用于一次传入多个问题、逐条询问时提示进度（0 表示单条）。
  */
 data class AgentQuestion(
     val question: String,
     val options: List<String>,
     val allowMultiple: Boolean = false,
     val allowCustom: Boolean = true,
+    val index: Int = 0,
+    val total: Int = 0,
 )
 
 /**
@@ -54,7 +57,7 @@ data class AgentQuestion(
  * 下一轮请求会在系统提示词之后接续这些历史，从而让同一会话里的多轮对话保持连贯。
  * 系统提示词不持久化，每次根据最新的技能/记忆重新构建。
  *
- * [askUser] 在工作线程上调用并阻塞，直到用户在弹窗中作答（返回 null 表示未作答）。
+ * [askUser] 在工作线程上调用并阻塞，直到用户在输入框下方的问答区作答（返回 null 表示未作答）。
  */
 class AgentRunner(
     private val ctx: Context,
@@ -376,29 +379,58 @@ class AgentRunner(
     // ==================== 向用户提问 / 模型配置工具 ====================
 
     private fun askQuestion(args: JSONObject): String {
-        val question = args.optString("question")
-        if (question.isBlank()) return err("缺少 question")
+        val handler = askUser ?: return err("当前环境无法向用户提问")
+
+        // 收集问题：优先 questions 数组（逐条询问），否则取单个 question。
+        val questions = mutableListOf<AgentQuestion>()
+        args.optJSONArray("questions")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val q = o.optString("question").trim()
+                if (q.isNotEmpty()) questions.add(parseQuestion(o, q))
+            }
+        }
+        if (questions.isEmpty()) {
+            val q = args.optString("question").trim()
+            if (q.isEmpty()) return err("缺少 question")
+            questions.add(parseQuestion(args, q))
+        }
+
+        val answers = JSONArray()
+        val plain = mutableListOf<String>()
+        questions.forEachIndexed { i, base ->
+            val q = base.copy(
+                index = if (questions.size > 1) i + 1 else 0,
+                total = if (questions.size > 1) questions.size else 0,
+            )
+            val answer = handler(q)
+            val shown = if (answer.isNullOrBlank()) "未作答" else answer
+            plain.add(if (questions.size > 1) "${q.question}：$shown" else shown)
+            answers.put(JSONObject().put("question", q.question).put("answer", answer))
+        }
+
+        val combined = plain.joinToString("\n")
+        return if (plain.all { it == "未作答" }) {
+            JSONObject().put("ok", false).put("error", "用户未作答").put("answers", answers).toString()
+        } else {
+            JSONObject().put("ok", true).put("answer", combined).put("answers", answers).toString()
+        }
+    }
+
+    private fun parseQuestion(o: JSONObject, question: String): AgentQuestion {
         val options = mutableListOf<String>()
-        args.optJSONArray("options")?.let { arr ->
+        o.optJSONArray("options")?.let { arr ->
             for (i in 0 until arr.length()) {
                 val s = arr.optString(i).trim()
                 if (s.isNotEmpty()) options.add(s)
             }
         }
-        val handler = askUser ?: return err("当前环境无法向用户提问")
-        val answer = handler(
-            AgentQuestion(
-                question = question,
-                options = options,
-                allowMultiple = args.optBoolean("allow_multiple", false),
-                allowCustom = args.optBoolean("allow_custom", true),
-            )
+        return AgentQuestion(
+            question = question,
+            options = options,
+            allowMultiple = o.optBoolean("allow_multiple", false),
+            allowCustom = o.optBoolean("allow_custom", true),
         )
-        return if (answer.isNullOrBlank()) {
-            JSONObject().put("ok", false).put("error", "用户未作答").toString()
-        } else {
-            JSONObject().put("ok", true).put("answer", answer).toString()
-        }
     }
 
     private fun listModelProviders(): String {
@@ -670,9 +702,23 @@ class AgentRunner(
 
             put(fn(
                 "ask_question_for_user",
-                "当需要用户补充信息或做选择时，向用户弹出一个选择题。会同时发送通知栏提醒。用于需求不明确、需要用户提供地址/密钥、或需要用户确认选项的场景。",
+                "当需要用户补充信息或做选择时，在输入框下方展开的问答区向用户提问，并同步发送通知栏提醒。用于需求不明确、需要用户提供地址/密钥、或需要用户确认选项的场景。",
                 JSONObject()
-                    .put("question", str("要询问用户的问题"))
+                    .put("question", str("要询问用户的问题（单个问题时使用）"))
+                    .put("questions", JSONObject()
+                        .put("type", "array")
+                        .put("description", "需要一次询问多个问题时使用，会逐条询问并分别收集答案")
+                        .put("items", JSONObject()
+                            .put("type", "object")
+                            .put("properties", JSONObject()
+                                .put("question", str("问题内容"))
+                                .put("options", JSONObject()
+                                    .put("type", "array")
+                                    .put("description", "可选项列表；留空则要求用户手动输入")
+                                    .put("items", JSONObject().put("type", "string")))
+                                .put("allow_multiple", JSONObject().put("type", "boolean").put("description", "是否允许多选，默认 false"))
+                                .put("allow_custom", JSONObject().put("type", "boolean").put("description", "是否允许用户手动输入，默认 true")))
+                            .put("required", JSONArray(listOf("question")))))
                     .put("options", JSONObject()
                         .put("type", "array")
                         .put("description", "可选项列表；留空则要求用户手动输入")
@@ -782,7 +828,9 @@ class AgentRunner(
         sb.append("\n\n思考深度要求：").append(depthHint)
 
         sb.append(
-            "\n\n模型配置能力：用户让你「增加/修改模型」时，先用 ask_question_for_user 询问平台名称、Base URL 与 API Key；" +
+            "\n\n向用户提问：需要用户补充信息或做选择时，调用 ask_question_for_user。问题会显示在输入框下方的问答区，并同步发送通知栏提醒；" +
+                "用户可在其中点选选项、多选或手动输入。若需一次询问多个问题，请用 questions 数组传入，界面会逐条询问。" +
+                "\n\n模型配置能力：用户让你「增加/修改模型」时，先用 ask_question_for_user 询问平台名称、Base URL 与 API Key；" +
                 "拿到后调用 fetch_models 拉取可用模型列表并让用户选择，再调用 save_model_provider 保存。" +
                 "同一平台可能有多个语言模型，请用 models 数组传全部需要的模型名。" +
                 "随后询问用户是否加入生图模型：若需要，再用 ask_question_for_user 询问生图模型所在的平台地址、密钥与模型名，" +

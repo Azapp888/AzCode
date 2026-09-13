@@ -147,6 +147,7 @@
     <string name="btn_confirm">确定</string>
     <string name="question_custom_option">其他（手动输入）</string>
     <string name="question_custom_hint">在此输入你的答案</string>
+    <string name="question_progress">（%1$d/%2$d）</string>
     <string name="back_again_to_exit">再按一次返回退出应用</string>
 
     <string name="warn_need_task">请输入任务</string>
