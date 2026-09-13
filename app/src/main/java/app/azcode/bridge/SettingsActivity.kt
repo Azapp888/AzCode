@@ -69,7 +69,7 @@ class SettingsActivity : Activity() {
         btnBridge.setOnClickListener { toggleBridge() }
         findViewById<View>(R.id.btnMode).setOnClickListener {
             val mode = DeviceControl.cycleMode(this)
-            Toast.makeText(this, "权限模式：$mode", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "命令执行模式：${mode.label}", Toast.LENGTH_SHORT).show()
             refreshStatus()
         }
 
@@ -125,7 +125,7 @@ class SettingsActivity : Activity() {
         else getString(R.string.status_shizuku_off)
         val root = if (DeviceControl.rootAvailable()) getString(R.string.status_root_on)
         else getString(R.string.status_root_off)
-        val mode = "权限模式：${DeviceControl.getMode(this).name}"
+        val mode = "命令执行模式：${DeviceControl.getMode(this).label}（内置命令行始终可用）"
 
         tvStatus.text = listOf(bridge, access, shizuku, root, mode).joinToString("\n")
         btnBridge.setText(

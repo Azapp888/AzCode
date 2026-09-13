@@ -114,7 +114,7 @@
     <string name="btn_stop_bridge">停止桥接</string>
     <string name="btn_cycle_mode">切换权限模式</string>
     <string name="section_about">关于</string>
-    <string name="about_desc">AzCode 是一款运行在本机的 Android 自动化助手，通过无障碍服务读取屏幕并执行操作，可选 Shizuku/Root 提升命令执行权限。图形界面形态标签为 magic，命令行形态标签为 Listen。遇到问题请先到「设备能力」检查状态。</string>
+    <string name="about_desc">AzCode 是一款运行在本机的 Android 自动化助手，通过无障碍服务读取屏幕并执行操作。内置命令行默认以应用自身权限在本机执行命令，无需 Root/Shizuku；需要系统级权限时可选 Shizuku/Root 提升。图形界面形态标签为 magic，命令行形态标签为 Listen。遇到问题请先到「设备能力」检查状态。</string>
 
     <string name="status_bridge_off">桥接：已停止</string>
     <string name="status_bridge_on">桥接：127.0.0.1:%1$d</string>

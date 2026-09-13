@@ -21,7 +21,7 @@ listen run "打开设置查看 Android 版本号"   # 运行完整 Agent 任务
 listen health                              # 能力自检
 listen screen                              # 读取屏幕节点
 listen tap --text "确定"                   # 按文本点击
-listen shell "pm list packages -3"         # 执行命令（需 Shizuku/Root）
+listen shell "pm list packages -3"         # 执行命令（内置命令行，无需 Root/Shizuku）
 listen notify --title "提醒" --body "内容"
 ```
 
@@ -32,7 +32,7 @@ listen notify --title "提醒" --body "内容"
 1. 打开无障碍服务：点右上角齿轮进入「设置」→「无障碍设置」→ 在系统设置里开启 **AzCode Screen Control**。
 2. 在「设置」里填写 **DeepSeek API Key**（Base URL 与模型有默认值，可改），点「保存配置」。
 3. 返回聊天界面，输入任务（如「打开设置查看 Android 版本号」）并发送。
-4. 需要 shell 能力时：安装 Shizuku 并授权，或在「设置」里用「切换权限模式」切到 ROOT；平时 NORMAL 模式仅用无障碍能力。
+4. shell 命令默认可直接用（内置命令行，应用自身权限）；需要系统级权限（访问其他应用私有目录、修改系统设置等）时，再安装 Shizuku 授权或切到 ROOT 模式。
 
 ### 界面
 
@@ -84,7 +84,7 @@ Agent 工具集：
 | `tap` | 坐标或按文本点击 |
 | `swipe` | 滑动 |
 | `global` | back / home / recents / notifications |
-| `shell` | 以 Shizuku/Root 身份执行命令（需高权限模式） |
+| `shell` | 执行命令：默认内置命令行（应用权限），可选 Shizuku/Root 提权 |
 | `generate_image` | 文生图（需配置生图模型） |
 | `ask_question_for_user` | 在输入框下方问答区向用户提问（支持一次多个问题） |
 | `search_plugins` / `install_plugin` / `list_installed_plugins` / `set_plugin_enabled` / `remove_plugin` | 插件市场 |
@@ -122,17 +122,23 @@ Android (app.azcode.bridge)
 | POST | `/tap` | `{"x":123,"y":456}` 或 `{"text":"确定"}` |
 | POST | `/swipe` | `{"x1":..,"y1":..,"x2":..,"y2":..,"duration":300}` |
 | POST | `/global` | `{"action":"back"\|"home"\|"recents"\|"notifications"}` |
-| POST | `/shell` | `{"cmd":"pm list packages"}`，需 SHIZUKU 或 ROOT 模式 |
+| POST | `/shell` | `{"cmd":"pm list packages"}`，NORMAL 模式即内置命令行 |
 | POST | `/notify` | `{"title":"..","body":".."}` |
 | POST | `/agent` | `{"task":"..","session":"可选会话 id"}` 运行完整 Agent 任务，返回 `answer` 与 `events` |
 
-## 权限模式
+## 命令执行模式
+
+内置命令行（NORMAL）默认可用：以应用自身权限调用 `/system/bin/sh -c`，**无需 Root、无需 Shizuku**，可直接跑 `sh`、`ls`、`cat`、`getprop`、`pm`、`am`、`dumpsys` 等命令。受应用沙箱限制，访问其他应用私有目录、修改系统设置等仍需提升权限。
 
 | 模式 | `/shell` 通道 | 前置条件 |
 | --- | --- | --- |
-| NORMAL | 不可用（返回错误说明） | 无 |
-| SHIZUKU | Shizuku binder，以 adb(uid 2000) 身份执行 | 安装并启动 Shizuku，应用内授权 |
-| ROOT | `su -c`，以 uid 0 执行 | 设备已 Root |
+| NORMAL（内置命令行） | `/system/bin/sh -c`，以应用 uid 执行 | 无 |
+| SHIZUKU | Shizuku binder，以 adb(uid 2000) 身份执行；不可用时回退内置命令行 | 安装并启动 Shizuku，应用内授权 |
+| ROOT | `su -c`，以 uid 0 执行；不可用时回退内置命令行 | 设备已 Root |
+
+命令超时 60 秒，超时自动终止，避免交互式命令挂死 Agent。
+
+说明：APK 不内置完整 Termux（它本身是独立应用，附带数百 MB 的 Linux 前缀，无法塞进普通 APK），而是直接复用系统自带的内置 shell，实现「命令行随时可用」的等效效果。
 
 读屏与点击依赖无障碍服务，需在系统设置手动开启「AzCode Screen Control」。
 

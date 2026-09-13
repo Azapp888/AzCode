@@ -705,7 +705,7 @@ class AgentRunner(
                     .put("type", "string")
                     .put("enum", JSONArray(listOf("back", "home", "recents", "notifications")))
                     .put("description", "导航动作")), listOf("action")))
-            put(fn("shell", "以 Shizuku/Root 身份执行 shell 命令（需高权限模式）。", JSONObject()
+            put(fn("shell", "执行 shell 命令。默认以内置命令行、应用自身权限在本机运行（无需 Root/Shizuku）；需要系统级权限时可提示用户切到 Shizuku/Root 模式。", JSONObject()
                 .put("cmd", str("要执行的命令")), listOf("cmd")))
 
             // generate_image 始终声明：工具 schema 顺序与集合固定，避免因增删工具

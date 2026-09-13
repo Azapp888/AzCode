@@ -4,18 +4,29 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import java.io.File
+import java.util.concurrent.TimeUnit
 
 /**
  * 设备控制能力：权限模式 + 命令执行通道。
  *
- * 复用于 DSH Mobile (MIT) 的 Shizuku 集成思路：
- *  - NORMAL   : 仅应用沙箱，/shell 不可用
+ *  - NORMAL   : 以内置 shell（/system/bin/sh）以应用自身 uid 执行，无需 Root/Shizuku
  *  - SHIZUKU  : 经 Shizuku binder 以 adb(uid 2000) 身份执行 shell
  *  - ROOT     : 经 su 以 uid 0 执行 shell
  *
- * 注意：Shizuku 无法改变子进程 uid，因此这里只把「执行通道」提权，应用本体仍为沙箱。
+ * NORMAL 即「内置命令行」：可直接跑 sh、ls、cat、getprop、pm、am 等本机命令，
+ * 但受应用沙箱限制（访问其他应用私有目录、系统设置等仍需 SHIZUKU/ROOT）。
  */
-enum class PrivMode { NORMAL, SHIZUKU, ROOT }
+enum class PrivMode(val label: String) {
+    NORMAL("本机（应用权限）"),
+    SHIZUKU("Shizuku"),
+    ROOT("Root");
+
+    companion object {
+        fun from(key: String?): PrivMode =
+            entries.firstOrNull { it.name == key } ?: NORMAL
+    }
+}
 
 object DeviceControl {
 
@@ -23,16 +34,26 @@ object DeviceControl {
     private const val PREFS = "azcode_priv"
     private const val KEY_MODE = "priv_mode"
 
+    /** 命令执行超时，避免交互式命令挂死 Agent。 */
+    private const val EXEC_TIMEOUT_SECONDS = 60L
+
     private val SU_PATHS = listOf(
         "/system/bin/su", "/system/xbin/su", "/sbin/su",
         "/vendor/bin/su", "/data/adb/magisk/su", "/data/adb/ksu/bin/su",
     )
 
+    private val SHELL_PATHS = listOf(
+        "/system/bin/sh", "/system/xbin/sh", "/vendor/bin/sh",
+    )
+
+    /** 可用的内置 shell；找不到时退回 PATH 中的 sh。 */
+    private fun shellPath(): String =
+        SHELL_PATHS.firstOrNull { File(it).exists() } ?: "sh"
+
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun getMode(ctx: Context): PrivMode = runCatching {
-        PrivMode.valueOf(prefs(ctx).getString(KEY_MODE, PrivMode.NORMAL.name)!!)
-    }.getOrDefault(PrivMode.NORMAL)
+    fun getMode(ctx: Context): PrivMode =
+        PrivMode.from(prefs(ctx).getString(KEY_MODE, PrivMode.NORMAL.name))
 
     fun setMode(ctx: Context, mode: PrivMode) {
         prefs(ctx).edit().putString(KEY_MODE, mode.name).apply()
@@ -66,7 +87,7 @@ object DeviceControl {
 
     /**
      * 按当前模式执行 shell 命令。
-     * NORMAL 模式返回错误说明，不静默失败。
+     * NORMAL 模式以内置 shell 以应用自身权限执行，命令始终可用，不再直接失败。
      */
     fun exec(ctx: Context, cmd: String): String {
         if (cmd.isBlank()) return "azcode: empty command\n"
@@ -74,11 +95,62 @@ object DeviceControl {
             PrivMode.SHIZUKU -> if (shizukuUsable()) {
                 runCatching { shizukuExec(cmd) }.getOrElse { "shizuku error: ${it.message}\n" }
             } else {
-                "shizuku not usable (server running=${shizukuServerRunning()}, granted=${shizukuGranted()})\n"
+                // Shizuku 不可用时回退到内置 shell，保证命令仍能执行。
+                runCatching { localExec(ctx, cmd) }
+                    .getOrElse { "shizuku not usable (server running=${shizukuServerRunning()}, granted=${shizukuGranted()}); local fallback error: ${it.message}\n" }
             }
-            PrivMode.ROOT -> runCatching { rootExec(cmd) }.getOrElse { "su error: ${it.message}\n" }
-            PrivMode.NORMAL -> "shell unavailable in NORMAL mode; switch to SHIZUKU or ROOT\n"
+            PrivMode.ROOT -> if (rootAvailable()) {
+                runCatching { rootExec(cmd) }.getOrElse { "su error: ${it.message}\n" }
+            } else {
+                runCatching { localExec(ctx, cmd) }
+                    .getOrElse { "root not available; local fallback error: ${it.message}\n" }
+            }
+            PrivMode.NORMAL -> runCatching { localExec(ctx, cmd) }
+                .getOrElse { "local shell error: ${it.message}\n" }
         }
+    }
+
+    /**
+     * 内置 shell：以应用自身 uid 执行命令，无需 Root/Shizuku。
+     * 工作目录设为应用私有目录，PATH 覆盖系统常见 bin 目录。
+     */
+    private fun localExec(ctx: Context, cmd: String): String {
+        val pb = ProcessBuilder(shellPath(), "-c", cmd)
+        pb.redirectErrorStream(true)
+        pb.directory(ctx.filesDir)
+        val env = pb.environment()
+        env["PATH"] = "/product/bin:/apex/com.android.runtime/bin:/system/bin:/system/xbin:/vendor/bin"
+        env["HOME"] = ctx.filesDir.absolutePath
+        env["TMPDIR"] = ctx.cacheDir.absolutePath
+        env["PWD"] = ctx.filesDir.absolutePath
+
+        val process = pb.start()
+        process.outputStream.close()
+
+        val sb = StringBuilder()
+        val reader = Thread {
+            runCatching {
+                process.inputStream.bufferedReader().use { r ->
+                    val buf = CharArray(4096)
+                    while (true) {
+                        val n = r.read(buf)
+                        if (n < 0) break
+                        sb.append(buf, 0, n)
+                    }
+                }
+            }
+        }
+        reader.isDaemon = true
+        reader.start()
+
+        val finished = process.waitFor(EXEC_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        if (!finished) {
+            process.destroyForcibly()
+            reader.join(1000)
+            return (sb.toString() + "\n[命令超时（>${EXEC_TIMEOUT_SECONDS}s），已终止]").trim() + "\n"
+        }
+        reader.join(2000)
+        return sb.toString()
     }
 
     /** 以 Shizuku(adb uid 2000) 身份执行，返回 stdout+stderr 合并 */
