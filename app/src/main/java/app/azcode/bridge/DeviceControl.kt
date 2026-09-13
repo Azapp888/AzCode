@@ -37,6 +37,9 @@ object DeviceControl {
     /** 命令执行超时，避免交互式命令挂死 Agent。 */
     private const val EXEC_TIMEOUT_SECONDS = 60L
 
+    /** Termux 命令更重（可跑 pip/npm/git），给更长的超时。 */
+    private const val TERMUX_TIMEOUT_MS = 90_000L
+
     private val SU_PATHS = listOf(
         "/system/bin/su", "/system/xbin/su", "/sbin/su",
         "/vendor/bin/su", "/data/adb/magisk/su", "/data/adb/ksu/bin/su",
@@ -87,27 +90,41 @@ object DeviceControl {
 
     /**
      * 按当前模式执行 shell 命令。
-     * NORMAL 模式以内置 shell 以应用自身权限执行，命令始终可用，不再直接失败。
+     * NORMAL 模式优先走 Termux（若已安装并授权），否则用内置 shell 以应用自身权限执行；
+     * 命令始终可用，不再直接失败。
      */
     fun exec(ctx: Context, cmd: String): String {
         if (cmd.isBlank()) return "azcode: empty command\n"
         return when (getMode(ctx)) {
             PrivMode.SHIZUKU -> if (shizukuUsable()) {
-                runCatching { shizukuExec(cmd) }.getOrElse { "shizuku error: ${it.message}\n" }
+                runCatching { shizukuExec(cmd) }
+                    .getOrElse { runCatching { preferredExec(ctx, cmd) }.getOrElse { localExec(ctx, cmd) } }
             } else {
-                // Shizuku 不可用时回退到内置 shell，保证命令仍能执行。
-                runCatching { localExec(ctx, cmd) }
-                    .getOrElse { "shizuku not usable (server running=${shizukuServerRunning()}, granted=${shizukuGranted()}); local fallback error: ${it.message}\n" }
+                runCatching { preferredExec(ctx, cmd) }
+                    .getOrElse { "shizuku not usable (server running=${shizukuServerRunning()}, granted=${shizukuGranted()}); fallback error: ${it.message}\n" }
             }
             PrivMode.ROOT -> if (rootAvailable()) {
-                runCatching { rootExec(cmd) }.getOrElse { "su error: ${it.message}\n" }
+                runCatching { rootExec(cmd) }
+                    .getOrElse { runCatching { preferredExec(ctx, cmd) }.getOrElse { localExec(ctx, cmd) } }
             } else {
-                runCatching { localExec(ctx, cmd) }
-                    .getOrElse { "root not available; local fallback error: ${it.message}\n" }
+                runCatching { preferredExec(ctx, cmd) }
+                    .getOrElse { "root not available; fallback error: ${it.message}\n" }
             }
-            PrivMode.NORMAL -> runCatching { localExec(ctx, cmd) }
-                .getOrElse { "local shell error: ${it.message}\n" }
+            PrivMode.NORMAL -> runCatching { preferredExec(ctx, cmd) }
+                .getOrElse { "shell error: ${it.message}\n" }
         }
+    }
+
+    /**
+     * 优先 Termux（完整 Linux：python/node/git/pip 等），不可用或失败时退回内置 shell。
+     */
+    private fun preferredExec(ctx: Context, cmd: String): String {
+        if (TermuxControl.isReady(ctx)) {
+            val r = runCatching { TermuxControl.exec(ctx, cmd, TERMUX_TIMEOUT_MS) }
+            r.getOrNull()?.let { return it }
+            Log.w(TAG, "termux exec failed, fallback to builtin shell: ${r.exceptionOrNull()?.message}")
+        }
+        return localExec(ctx, cmd)
     }
 
     /**

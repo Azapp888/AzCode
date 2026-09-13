@@ -128,17 +128,35 @@ Android (app.azcode.bridge)
 
 ## 命令执行模式
 
-内置命令行（NORMAL）默认可用：以应用自身权限调用 `/system/bin/sh -c`，**无需 Root、无需 Shizuku**，可直接跑 `sh`、`ls`、`cat`、`getprop`、`pm`、`am`、`dumpsys` 等命令。受应用沙箱限制，访问其他应用私有目录、修改系统设置等仍需提升权限。
+shell 命令默认可用，分两层：
+
+1. **Termux（优先）**：设备已安装 Termux 并授权后，`shell` 自动通过 Termux 的 `RUN_COMMAND` 接口执行，等价于完整 Linux 环境，可跑 `python`、`node`、`git`、`pip`、`ffmpeg` 等 Termux 里已安装的软件包。
+2. **内置命令行（兜底）**：未装 Termux 或 Termux 不可用时，以应用自身权限调用 `/system/bin/sh -c`，可直接跑 `sh`、`ls`、`cat`、`getprop`、`pm`、`am`、`dumpsys` 等命令。
+
+两者都无需 Root/Shizuku。受沙箱限制，访问其他应用私有目录、修改系统设置等仍需 SHIZUKU/ROOT。
+
+### 启用 Termux（可选）
+
+Termux 是独立应用，前缀（`$PREFIX`）数百 MB，无法塞进本 APK，因此按需接入：
+
+1. 安装 Termux（`com.termux`，F-Droid 或 GitHub 版）；
+2. 在「设置 → 设备能力 → Termux 授权」授予 `com.termux.permission.RUN_COMMAND`；
+3. 在 Termux 里执行以下命令并重启 Termux，开启外部应用调用：
+
+    ```bash
+    echo "allow-external-apps=true" >> ~/.termux/termux.properties
+    ```
+
+之后 `shell` 会自动优先走 Termux；若调用失败则静默回退内置命令行，不会中断任务。
 
 | 模式 | `/shell` 通道 | 前置条件 |
 | --- | --- | --- |
+| NORMAL（Termux） | Termux `RUN_COMMAND`，以 Termux uid 执行 bash | 安装 Termux + 授权 + `allow-external-apps=true` |
 | NORMAL（内置命令行） | `/system/bin/sh -c`，以应用 uid 执行 | 无 |
-| SHIZUKU | Shizuku binder，以 adb(uid 2000) 身份执行；不可用时回退内置命令行 | 安装并启动 Shizuku，应用内授权 |
-| ROOT | `su -c`，以 uid 0 执行；不可用时回退内置命令行 | 设备已 Root |
+| SHIZUKU | Shizuku binder，以 adb(uid 2000) 身份执行；不可用时回退 NORMAL | 安装并启动 Shizuku，应用内授权 |
+| ROOT | `su -c`，以 uid 0 执行；不可用时回退 NORMAL | 设备已 Root |
 
-命令超时 60 秒，超时自动终止，避免交互式命令挂死 Agent。
-
-说明：APK 不内置完整 Termux（它本身是独立应用，附带数百 MB 的 Linux 前缀，无法塞进普通 APK），而是直接复用系统自带的内置 shell，实现「命令行随时可用」的等效效果。
+内置命令行超时 60 秒，Termux 超时 90 秒，超时自动终止，避免交互式命令挂死 Agent。
 
 读屏与点击依赖无障碍服务，需在系统设置手动开启「AzCode Screen Control」。
 

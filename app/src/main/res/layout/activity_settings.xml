@@ -189,6 +189,17 @@
                     android:text="@string/btn_request_shizuku"
                     android:textColor="@color/primary"
                     android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/btnTermux"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="46dp"
+                    android:layout_marginStart="10dp"
+                    android:background="@drawable/bg_button_outline"
+                    android:text="@string/btn_termux"
+                    android:textColor="@color/primary"
+                    android:textSize="13sp" />
             </LinearLayout>
 
             <LinearLayout

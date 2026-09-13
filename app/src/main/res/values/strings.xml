@@ -114,7 +114,7 @@
     <string name="btn_stop_bridge">停止桥接</string>
     <string name="btn_cycle_mode">切换权限模式</string>
     <string name="section_about">关于</string>
-    <string name="about_desc">AzCode 是一款运行在本机的 Android 自动化助手，通过无障碍服务读取屏幕并执行操作。内置命令行默认以应用自身权限在本机执行命令，无需 Root/Shizuku；需要系统级权限时可选 Shizuku/Root 提升。图形界面形态标签为 magic，命令行形态标签为 Listen。遇到问题请先到「设备能力」检查状态。</string>
+    <string name="about_desc">AzCode 是一款运行在本机的 Android 自动化助手，通过无障碍服务读取屏幕并执行操作。已安装并授权 Termux 时自动使用其完整 Linux 环境，否则以内置命令行以应用自身权限执行，均无需 Root/Shizuku；需要系统级权限时可选 Shizuku/Root 提升。图形界面形态标签为 magic，命令行形态标签为 Listen。遇到问题请先到「设备能力」检查状态。</string>
 
     <string name="status_bridge_off">桥接：已停止</string>
     <string name="status_bridge_on">桥接：127.0.0.1:%1$d</string>
@@ -124,6 +124,15 @@
     <string name="status_shizuku_off">Shizuku 不可用</string>
     <string name="status_root_on">Root 可用</string>
     <string name="status_root_off">Root 不可用</string>
+    <string name="status_termux_not_installed">Termux 未安装</string>
+    <string name="status_termux_no_permission">Termux 已安装，待授权</string>
+    <string name="status_termux_on">Termux 可用</string>
+    <string name="btn_termux">Termux 授权</string>
+    <string name="btn_termux_install">安装 Termux</string>
+    <string name="toast_termux_installed">Termux 已安装，请授权后使用</string>
+    <string name="toast_termux_granted">Termux 已授权</string>
+    <string name="toast_termux_denied">Termux 授权被拒绝</string>
+    <string name="toast_termux_need_allow_external">请在 Termux 中执行 echo "allow-external-apps=true" >> ~/.termux/termux.properties 并重启 Termux</string>
 
     <string name="tool_params">参数</string>
     <string name="tool_result">结果</string>

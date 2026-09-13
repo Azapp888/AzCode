@@ -66,6 +66,7 @@ class SettingsActivity : Activity() {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
         findViewById<View>(R.id.btnShizuku).setOnClickListener { requestShizuku() }
+        findViewById<View>(R.id.btnTermux).setOnClickListener { requestTermux() }
         btnBridge.setOnClickListener { toggleBridge() }
         findViewById<View>(R.id.btnMode).setOnClickListener {
             val mode = DeviceControl.cycleMode(this)
@@ -106,6 +107,46 @@ class SettingsActivity : Activity() {
         }
     }
 
+    private fun requestTermux() {
+        when {
+            !TermuxControl.isInstalled(this) -> {
+                Toast.makeText(this, "Termux 未安装，正在打开安装页", Toast.LENGTH_SHORT).show()
+                runCatching {
+                    startActivity(
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            android.net.Uri.parse("https://f-droid.org/packages/com.termux/"),
+                        )
+                    )
+                }
+            }
+            TermuxControl.isPermissionGranted(this) ->
+                Toast.makeText(this, R.string.toast_termux_need_allow_external, Toast.LENGTH_LONG).show()
+            else -> requestPermissions(arrayOf(TermuxControl.PERMISSION), 200)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 200) {
+            val granted = grantResults.isNotEmpty() &&
+                grantResults[0] == PackageManager.PERMISSION_GRANTED
+            Toast.makeText(
+                this,
+                if (granted) R.string.toast_termux_granted else R.string.toast_termux_denied,
+                Toast.LENGTH_SHORT,
+            ).show()
+            if (granted) {
+                Toast.makeText(this, R.string.toast_termux_need_allow_external, Toast.LENGTH_LONG).show()
+            }
+            refreshStatus()
+        }
+    }
+
     private fun toggleBridge() {
         if (AgentBridge.isRunning) {
             BridgeService.stop(this)
@@ -125,9 +166,14 @@ class SettingsActivity : Activity() {
         else getString(R.string.status_shizuku_off)
         val root = if (DeviceControl.rootAvailable()) getString(R.string.status_root_on)
         else getString(R.string.status_root_off)
+        val termux = when {
+            !TermuxControl.isInstalled(this) -> getString(R.string.status_termux_not_installed)
+            !TermuxControl.isPermissionGranted(this) -> getString(R.string.status_termux_no_permission)
+            else -> getString(R.string.status_termux_on)
+        }
         val mode = "命令执行模式：${DeviceControl.getMode(this).label}（内置命令行始终可用）"
 
-        tvStatus.text = listOf(bridge, access, shizuku, root, mode).joinToString("\n")
+        tvStatus.text = listOf(bridge, access, shizuku, root, termux, mode).joinToString("\n")
         btnBridge.setText(
             if (AgentBridge.isRunning) R.string.btn_stop_bridge else R.string.btn_start_bridge
         )
