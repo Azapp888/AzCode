@@ -18,57 +18,56 @@ public sealed class AgentRunner
         _cfg = cfg;
     }
 
-    private const string SystemPrompt = """
-        你是 AzCode，一个运行在 Windows 电脑本地的自动化助手，直接控制这台电脑。
-        按需调用 get_screen 观察当前活动窗口的控件树（名称/类型/坐标）与窗口标题，只在需要定位控件时读取，不必每一步都读。
-        点击优先用 click 的 text 字段匹配控件名称，匹配不到时再用坐标。
-        输入文字用 type；组合键用 key（如 "ctrl+s"、"enter"、"alt+f4"）。
-        需要执行系统操作（启动程序、文件操作、查询信息）时用 shell（PowerShell）。
-        任务完成或无法继续时，调用 finish 并给出简短总结。
-        """;
-
     public async Task RunAsync(string task, CancellationToken ct)
     {
-        var messages = new List<ChatMessage>
-        {
-            new() { Role = "system", Content = SystemPrompt },
-            new() { Role = "user", Content = task },
-        };
+        // 前缀稳定：第 0 条 system 为稳定人设，技能/插件等运行时上下文仅在变化时
+        // 追加到历史末尾；历史 append-only，从而最大化提供商前缀缓存命中率。
+        var history = ConversationStore.Load();
+        var messages = PromptCache.Assemble(_cfg, history, task);
         var tools = BuildTools();
+        var _skills = new SkillStore();
 
-        for (var step = 1; _cfg.MaxSteps <= 0 || step <= _cfg.MaxSteps; step++)
+        try
         {
-            ct.ThrowIfCancellationRequested();
-            var limit = _cfg.MaxSteps <= 0 ? "∞" : _cfg.MaxSteps.ToString();
-            Log?.Invoke($"[step {step}/{limit}] 请求模型…");
-
-            var msg = await _llm.ChatAsync(_cfg, messages, tools, ct);
-            messages.Add(msg);
-
-            if (msg.ToolCalls is null || msg.ToolCalls.Count == 0)
-            {
-                Log?.Invoke($"完成：{msg.Content}");
-                return;
-            }
-
-            foreach (var call in msg.ToolCalls)
+            for (var step = 1; _cfg.MaxSteps <= 0 || step <= _cfg.MaxSteps; step++)
             {
                 ct.ThrowIfCancellationRequested();
-                var result = Execute(call);
-                Log?.Invoke($"  {call.Function.Name} -> {Truncate(result, 500)}");
-                messages.Add(new ChatMessage
-                {
-                    Role = "tool",
-                    ToolCallId = call.Id,
-                    Content = result,
-                });
-            }
-        }
+                var limit = _cfg.MaxSteps <= 0 ? "∞" : _cfg.MaxSteps.ToString();
+                Log?.Invoke($"[step {step}/{limit}] 请求模型…");
 
-        Log?.Invoke($"达到最大步数 {_cfg.MaxSteps}，停止。");
+                var msg = await _llm.ChatAsync(_cfg, messages, tools, ct);
+                messages.Add(msg);
+
+                if (msg.ToolCalls is null || msg.ToolCalls.Count == 0)
+                {
+                    Log?.Invoke($"完成：{msg.Content}");
+                    return;
+                }
+
+                foreach (var call in msg.ToolCalls)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var result = await ExecuteAsync(call, _skills, ct);
+                    Log?.Invoke($"  {call.Function.Name} -> {Truncate(result, 500)}");
+                    messages.Add(new ChatMessage
+                    {
+                        Role = "tool",
+                        ToolCallId = call.Id,
+                        Content = result,
+                    });
+                }
+            }
+
+            Log?.Invoke($"达到最大步数 {_cfg.MaxSteps}，停止。");
+        }
+        finally
+        {
+            // 历史 append-only：仅去掉第 0 条稳定前缀，保留运行时 system 与全部对话。
+            ConversationStore.Save(messages.Skip(1).ToList());
+        }
     }
 
-    private static string Execute(ToolCall call)
+    private static async Task<string> ExecuteAsync(ToolCall call, SkillStore skills, CancellationToken ct)
     {
         var args = ParseArgs(call.Function.Arguments);
         try
@@ -114,6 +113,41 @@ public sealed class AgentRunner
                     return WindowsAutomation.Shell(cmd);
                 }
 
+                case "search_plugins":
+                    return await SearchPluginsAsync(
+                        skills,
+                        args["keyword"]?.ToString() ?? "",
+                        args["limit"] is null ? 8 : (int)args["limit"]!.GetValue<double>(),
+                        ct);
+
+                case "install_plugin":
+                {
+                    var url = args["url"]?.ToString() ?? "";
+                    if (string.IsNullOrWhiteSpace(url)) return Err("缺少 url");
+                    var installed = await skills.InstallAsync(url, ct);
+                    return new JsonObject { ["ok"] = true, ["installed"] = installed.Name }.ToJsonString();
+                }
+
+                case "list_installed_plugins":
+                    return ListPlugins(skills);
+
+                case "set_plugin_enabled":
+                {
+                    var target = ResolveSkill(skills, args["id"]?.ToString() ?? "", args["name"]?.ToString() ?? "");
+                    if (target is null) return Err("未找到该插件");
+                    var enabled = args["enabled"] is null || args["enabled"]!.GetValue<bool>();
+                    skills.SetEnabled(target.Id, enabled);
+                    return new JsonObject { ["ok"] = true, ["name"] = target.Name, ["enabled"] = enabled }.ToJsonString();
+                }
+
+                case "remove_plugin":
+                {
+                    var target = ResolveSkill(skills, args["id"]?.ToString() ?? "", args["name"]?.ToString() ?? "");
+                    if (target is null) return Err("未找到该插件");
+                    skills.Remove(target.Id);
+                    return new JsonObject { ["ok"] = true, ["removed"] = target.Name }.ToJsonString();
+                }
+
                 case "finish":
                     return new JsonObject { ["ok"] = true, ["summary"] = args["summary"]?.ToString() ?? "" }.ToJsonString();
 
@@ -147,6 +181,48 @@ public sealed class AgentRunner
 
     private static string Truncate(string s, int max) =>
         s.Length <= max ? s : s[..max] + "…";
+
+    private static async Task<string> SearchPluginsAsync(
+        SkillStore skills, string keyword, int limit, CancellationToken ct)
+    {
+        var plugins = await skills.SearchAsync(keyword, limit, ct);
+        var arr = new JsonArray();
+        foreach (var p in plugins)
+            arr.Add(new JsonObject
+            {
+                ["id"] = p.Id,
+                ["name"] = p.Name,
+                ["description"] = p.Description,
+                ["installUrl"] = p.InstallUrl,
+                ["stars"] = p.Stars,
+                ["tags"] = new JsonArray(p.Tags.Select(t => JsonValue.Create(t)!).ToArray()),
+            });
+        return new JsonObject { ["ok"] = true, ["count"] = plugins.Count, ["plugins"] = arr }.ToJsonString();
+    }
+
+    private static string ListPlugins(SkillStore skills)
+    {
+        var arr = new JsonArray();
+        var all = skills.All();
+        foreach (var s in all)
+            arr.Add(new JsonObject
+            {
+                ["id"] = s.Id,
+                ["name"] = s.Name,
+                ["description"] = s.Description,
+                ["enabled"] = s.Enabled,
+                ["source"] = string.IsNullOrWhiteSpace(s.Source) ? "内置" : s.Source,
+            });
+        return new JsonObject { ["ok"] = true, ["count"] = all.Count, ["plugins"] = arr }.ToJsonString();
+    }
+
+    private static Skill? ResolveSkill(SkillStore skills, string id, string name)
+    {
+        var all = skills.All();
+        return all.FirstOrDefault(s => id.Length > 0 && s.Id == id)
+               ?? all.FirstOrDefault(s => name.Length > 0 && s.Name == name)
+               ?? all.FirstOrDefault(s => name.Length > 0 && s.Name.Contains(name));
+    }
 
     private static JsonArray BuildTools()
     {
@@ -190,6 +266,27 @@ public sealed class AgentRunner
             {
                 ["cmd"] = Str("要执行的命令"),
             }, new[] { "cmd" }),
+            Fn("search_plugins", "扫描热门开源仓库，查找可安装的 Agent 插件（技能）。", new JsonObject
+            {
+                ["keyword"] = Str("搜索关键词，留空返回内置精选"),
+                ["limit"] = Num("最多返回条数，默认 8"),
+            }, Array.Empty<string>()),
+            Fn("install_plugin", "一键安装插件：下载仓库中的 SKILL.md 并写入本机技能库。", new JsonObject
+            {
+                ["url"] = Str("候选的 installUrl"),
+            }, new[] { "url" }),
+            Fn("list_installed_plugins", "列出本机已安装的插件及其启停状态。", new JsonObject(), Array.Empty<string>()),
+            Fn("set_plugin_enabled", "启用或停用一个已安装插件。", new JsonObject
+            {
+                ["id"] = Str("插件 id"),
+                ["name"] = Str("插件名称"),
+                ["enabled"] = new JsonObject { ["type"] = "boolean", ["description"] = "是否启用" },
+            }, Array.Empty<string>()),
+            Fn("remove_plugin", "删除一个已安装插件。", new JsonObject
+            {
+                ["id"] = Str("插件 id"),
+                ["name"] = Str("插件名称"),
+            }, Array.Empty<string>()),
             Fn("finish", "任务结束并给出总结。", new JsonObject
             {
                 ["summary"] = Str("结果总结"),

@@ -1,8 +1,8 @@
-# AzCode Console (Windows)
+# magic (Windows)
 
-Windows 原生端（.NET 8 / WPF）：运行在本机的自动化 Agent。它把自然语言任务交给 DeepSeek 决策，再通过 Windows UI Automation、模拟鼠标键盘与 PowerShell 直接操作这台电脑。
+Windows 原生端（.NET 8 / WPF）：运行在本机的自动化 Agent，图形界面叫 **magic**（命令行形态为 **Listen**）。它把自然语言任务交给模型决策，再通过 Windows UI Automation、模拟鼠标键盘与 PowerShell 直接操作这台电脑。
 
-Android 端（控制本机手机的独立 Agent）位于另一分支 `260912-feat-android-native`。两端是相互独立、功能对等的应用，只是运行平台不同。
+其余端位于独立分支、功能对等：Android `260912-feat-android-native`、Linux `260912-feat-linux-native`。三端统一命名：图形界面 = magic，命令行 = Listen。
 
 ## 架构
 
@@ -45,7 +45,14 @@ AzCode Console (.NET/WPF)
 | `type` | 向当前焦点输入文本 |
 | `key` | 按下组合键，如 `ctrl+s`、`enter`、`alt+f4`、`win` |
 | `shell` | 执行 PowerShell 命令 |
+| `search_plugins` / `install_plugin` / `list_installed_plugins` / `set_plugin_enabled` / `remove_plugin` | 插件市场：扫描热门开源插件并一键安装 |
 | `finish` | 结束任务并总结 |
+
+## 降缓存未命中与插件
+
+- **降缓存未命中**（移植自 deepseek-harness）：第 0 条 `system` 为稳定人设，字节不变；技能等运行时上下文单独成一条 `system` 消息，未变时不重复插入、变化时追加到历史末尾；工具定义顺序固定。历史持久化在 `%APPDATA%\AzCode\conversation.json`，append-only 增长以保持前缀缓存温热。实现见 `Services/PromptCache.cs`。
+- **内置 ponytail**：首次启动写入「拒绝过度设计」技能，默认启用。
+- **插件市场**：模型可搜索 GitHub 上 star 较多的 Agent 技能仓库，一键安装其中的 `SKILL.md`。
 
 ## 构建
 
@@ -70,6 +77,9 @@ src/AzCode.Desktop/
   Models/ChatModels.cs              对话消息模型
   Services/DeepSeekClient.cs        DeepSeek function calling
   Services/AgentRunner.cs           决策循环与工具执行
+  Services/PromptCache.cs           降缓存未命中：稳定前缀 + 运行时上下文追加
+  Services/SkillStore.cs            技能持久化 + 内置 ponytail + 插件扫描安装
+  Services/ConversationStore.cs     会话历史 append-only 持久化
   Services/WindowsAutomation.cs     UI Automation / 键鼠 / PowerShell
 .github/workflows/windows.yml
 ```

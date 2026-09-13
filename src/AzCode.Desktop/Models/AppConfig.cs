@@ -15,6 +15,9 @@ public sealed class AppConfig
     public int MaxSteps { get; set; } = 0; // 0 表示无限步数，由重复检测兜底
     public double Temperature { get; set; } = 0.2;
 
+    /// <summary>用户自定义系统提示词；留空使用内置默认人设（稳定前缀）。</summary>
+    public string SystemPrompt { get; set; } = "";
+
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
