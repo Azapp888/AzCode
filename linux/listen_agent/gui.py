@@ -21,7 +21,7 @@ class MagicApp:
         self.agent: Agent | None = None
         self.worker: threading.Thread | None = None
 
-        root.title(f"magic {__version__}")
+        root.title(f"AzCode {__version__} · magic")
         root.geometry("900x640")
         self._build()
         self._load_active_provider()
@@ -69,7 +69,7 @@ class MagicApp:
         self.btn_stop = ttk.Button(composer, text="停止", command=self._stop, state="disabled")
         self.btn_stop.pack(side="left")
 
-        self._append(f"magic {__version__} 已就绪。填写模型信息后输入任务即可。\n"
+        self._append(f"AzCode {__version__}（magic 图形界面）已就绪。填写模型信息后输入任务即可。\n"
                      f"内置插件 ponytail（拒绝过度设计）已启用。\n")
 
     def _load_active_provider(self) -> None:
