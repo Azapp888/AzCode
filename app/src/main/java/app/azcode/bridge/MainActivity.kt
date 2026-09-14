@@ -1,5 +1,6 @@
 package app.azcode.bridge
 
+import android.app.AlertDialog
 import android.app.Dialog
 import androidx.appcompat.app.AppCompatActivity
 import android.content.ClipData
@@ -11,8 +12,6 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.view.Gravity
 import android.view.View
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -23,9 +22,9 @@ import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
-import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import org.json.JSONObject
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
@@ -52,9 +51,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var attachmentsRow: LinearLayout
     private lateinit var modelPanel: View
     private lateinit var btnModelBox: TextView
-    private lateinit var spModel: Spinner
-    private lateinit var depthRow: LinearLayout
-    private var updatingModelSpinner = false
+    private lateinit var modelPickRow: View
+    private lateinit var tvCurrentModel: TextView
+    private lateinit var tvDepthLabel: TextView
+    private lateinit var depthSlider: DepthSliderView
+    private var depthIndex = 0
+    private var maxDepthConfirmed = false
+    private var maxDepthPrompting = false
 
     @Volatile private var runner: AgentRunner? = null
     private var worker: Thread? = null
@@ -105,8 +108,10 @@ class MainActivity : AppCompatActivity() {
         attachmentsRow = findViewById(R.id.attachmentsRow)
         modelPanel = findViewById(R.id.modelPanel)
         btnModelBox = findViewById(R.id.btnModelBox)
-        spModel = findViewById(R.id.spModel)
-        depthRow = findViewById(R.id.depthRow)
+        modelPickRow = findViewById(R.id.modelPickRow)
+        tvCurrentModel = findViewById(R.id.tvCurrentModel)
+        tvDepthLabel = findViewById(R.id.tvDepthLabel)
+        depthSlider = findViewById(R.id.depthSlider)
 
         findViewById<View>(R.id.btnSessions).setOnClickListener {
             startActivity(Intent(this, SessionsActivity::class.java))
@@ -343,124 +348,191 @@ class MainActivity : AppCompatActivity() {
         return out
     }
 
-    private fun modelOptionLabel(account: ProviderAccount, model: String): String =
-        if (model.isBlank()) account.name else "${account.name} · $model"
-
-    private fun buildModelAdapter(): ArrayAdapter<String> {
-        return object : ArrayAdapter<String>(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            providerOptions.map { modelOptionLabel(it.first, it.second) },
-        ) {
-            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
-                val v = super.getView(position, convertView, parent)
-                (v as? TextView)?.textSize = 13f
-                return v
-            }
-
-            override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
-                val v = super.getDropDownView(position, convertView, parent)
-                (v as? TextView)?.textSize = 13f
-                return v
-            }
-        }
+    private fun depthToProgress(index: Int): Float {
+        val last = (ThinkingDepth.entries.size - 1).coerceAtLeast(1)
+        return (index.coerceIn(0, last)).toFloat() / last
     }
 
     private fun setupModelSelector() {
-        val all = AgentConfig.providers(this)
-        providersSignature = all.joinToString("|") {
-            "${it.id}:${it.name}:${it.enabled}:${it.allModels.joinToString(",")}"
-        }
-        providerOptions = buildModelOptions(all)
-        val active = AgentConfig.activeProvider(this)
-        val activeId = active?.id
-        val activeModel = active?.model
+        providersSignature = allProvidersSignature()
+        providerOptions = buildModelOptions(AgentConfig.providers(this))
+        val depth = AgentConfig.thinkingDepth(this)
+        depthIndex = depth.ordinal
+        maxDepthConfirmed = depth == ThinkingDepth.entries.last()
 
-        updatingModelSpinner = true
-        spModel.adapter = buildModelAdapter()
-        val index = providerOptions
-            .indexOfFirst { it.first.id == activeId && it.second == activeModel }
-            .let { if (it >= 0) it else providerOptions.indexOfFirst { it.first.id == activeId } }
-            .coerceAtLeast(0)
-        spModel.setSelection(index, false)
-        updatingModelSpinner = false
-        spModel.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (updatingModelSpinner) return
-                val (account, model) = providerOptions.getOrNull(position) ?: return
-                if (account.id != AgentConfig.activeId(this@MainActivity)) {
-                    AgentConfig.setActiveId(this@MainActivity, account.id)
-                }
-                if (model.isNotBlank() && model != account.model) {
-                    AgentConfig.setActiveModel(this@MainActivity, account.id, model)
-                }
-                updateModelBox()
-            }
+        // 连续滑块，无档位吸附；仅回报最接近的档位。
+        depthSlider.depthCount = ThinkingDepth.entries.size
+        depthSlider.setProgressSilently(depthToProgress(depth.ordinal))
+        depthSlider.onProgressChanged = { _, index, fromUser -> onDepthChanged(index, fromUser) }
+        updateDepthLabel(depth.ordinal)
 
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
-
-        depthRow.removeAllViews()
-        ThinkingDepth.entries.forEach { depth ->
-            val chip = TextView(this).apply {
-                text = depth.label
-                textSize = 12f
-                gravity = Gravity.CENTER
-                setPadding(dp(14), dp(6), dp(14), dp(6))
-                setOnClickListener {
-                    AgentConfig.setThinkingDepth(this@MainActivity, depth)
-                    updateDepthChips()
-                    updateModelBox()
-                }
-            }
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            )
-            lp.marginEnd = dp(8)
-            depthRow.addView(chip, lp)
-        }
-
+        modelPickRow.setOnClickListener { showModelPicker() }
         btnModelBox.setOnClickListener {
-            modelPanel.visibility = if (modelPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            if (modelPanel.visibility == View.VISIBLE) {
+                modelPanel.visibility = View.GONE
+            } else {
+                syncModelSelector()
+                modelPanel.visibility = View.VISIBLE
+            }
         }
-        updateDepthChips()
         updateModelBox()
+    }
+
+    private fun onDepthChanged(index: Int, fromUser: Boolean) {
+        val last = ThinkingDepth.entries.size - 1
+        if (!fromUser) {
+            updateDepthLabel(index)
+            return
+        }
+        if (index == last && !maxDepthConfirmed && depthIndex != last) {
+            if (!maxDepthPrompting) promptMaxDepth()
+            return
+        }
+        if (index != last) maxDepthConfirmed = false
+        applyDepth(index)
+    }
+
+    private fun applyDepth(index: Int) {
+        val depth = ThinkingDepth.entries[index.coerceIn(0, ThinkingDepth.entries.size - 1)]
+        if (AgentConfig.thinkingDepth(this) != depth) AgentConfig.setThinkingDepth(this, depth)
+        depthIndex = index
+        updateDepthLabel(index)
+        updateModelBox()
+    }
+
+    /** 拉满思考深度前提示可能的额外费用。 */
+    private fun promptMaxDepth() {
+        maxDepthPrompting = true
+        AlertDialog.Builder(this)
+            .setTitle(R.string.depth_max_title)
+            .setMessage(R.string.depth_max_message)
+            .setPositiveButton(R.string.btn_confirm) { _, _ ->
+                maxDepthPrompting = false
+                maxDepthConfirmed = true
+                applyDepth(ThinkingDepth.entries.size - 1)
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ ->
+                maxDepthPrompting = false
+                revertDepth()
+            }
+            .setOnCancelListener {
+                maxDepthPrompting = false
+                revertDepth()
+            }
+            .show()
+    }
+
+    private fun revertDepth() {
+        depthSlider.setProgressSilently(depthToProgress(depthIndex))
+        updateDepthLabel(depthIndex)
+    }
+
+    private fun updateDepthLabel(index: Int) {
+        tvDepthLabel.text = ThinkingDepth.entries[index.coerceIn(0, ThinkingDepth.entries.size - 1)].label
+    }
+
+    /** 按提供商分组的模型选择弹层：可滚动、限高、点击外部自动关闭。 */
+    private fun showModelPicker() {
+        providerOptions = buildModelOptions(AgentConfig.providers(this))
+        val sheet = BottomSheetDialog(this)
+        val content = layoutInflater.inflate(R.layout.sheet_model_picker, null)
+        val container = content.findViewById<LinearLayout>(R.id.pickerContainer)
+        val activeId = AgentConfig.activeId(this)
+        val activeModel = AgentConfig.activeProvider(this)?.model
+
+        if (providerOptions.isEmpty()) {
+            container.addView(pickerHeader(getString(R.string.model_picker_empty)))
+        } else {
+            var lastProviderId: String? = null
+            providerOptions.forEach { (account, model) ->
+                if (account.id != lastProviderId) {
+                    lastProviderId = account.id
+                    container.addView(pickerHeader(account.name))
+                }
+                val selected = account.id == activeId && model == activeModel
+                container.addView(
+                    pickerRow(model.ifBlank { account.name }, selected) {
+                        if (account.id != AgentConfig.activeId(this)) {
+                            AgentConfig.setActiveId(this, account.id)
+                        }
+                        if (model.isNotBlank() && model != account.model) {
+                            AgentConfig.setActiveModel(this, account.id, model)
+                        }
+                        syncModelSelector()
+                        sheet.dismiss()
+                    },
+                )
+            }
+        }
+
+        sheet.setContentView(content)
+        sheet.behavior.maxHeight = (resources.displayMetrics.heightPixels * 0.55f).toInt()
+        sheet.behavior.skipCollapsed = true
+        sheet.show()
+    }
+
+    private fun pickerHeader(text: String): TextView = TextView(this).apply {
+        this.text = text
+        textSize = 12f
+        setTextColor(getColor(R.color.text_caption))
+        setPadding(dp(14), dp(14), dp(14), dp(4))
+    }
+
+    private fun pickerRow(text: String, selected: Boolean, onClick: () -> Unit): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(44)
+            background = getDrawable(
+                if (selected) R.drawable.bg_picker_item_selected else R.drawable.bg_picker_item,
+            )
+            isClickable = true
+            isFocusable = true
+            setPadding(dp(14), dp(10), dp(12), dp(10))
+            setOnClickListener { onClick() }
+        }
+        val label = TextView(this).apply {
+            this.text = text
+            textSize = 14f
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setTextColor(getColor(if (selected) R.color.primary else R.color.text_primary))
+        }
+        row.addView(
+            label,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        if (selected) {
+            row.addView(
+                ImageView(this).apply {
+                    setImageResource(R.drawable.ic_check)
+                    contentDescription = null
+                },
+                LinearLayout.LayoutParams(dp(18), dp(18)),
+            )
+        }
+        return row
     }
 
     private fun syncModelSelector() {
-        if (allProvidersSignature() != providersSignature) {
-            setupModelSelector()
-            return
+        val all = AgentConfig.providers(this)
+        val sig = allProvidersSignature()
+        if (sig != providersSignature) {
+            providersSignature = sig
+            providerOptions = buildModelOptions(all)
         }
-        val active = AgentConfig.activeProvider(this)
-        val activeId = active?.id
-        val activeModel = active?.model
-        val index = providerOptions
-            .indexOfFirst { it.first.id == activeId && it.second == activeModel }
-            .let { if (it >= 0) it else providerOptions.indexOfFirst { it.first.id == activeId } }
-        if (index >= 0 && index != spModel.selectedItemPosition) {
-            updatingModelSpinner = true
-            spModel.setSelection(index, false)
-            updatingModelSpinner = false
-        }
-        updateDepthChips()
+        val depth = AgentConfig.thinkingDepth(this)
+        depthIndex = depth.ordinal
+        if (depth != ThinkingDepth.entries.last()) maxDepthConfirmed = false
+        depthSlider.setProgressSilently(depthToProgress(depth.ordinal))
+        updateDepthLabel(depth.ordinal)
         updateModelBox()
-    }
-
-    private fun updateDepthChips() {
-        val current = AgentConfig.thinkingDepth(this)
-        for (i in 0 until depthRow.childCount) {
-            val chip = depthRow.getChildAt(i) as TextView
-            val selected = ThinkingDepth.entries[i] == current
-            chip.background = getDrawable(if (selected) R.drawable.bg_chip_selected else R.drawable.bg_chip)
-            chip.setTextColor(getColor(if (selected) R.color.text_on_primary else R.color.text_secondary))
-        }
     }
 
     private fun updateModelBox() {
         val provider = AgentConfig.activeProvider(this)
         val model = provider?.model?.takeIf { it.isNotBlank() } ?: getString(R.string.model_box_unset)
+        tvCurrentModel.text = model
         btnModelBox.text = getString(
             R.string.model_box_format,
             model,

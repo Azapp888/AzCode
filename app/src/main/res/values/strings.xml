@@ -86,6 +86,10 @@
     <string name="warn_need_model">请填写语言模型名</string>
     <string name="warn_need_image_model">请填写生图模型名</string>
     <string name="model_box_unset">未配置模型</string>
+    <string name="model_picker_title">选择模型</string>
+    <string name="model_picker_empty">暂无可用模型，请先在「设置 → 模型管理」中添加</string>
+    <string name="depth_max_title">已拉满思考深度</string>
+    <string name="depth_max_message">思考深度拉满会明显增加推理消耗，可能产生更高的费用。确定要继续吗？</string>
     <string name="model_entry_active">模型管理（当前：%1$s · %2$s，已启用 %3$d 个）</string>
     <string name="model_entry_empty">模型管理（尚未配置，点此添加）</string>
 
