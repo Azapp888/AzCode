@@ -64,6 +64,9 @@ listen notify --title "提醒" --body "内容"
 
 - **系统提示词**：在设置页填写，留空使用内置默认提示词；会作为每次运行的 system 消息。
 - **技能管理**：设置页 → 技能管理。每个技能是一段注入系统提示词的指令文本，可单独启用/停用或删除。
+- **内置技能**：随应用内置两个，可在技能页启停。
+  - `ponytail · 拒绝过度设计`：最小改动原则，抑制多余依赖与抽象。
+  - `impeccable · 界面打磨`：界面设计的工艺底线与 Android（Material 3）规范，移植自 [pbakaus/impeccable](https://github.com/pbakaus/impeccable)（Apache-2.0）。
 - **从 GitHub 安装技能**：点技能页右上角「+」，填入 SKILL.md 的 GitHub 链接即可。支持：
 
 ```
@@ -207,6 +210,9 @@ tools/install.sh             Listen 一行安装脚本
 MIT。无障碍与 Shizuku 执行模块参考并改编自
 [Soodok/Deepseek-Harness-Local-Android](https://github.com/Soodok/Deepseek-Harness-Local-Android)（MIT），
 Shizuku API 来自 [RikkaApps/Shizuku-API](https://github.com/RikkaApps/Shizuku-API)。
+
+界面设计参考 DeepSeek 官方样式（令牌来源见 `DESIGN.md` 的「参考来源与引用文件」）；
+内置 `impeccable` 技能移植自 [pbakaus/impeccable](https://github.com/pbakaus/impeccable)（Apache-2.0）。
 
 ## 免责声明
 

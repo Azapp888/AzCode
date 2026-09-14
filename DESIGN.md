@@ -52,3 +52,34 @@
 - `Theme.AzCode` 基于 `Theme.Material3.DayNight.NoActionBar`，通过 `values-night` 自动切换深浅色。
 - `viewInflaterClass` 固定为 AppCompat inflater，保留各界面自定义 `android:background`。
 - Android 12+ 启用 Material You 动态取色（`DynamicColors`），仅协调系统与 Material 控件；品牌蓝以静态引用保持稳定。
+
+## 参考来源与引用文件
+
+本设计系统不是凭记忆估算，而是从下列真实来源提取。为可追溯，逐项列出所引用的文件。
+
+### 一、DeepSeek 官方（色值、圆角、字号令牌的真实来源）
+
+| 引用的文件 | 用途 |
+| --- | --- |
+| `https://fe-static.deepseek.com/chat/static/main.cffac0f0da.css` | 主来源：提取 `--dsw-static-*` 基础色板与 `--dsw-alias-*` 语义令牌的明/暗两套取值 |
+| `https://www.deepseek.com/_next/static/css/8200fbc59b0ac2c5.css` | 官网样式，用于交叉核对品牌蓝 |
+| `https://www.deepseek.com/_next/static/css/826310b8bcf73c16.css` | 官网样式，用于交叉核对品牌蓝 |
+| `https://www.deepseek.com/_next/static/css/aa0e993381ed79dc.css` | 官网样式，用于交叉核对品牌蓝 |
+
+### 二、impeccable 技能（设计流程与工艺底线的来源）
+
+| 引用的文件 | 用途 |
+| --- | --- |
+| `SKILL.md`（v4.3.1） | 工作流总纲、命令表、模式定义 |
+| `reference/routing.md` | 请求路由与命令选择 |
+| `reference/new-work.md` | 新界面/替换视觉世界的流程（先取参考、再定方向） |
+| `reference/craft-floor.md` | 工艺底线核验项与「明确拒绝」清单 |
+| `reference/android.md` | Android 平台规则（Material 3、48dp 触控、边到边 inset、深色与字体缩放验证） |
+| `scripts/impeccable` | 运行 `impeccable context` 探测项目上下文 |
+
+技能主页：`https://github.com/pbakaus/impeccable`（Apache-2.0）。
+
+### 三、随应用内置的版本
+
+`SkillStore.IMPECCABLE_CONTENT` 是上述技能的 Android 原生精简移植版，随 APK 内置、可在「设置 → 技能」中启停。上游完整技能不含在本仓库内。
+
