@@ -54,6 +54,7 @@ AzCode Console (.NET/WPF)
 
 - **降缓存未命中**（移植自 deepseek-harness）：第 0 条 `system` 为稳定人设，字节不变；技能等运行时上下文单独成一条 `system` 消息，未变时不重复插入、变化时追加到历史末尾；工具定义顺序固定。历史持久化在 `%APPDATA%\AzCode\conversation.json`，append-only 增长以保持前缀缓存温热。实现见 `Services/PromptCache.cs`。
 - **内置 ponytail**：首次启动写入「拒绝过度设计」技能，默认启用。
+- **内置 impeccable**：首次启动写入「界面打磨」技能，默认启用；移植自 [pbakaus/impeccable](https://github.com/pbakaus/impeccable)（Apache-2.0），按桌面原生场景提炼。
 - **插件市场**：模型可搜索 GitHub 上 star 较多的 Agent 技能仓库，一键安装其中的 `SKILL.md`。
 
 ## 构建
@@ -80,7 +81,7 @@ src/AzCode.Desktop/
   Services/DeepSeekClient.cs        DeepSeek function calling
   Services/AgentRunner.cs           决策循环与工具执行
   Services/PromptCache.cs           降缓存未命中：稳定前缀 + 运行时上下文追加
-  Services/SkillStore.cs            技能持久化 + 内置 ponytail + 插件扫描安装
+  Services/SkillStore.cs            技能持久化 + 内置 ponytail/impeccable + 插件扫描安装
   Services/ConversationStore.cs     会话历史 append-only 持久化
   Services/WindowsAutomation.cs     UI Automation / 键鼠 / PowerShell
 .github/workflows/windows.yml
