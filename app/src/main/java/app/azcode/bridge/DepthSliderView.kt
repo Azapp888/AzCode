@@ -67,9 +67,9 @@ class DepthSliderView @JvmOverloads constructor(
     private val colorTrack = ContextCompat.getColor(context, R.color.surface_muted)
     private val colorThumb = ContextCompat.getColor(context, R.color.surface)
 
-    private val trackHeight = dp(8f)
-    private val thumbRadius = dp(11f)
-    private val ringWidth = dp(2.5f)
+    private val trackHeight = dp(14f)
+    private val thumbRadius = dp(16f)
+    private val ringWidth = dp(3f)
 
     private class Bubble(var x: Float, var y: Float, var r: Float, var speed: Float, var alpha: Int)
 
@@ -80,14 +80,21 @@ class DepthSliderView @JvmOverloads constructor(
     init {
         isClickable = true
         isFocusable = true
-        minimumHeight = dp(48f).toInt()
+        minimumHeight = dp(60f).toInt()
     }
 
     /** 静默设置进度：不回调、不触发费用确认，但会同步特效状态。 */
     fun setProgressSilently(value: Float) = applyProgress(value, fromUser = false, notify = false)
 
+    /** 用户拖动时吸附到最近档位，调节幅度粗、不落在档位之间。 */
+    private fun snap(value: Float): Float {
+        val last = (depthCount - 1).coerceAtLeast(1)
+        return ((value.coerceIn(0f, 1f) * last).roundToInt()).toFloat() / last
+    }
+
     private fun applyProgress(value: Float, fromUser: Boolean, notify: Boolean) {
-        val p = value.coerceIn(0f, 1f)
+        val target = if (fromUser) snap(value) else value
+        val p = target.coerceIn(0f, 1f)
         val changed = abs(p - progressValue) > 0.0001f
         val wasMax = isMaxed
         progressValue = p

@@ -7,11 +7,13 @@ import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.view.Gravity
 import android.view.View
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -24,7 +26,6 @@ import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import com.google.android.material.bottomsheet.BottomSheetDialog
 import org.json.JSONObject
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
@@ -431,14 +432,24 @@ class MainActivity : AppCompatActivity() {
         tvDepthLabel.text = ThinkingDepth.entries[index.coerceIn(0, ThinkingDepth.entries.size - 1)].label
     }
 
-    /** 按提供商分组的模型选择弹层：可滚动、限高、点击外部自动关闭。 */
+    /**
+     * 按提供商分组的模型选择弹层：底部贴边、内容自适应高度、最高不超过屏幕六成，
+     * 点击遮罩或返回键即关闭。列表区域可上下滚动。
+     */
     private fun showModelPicker() {
         providerOptions = buildModelOptions(AgentConfig.providers(this))
-        val sheet = BottomSheetDialog(this)
         val content = layoutInflater.inflate(R.layout.sheet_model_picker, null)
         val container = content.findViewById<LinearLayout>(R.id.pickerContainer)
+        val scroll = content.findViewById<ScrollView>(R.id.pickerScroll)
         val activeId = AgentConfig.activeId(this)
         val activeModel = AgentConfig.activeProvider(this)?.model
+
+        val dialog = Dialog(this).apply {
+            requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+            setContentView(content)
+            setCanceledOnTouchOutside(true)
+            setCancelable(true)
+        }
 
         if (providerOptions.isEmpty()) {
             container.addView(pickerHeader(getString(R.string.model_picker_empty)))
@@ -459,16 +470,40 @@ class MainActivity : AppCompatActivity() {
                             AgentConfig.setActiveModel(this, account.id, model)
                         }
                         syncModelSelector()
-                        sheet.dismiss()
+                        dialog.dismiss()
                     },
                 )
             }
         }
 
-        sheet.setContentView(content)
-        sheet.behavior.maxHeight = (resources.displayMetrics.heightPixels * 0.55f).toInt()
-        sheet.behavior.skipCollapsed = true
-        sheet.show()
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            setDimAmount(0.45f)
+            attributes = attributes.apply { gravity = Gravity.BOTTOM }
+            setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT)
+        }
+        dialog.show()
+        dialog.window?.setLayout(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+        )
+        content.post { capPickerHeight(content, scroll, dialog) }
+    }
+
+    /** 收紧弹层高度：超出屏幕六成时压缩列表区域，保证四周留有可点击关闭的遮罩。 */
+    private fun capPickerHeight(content: View, scroll: ScrollView, dialog: Dialog) {
+        val maxHeight = (resources.displayMetrics.heightPixels * 0.6f).toInt()
+        if (content.height > maxHeight) {
+            val overflow = content.height - maxHeight
+            scroll.layoutParams = scroll.layoutParams.apply {
+                height = (scroll.height - overflow).coerceAtLeast(dp(140))
+            }
+            dialog.window?.setLayout(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+            )
+        }
     }
 
     private fun pickerHeader(text: String): TextView = TextView(this).apply {
