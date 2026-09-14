@@ -48,7 +48,18 @@ AzCode Console (.NET/WPF)
 | `key` | 按下组合键，如 `ctrl+s`、`enter`、`alt+f4`、`win` |
 | `shell` | 执行 PowerShell 命令 |
 | `search_plugins` / `install_plugin` / `list_installed_plugins` / `set_plugin_enabled` / `remove_plugin` | 插件市场：扫描热门开源插件并一键安装 |
+| `github_status` / `github_save_config` | 查看与保存 GitHub 接入状态 |
+| `github_list_repos` / `github_get_repo` / `github_list_branches` / `github_list_commits` | 浏览仓库、分支与提交 |
+| `github_read_file` / `github_write_file` | 读取与提交仓库文件（写文件自动探测 sha） |
+| `github_list_issues` / `github_create_issue` / `github_comment_issue` | 管理 Issue 与评论 |
+| `github_list_pulls` / `github_create_pull` / `github_search_repos` | Pull Request 与仓库搜索 |
 | `finish` | 结束任务并总结 |
+
+## GitHub 接入
+
+在主界面「GitHub Token / 默认仓库 / 分支」一栏填写后保存即可。Token 属于用户自己的凭据，仅存于本机配置（`%APPDATA%\AzCode\config.json`），不读取任何环境变量或平台内部变量。保存前会调用 GitHub API 校验 Token；Token 需 `repo` scope。
+
+接入后 Agent 可以读取与提交仓库文件、查看提交记录、管理 Issue 与 Pull Request、搜索公开仓库；插件搜索与安装也会自动复用该 Token，可安装私有仓库中的技能。工具集中不包含删除仓库等不可逆操作。
 
 ## 降缓存未命中与插件
 
@@ -80,6 +91,7 @@ src/AzCode.Desktop/
   Models/ChatModels.cs              对话消息模型
   Services/DeepSeekClient.cs        DeepSeek function calling
   Services/AgentRunner.cs           决策循环与工具执行
+  Services/GitHubClient.cs          GitHub REST 客户端
   Services/PromptCache.cs           降缓存未命中：稳定前缀 + 运行时上下文追加
   Services/SkillStore.cs            技能持久化 + 内置 ponytail/impeccable + 插件扫描安装
   Services/ConversationStore.cs     会话历史 append-only 持久化
