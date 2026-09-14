@@ -23,6 +23,8 @@ MEMORY_PATH = CONFIG_DIR / "memory.json"
 
 PONYTAIL_ID = "builtin-ponytail"
 
+IMPECCABLE_ID = "builtin-impeccable"
+
 PONYTAIL_CONTENT = """# ponytail · 拒绝过度设计
 
 你是一个克制的工程师。每次动手前，先确认「解决当前问题所需的最小改动」，然后只做这些。
@@ -36,6 +38,38 @@ PONYTAIL_CONTENT = """# ponytail · 拒绝过度设计
 6. 完成后用一两句话说明改动，并注明是否引入了新的依赖或文件。
 
 判断口诀：如果这段代码今天没有明确用途，就不要写。
+"""
+
+# 移植自 impeccable（Apache-2.0，https://github.com/pbakaus/impeccable），
+# 按 AzCode 桌面原生（Tk）场景提炼为可直接注入系统提示词的版本。
+IMPECCABLE_CONTENT = """# impeccable · 界面打磨
+
+你是资深设计总监，目标是把界面做到「值得被点名」的完成度：生产级实现、明确观点、厚待用户、讲究的细节。面向桌面原生界面（Tk）。
+
+## 先证据，后动手
+1. 先取真实参考再改代码：拿到用户指定的参考产品/截图后，提取其真实色值、圆角、间距、字级；禁止凭记忆猜色值。
+2. 分清「精修」与「重做」：精修保留既有识别、行为与文案；重做只保留产品事实与功能，把旧外观当反面参照。
+3. 方向未定前不改 UI；方向确认后一口气做完。
+
+## 必须达标（对着成品核验）
+- 对比度：正文与占位文字至少 4.5:1，大号文字至少 3:1；彩色底上的次要文字用同色系加深，不要用灰。
+- 层次：阴影必须有偏移加柔和模糊；零偏移的彩色光晕只是装饰。
+- 间距：同组紧凑、组间宽松；标题上方的留白大于下方。
+- 字体：标题与正文有明确的字号与字重台阶，字号随系统设置缩放。
+- 状态：按压、悬停、禁用、加载、错误、空态齐备；控件真的可用。
+- 文案：控件名说清动作，错误信息说清问题与恢复方式。
+
+## 明确拒绝（白给时不要用）
+- 用「同尺寸卡片 + 图标 + 标题 + 文字」当页面骨架；卡片嵌套一律错。
+- 标题上方的 kicker/eyebrow 小标签。
+- 01/02/03 章节编号，除非顺序本身携带信息。
+- 渐变文字、装饰性玻璃模糊、超过 1dp 的彩色左边框、硬偏移阴影。
+- 用 emoji 或 Unicode 字符冒充图标；图标应来自统一描边粗细的图标体系。
+- 按品类而不是使用场景决定明暗主题。
+
+## 交付纪律
+- 不做开放式反复自检：构建完整、批量检查一次、一轮修完、至多再确认一轮即停。
+- 报告说明改了哪些文件、是否新增依赖或文件。
 """
 
 
@@ -106,15 +140,23 @@ def enabled_skills() -> list[Skill]:
 
 
 def seed_builtins() -> None:
-    if any(s.id == PONYTAIL_ID for s in all_skills()):
-        return
-    save_skill(Skill(
-        id=PONYTAIL_ID,
-        name="ponytail · 拒绝过度设计",
-        description="只做最小必要改动，避免多余依赖、抽象与投机功能。",
-        content=PONYTAIL_CONTENT.strip(),
-        source="",
-    ))
+    seeded = {s.id for s in all_skills()}
+    if PONYTAIL_ID not in seeded:
+        save_skill(Skill(
+            id=PONYTAIL_ID,
+            name="ponytail · 拒绝过度设计",
+            description="只做最小必要改动，避免多余依赖、抽象与投机功能。",
+            content=PONYTAIL_CONTENT.strip(),
+            source="",
+        ))
+    if IMPECCABLE_ID not in seeded:
+        save_skill(Skill(
+            id=IMPECCABLE_ID,
+            name="impeccable · 界面打磨",
+            description="先取真实参考，再按工艺底线把界面做到生产级完成度。",
+            content=IMPECCABLE_CONTENT.strip(),
+            source="",
+        ))
 
 
 # --------------------------------------------------------------- MemoryStore
@@ -154,6 +196,13 @@ CURATED = [
         description="让 Agent 只做最小必要改动：不引入多余依赖、不预先抽象、不写投机功能。",
         install_url="ilindaniel/ponytail-lite",
         tags=["工程", "简洁", "反过度设计"],
+    ),
+    Plugin(
+        id="impeccable",
+        name="impeccable · 界面打磨",
+        description="把界面做到生产级完成度：先取真实参考，再按工艺底线逐项核验，拒绝廉价设计套路。",
+        install_url="pbakaus/impeccable",
+        tags=["设计", "界面", "打磨"],
     ),
 ]
 
