@@ -1,8 +1,8 @@
 package app.azcode.bridge
 
 import android.Manifest
-import android.app.Activity
 import android.content.Intent
+import androidx.appcompat.app.AppCompatActivity
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -14,7 +14,7 @@ import android.widget.TextView
 import android.widget.Toast
 
 /** 设置页：模型管理入口 + 步数/提示词 + 设备能力，主界面只保留聊天。 */
-class SettingsActivity : Activity() {
+class SettingsActivity : AppCompatActivity() {
 
     private lateinit var etMaxSteps: EditText
     private lateinit var etSystemPrompt: EditText

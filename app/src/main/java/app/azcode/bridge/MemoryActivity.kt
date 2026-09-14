@@ -1,7 +1,7 @@
 package app.azcode.bridge
 
-import android.app.Activity
 import android.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
@@ -19,7 +19,7 @@ import android.widget.Toast
  * 记忆管理：分条保存用户提供的敏感信息、使用习惯与技能方法。
  * 敏感条目在界面上默认打码，点击内容可临时显示；启用后注入 Agent 系统提示词。
  */
-class MemoryActivity : Activity() {
+class MemoryActivity : AppCompatActivity() {
 
     private lateinit var container: LinearLayout
     private lateinit var tvEmpty: TextView

@@ -1,7 +1,7 @@
 package app.azcode.bridge
 
-import android.app.Activity
 import android.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
 import android.app.ProgressDialog
 import android.content.Intent
 import android.net.Uri
@@ -16,7 +16,7 @@ import android.widget.Toast
  * 模型管理：列出全部提供商账号，可增删、启停，并标记当前使用的账号。
  * 点击卡片或「编辑」进入详情页；「导入」可从 Markdown 文档批量录入。
  */
-class ProvidersActivity : Activity() {
+class ProvidersActivity : AppCompatActivity() {
 
     private lateinit var container: LinearLayout
     private lateinit var tvEmpty: TextView

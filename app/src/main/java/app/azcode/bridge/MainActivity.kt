@@ -1,7 +1,7 @@
 package app.azcode.bridge
 
-import android.app.Activity
 import android.app.Dialog
+import androidx.appcompat.app.AppCompatActivity
 import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicReference
  *  - 工具调用以可折叠卡片呈现，默认收起，失败时自动展开
  *  - 所有配置、技能与记忆入口收敛到 SettingsActivity
  */
-class MainActivity : Activity() {
+class MainActivity : AppCompatActivity() {
 
     private lateinit var chatContainer: LinearLayout
     private lateinit var svChat: ScrollView

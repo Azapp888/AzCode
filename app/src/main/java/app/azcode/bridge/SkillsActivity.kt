@@ -1,7 +1,7 @@
 package app.azcode.bridge
 
-import android.app.Activity
 import android.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.view.View
 import android.widget.EditText
@@ -12,7 +12,7 @@ import android.widget.TextView
 import android.widget.Toast
 
 /** 技能管理：列表、启停、删除、从 GitHub 安装。 */
-class SkillsActivity : Activity() {
+class SkillsActivity : AppCompatActivity() {
 
     private lateinit var container: LinearLayout
     private lateinit var tvEmpty: TextView

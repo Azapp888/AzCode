@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 品牌：暗色下使用 deepseek-450，提升在深底上的对比度 -->
+    <color name="primary">#5686FE</color>
+    <color name="primary_pressed">#679EFE</color>
+    <color name="primary_soft">#1E2A46</color>
+    <color name="text_on_primary">#FFFFFF</color>
+    <color name="on_primary_muted">#DCE4FF</color>
+
+    <!-- 表面：取自 DeepSeek bluish-950 / 875 / 850 -->
+    <color name="background">#151517</color>
+    <color name="surface">#232324</color>
+    <color name="surface_muted">#1B1B1C</color>
+    <color name="input_bg">#2C2C2E</color>
+    <color name="input_stroke">#1FFFFFFF</color>
+    <color name="border_subtle">#0FFFFFFF</color>
+
+    <!-- 文字层级 -->
+    <color name="text_primary">#F9FAFB</color>
+    <color name="text_secondary">#CFD3D6</color>
+    <color name="text_caption">#81858C</color>
+
+    <!-- 分隔线 -->
+    <color name="divider">#1FFFFFFF</color>
+
+    <!-- 消息气泡 -->
+    <color name="bubble_assistant">#2C2C2E</color>
+    <color name="bubble_user">#5686FE</color>
+
+    <!-- 工具卡片 -->
+    <color name="tool_bg">#232324</color>
+    <color name="tool_border">#1FFFFFFF</color>
+    <color name="tool_text">#CFD3D6</color>
+
+    <!-- 状态 -->
+    <color name="success">#4ED17E</color>
+    <color name="status_off">#5A5D63</color>
+    <color name="error">#F25A5A</color>
+    <color name="error_bg">#3A1D1D</color>
+    <color name="error_border">#6B2B2B</color>
+
+    <!-- 按压反馈 -->
+    <color name="ripple_neutral">#1FFFFFFF</color>
+    <color name="ripple_on_primary">#33FFFFFF</color>
+
+    <color name="ic_launcher_background">#FFFFFF</color>
+</resources>

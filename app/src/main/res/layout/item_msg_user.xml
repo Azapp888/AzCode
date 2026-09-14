@@ -24,7 +24,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="4dp"
             android:drawablePadding="4dp"
-            android:textColor="#DCE4FF"
+            android:textColor="@color/on_primary_muted"
             android:textSize="12sp"
             android:visibility="gone" />
 

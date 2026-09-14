@@ -1,7 +1,7 @@
 package app.azcode.bridge
 
-import android.app.Activity
 import android.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.text.format.DateUtils
 import android.view.View
@@ -9,7 +9,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 /** 任务会话管理：新建、切换、删除。每个会话拥有独立的聊天记录与 Agent 上下文。 */
-class SessionsActivity : Activity() {
+class SessionsActivity : AppCompatActivity() {
 
     private lateinit var container: LinearLayout
     private lateinit var tvEmpty: TextView

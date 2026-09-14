@@ -1,28 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#4D6BFE</color>
-    <color name="primary_dark">#3B58E0</color>
-    <color name="surface">#FFFFFF</color>
-    <color name="background">#F7F8FA</color>
-
-    <color name="text_primary">#1A1A1A</color>
-    <color name="text_secondary">#6B7280</color>
+    <!-- 品牌：取自 DeepSeek 官方设计系统 deepseek-500 -->
+    <color name="primary">#3964FE</color>
+    <color name="primary_pressed">#5686FE</color>
+    <color name="primary_soft">#E5F0FF</color>
     <color name="text_on_primary">#FFFFFF</color>
-    <color name="divider">#E5E7EB</color>
+    <color name="on_primary_muted">#DCE4FF</color>
 
-    <color name="bubble_assistant">#F5F6F8</color>
-    <color name="input_bg">#FBFCFE</color>
-    <color name="input_stroke">#E9ECF1</color>
+    <!-- 表面：页面底 / 卡片 / 输入区 -->
+    <color name="background">#F5F6F7</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_muted">#F5F6F7</color>
+    <color name="input_bg">#FFFFFF</color>
+    <color name="input_stroke">#0A000000</color>
+    <color name="border_subtle">#0A000000</color>
 
-    <color name="tool_bg">#F7F8FA</color>
-    <color name="tool_border">#E5E7EB</color>
-    <color name="tool_text">#4B5563</color>
+    <!-- 文字层级 -->
+    <color name="text_primary">#0F1115</color>
+    <color name="text_secondary">#61666B</color>
+    <color name="text_caption">#ADB2B8</color>
 
-    <color name="success">#16A34A</color>
-    <color name="error">#DC2626</color>
+    <!-- 分隔线 -->
+    <color name="divider">#1A000000</color>
+
+    <!-- 消息气泡 -->
+    <color name="bubble_assistant">#FFFFFF</color>
+    <color name="bubble_user">#3964FE</color>
+
+    <!-- 工具卡片 -->
+    <color name="tool_bg">#FFFFFF</color>
+    <color name="tool_border">#1A000000</color>
+    <color name="tool_text">#61666B</color>
+
+    <!-- 状态 -->
+    <color name="success">#22C55E</color>
+    <color name="status_off">#C4C7CE</color>
+    <color name="error">#EC1313</color>
     <color name="error_bg">#FEF2F2</color>
-    <color name="error_border">#FCA5A5</color>
+    <color name="error_border">#FECACA</color>
+
+    <!-- 按压反馈 -->
+    <color name="ripple_neutral">#14263148</color>
+    <color name="ripple_on_primary">#33FFFFFF</color>
 
     <color name="ic_launcher_background">#FFFFFF</color>
-    <color name="accent_navy">#061A3A</color>
 </resources>

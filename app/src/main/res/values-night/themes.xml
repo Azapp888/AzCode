@@ -1,25 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!--
-      Theme.AzCode
-      · 采用 Material3 DayNight，获得系统深色模式与 Material You 动态取色能力
-      · viewInflaterClass 固定为 AppCompat 的 inflater，避免 <Button>/<Switch> 被替换为
-        Material 控件而丢失各界面自定义的 android:background 外观
-      · 品牌主色在各界面以 @color/primary 静态引用，保证品牌一致性
-    -->
+    <!-- 深色下仅调整系统栏图标反色，其余色值由 values-night/colors.xml 自动切换 -->
     <style name="Theme.AzCode" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="viewInflaterClass">androidx.appcompat.app.AppCompatViewInflater</item>
         <item name="switchStyle">@style/Widget.AppCompat.CompoundButton.Switch</item>
 
-        <!-- 窗口与系统栏 -->
         <item name="android:windowBackground">@color/background</item>
         <item name="android:statusBarColor">@color/background</item>
         <item name="android:navigationBarColor">@color/background</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
         <item name="android:forceDarkAllowed">false</item>
 
-        <!-- Material3 颜色角色（同时供 AppCompat 控件取色，如 Switch / 光标 / 涟漪） -->
         <item name="colorPrimary">@color/primary</item>
         <item name="colorOnPrimary">@color/text_on_primary</item>
         <item name="colorPrimaryContainer">@color/primary_soft</item>
@@ -32,7 +24,6 @@
         <item name="colorOutlineVariant">@color/border_subtle</item>
         <item name="colorError">@color/error</item>
 
-        <!-- 兼容 android.* 控件属性 -->
         <item name="android:colorAccent">@color/primary</item>
         <item name="colorAccent">@color/primary</item>
         <item name="colorControlActivated">@color/primary</item>
@@ -40,24 +31,5 @@
         <item name="android:textColorSecondary">@color/text_secondary</item>
         <item name="android:textColorHint">@color/text_caption</item>
         <item name="android:windowContentOverlay">@null</item>
-    </style>
-
-    <style name="SettingLabel">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:paddingTop">14dp</item>
-        <item name="android:paddingBottom">4dp</item>
-        <item name="android:textSize">13sp</item>
-        <item name="android:textColor">@color/text_secondary</item>
-    </style>
-
-    <style name="SettingInput">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:background">@drawable/bg_field</item>
-        <item name="android:padding">12dp</item>
-        <item name="android:textSize">14sp</item>
-        <item name="android:textColor">@color/text_primary</item>
-        <item name="android:textColorHint">@color/text_caption</item>
     </style>
 </resources>

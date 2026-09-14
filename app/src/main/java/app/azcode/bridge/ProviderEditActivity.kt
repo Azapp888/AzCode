@@ -1,7 +1,7 @@
 package app.azcode.bridge
 
-import android.app.Activity
 import android.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.view.View
 import android.widget.AdapterView
@@ -17,7 +17,7 @@ import android.widget.Toast
  * 提供商详情：填写平台名称、API 协议、地址、Key 与语言模型；
  * 打开「加入生图模型」开关后，可再填写该平台的文生图模型。
  */
-class ProviderEditActivity : Activity() {
+class ProviderEditActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_ID = "provider_id"
