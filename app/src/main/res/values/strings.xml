@@ -93,6 +93,30 @@
     <string name="model_entry_active">模型管理（当前：%1$s · %2$s，已启用 %3$d 个）</string>
     <string name="model_entry_empty">模型管理（尚未配置，点此添加）</string>
 
+    <string name="title_github">GitHub 接入</string>
+    <string name="github_entry">GitHub 接入（%1$s）</string>
+    <string name="github_entry_on">已连接 @%1$s</string>
+    <string name="github_entry_off">未连接，点此填写 Token</string>
+    <string name="github_token_label">Personal Access Token</string>
+    <string name="github_token_hint">ghp_… 或 github_pat_…（需 repo 权限）</string>
+    <string name="github_repo_label">默认仓库</string>
+    <string name="github_repo_hint">owner/repo，可留空</string>
+    <string name="github_branch_label">默认分支</string>
+    <string name="github_branch_hint">如 main，留空则用仓库默认分支</string>
+    <string name="btn_github_save">保存并验证</string>
+    <string name="btn_github_verify">验证连接</string>
+    <string name="btn_github_logout">断开连接</string>
+    <string name="github_status_off">未接入 GitHub。填入 Token 后，Agent 就能读取、提交你仓库中的文件，并管理 Issue 与 Pull Request。</string>
+    <string name="github_status_on">已连接：@%1$s\n默认仓库：%2$s\n默认分支：%3$s</string>
+    <string name="github_status_none">未设置</string>
+    <string name="github_status_default_branch">仓库默认</string>
+    <string name="github_saved">已保存并验证：@%1$s</string>
+    <string name="github_verify_ok">连接正常：@%1$s</string>
+    <string name="github_verify_failed">验证失败：%1$s</string>
+    <string name="github_need_token">请先填写 Token</string>
+    <string name="github_logged_out">已断开 GitHub 连接</string>
+    <string name="github_help">在 GitHub「Settings → Developer settings → Personal access tokens」创建一个 Token：\n· Fine-grained：仅勾选目标仓库的 Contents、Issues、Pull requests 读写；\n· Classic：勾选 repo scope。\nToken 仅保存在本机应用私有存储中，不会上传到任何第三方服务器。Agent 可执行的操作：读取/提交文件、查看提交记录、创建 Issue 与评论、创建 Pull Request。</string>
+
     <string name="section_skills">技能管理</string>
     <string name="skills_entry">技能管理（已启用 %1$d / 共 %2$d）</string>
     <string name="title_skills">技能管理</string>

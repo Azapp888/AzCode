@@ -24,9 +24,9 @@ object GitHubSkillFetcher {
 
     class FetchException(message: String) : Exception(message)
 
-    fun install(urlInput: String): Skill {
+    fun install(urlInput: String, token: String = ""): Skill {
         val rawUrl = resolveRawUrl(urlInput.trim())
-        val body = download(rawUrl)
+        val body = download(rawUrl, token)
         val parsed = parse(body)
         val id = "gh-" + sha1(rawUrl).take(12)
         return Skill(
@@ -87,7 +87,7 @@ object GitHubSkillFetcher {
         throw FetchException("请指向 SKILL.md 文件或仓库目录")
     }
 
-    private fun download(url: String): String {
+    private fun download(url: String, token: String = ""): String {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 15_000
@@ -95,6 +95,7 @@ object GitHubSkillFetcher {
             instanceFollowRedirects = true
             setRequestProperty("Accept", "text/plain, text/markdown, */*")
             setRequestProperty("User-Agent", "AzCode-Android")
+            if (token.isNotBlank()) setRequestProperty("Authorization", "Bearer $token")
         }
         try {
             val code = conn.responseCode

@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="6dp"
+        android:paddingEnd="16dp">
+
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/title_github"
+            android:src="@drawable/ic_back" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="@string/title_github"
+            android:textColor="@color/text_primary"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/divider" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/tvGithubStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_field"
+                android:lineSpacingExtra="3dp"
+                android:padding="12dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <TextView style="@style/SettingLabel" android:text="@string/github_token_label" />
+
+            <EditText
+                android:id="@+id/etGithubToken"
+                style="@style/SettingInput"
+                android:hint="@string/github_token_hint"
+                android:inputType="textPassword" />
+
+            <TextView style="@style/SettingLabel" android:text="@string/github_repo_label" />
+
+            <EditText
+                android:id="@+id/etGithubRepo"
+                style="@style/SettingInput"
+                android:hint="@string/github_repo_hint"
+                android:inputType="text" />
+
+            <TextView style="@style/SettingLabel" android:text="@string/github_branch_label" />
+
+            <EditText
+                android:id="@+id/etGithubBranch"
+                style="@style/SettingInput"
+                android:hint="@string/github_branch_hint"
+                android:inputType="text" />
+
+            <Button
+                android:id="@+id/btnGithubSave"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="18dp"
+                android:background="@drawable/bg_button_primary"
+                android:text="@string/btn_github_save"
+                android:textColor="@color/text_on_primary"
+                android:textSize="15sp" />
+
+            <Button
+                android:id="@+id/btnGithubVerify"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_button_outline"
+                android:text="@string/btn_github_verify"
+                android:textColor="@color/primary"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btnGithubLogout"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_button_outline"
+                android:text="@string/btn_github_logout"
+                android:textColor="@color/primary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="16dp"
+                android:lineSpacingExtra="3dp"
+                android:text="@string/github_help"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

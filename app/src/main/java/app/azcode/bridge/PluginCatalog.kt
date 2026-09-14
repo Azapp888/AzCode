@@ -59,7 +59,7 @@ object PluginCatalog {
     )
 
     /** 实时搜索：内置精选 + GitHub star 排序结果。keyword 为空时只返回精选。 */
-    fun search(keyword: String, limit: Int = 8): List<Plugin> {
+    fun search(keyword: String, limit: Int = 8, token: String = ""): List<Plugin> {
         val kw = keyword.trim()
         val out = LinkedHashSet<String>()
         val result = mutableListOf<Plugin>()
@@ -80,11 +80,11 @@ object PluginCatalog {
                 it.tags.any { t -> t.lowercase().contains(lc) }
         }.forEach(::add)
 
-        githubSearch(kw, limit).forEach(::add)
+        githubSearch(kw, limit, token).forEach(::add)
         return result.take(limit.coerceAtLeast(1) + CURATED.size)
     }
 
-    private fun githubSearch(keyword: String, limit: Int): List<Plugin> {
+    private fun githubSearch(keyword: String, limit: Int, token: String = ""): List<Plugin> {
         return try {
             val q = URLEncoder.encode("$keyword SKILL.md in:name,description,readme", "UTF-8")
             val url = URL("$GITHUB_SEARCH?q=$q&sort=stars&order=desc&per_page=${limit.coerceIn(1, 20)}")
@@ -94,6 +94,7 @@ object PluginCatalog {
                 readTimeout = 15_000
                 setRequestProperty("Accept", "application/vnd.github+json")
                 setRequestProperty("User-Agent", "AzCode-Android")
+                if (token.isNotBlank()) setRequestProperty("Authorization", "Bearer $token")
             }
             try {
                 if (conn.responseCode !in 200..299) return emptyList()
@@ -124,7 +125,7 @@ object PluginCatalog {
 
     /** 一键安装：把候选仓库的 SKILL.md 解析并写入技能库，返回技能名。 */
     fun install(ctx: Context, installUrl: String): String {
-        val skill = GitHubSkillFetcher.install(installUrl)
+        val skill = GitHubSkillFetcher.install(installUrl, GitHubConfig.token(ctx))
         SkillStore.add(ctx, skill)
         return skill.name
     }

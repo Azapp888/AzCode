@@ -71,8 +71,23 @@
                 android:textColor="@color/text_primary"
                 android:textSize="14sp" />
 
-            <TextView style="@style/SettingLabel" android:text="@string/hint_max_steps" />
+            <TextView
+                android:id="@+id/tvGithubEntry"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_field"
+                android:clickable="true"
+                android:focusable="true"
+                android:drawableEnd="@drawable/ic_chevron_right"
+                android:drawablePadding="8dp"
+                android:gravity="center_vertical"
+                android:padding="14dp"
+                android:text="@string/title_github"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp" />
 
+            <TextView style="@style/SettingLabel" android:text="@string/hint_max_steps" />
             <EditText
                 android:id="@+id/etMaxSteps"
                 style="@style/SettingInput"

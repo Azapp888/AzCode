@@ -49,6 +49,7 @@ object AgentConfig {
 按需调用 get_screen 观察当前界面，只在需要查看屏幕内容或定位控件时才读取，不必每一步都读。
 坐标使用屏幕物理像素。优先按文本点击（tap 的 text 字段）以提高鲁棒性；无法定位文本时再用坐标。
 shell 工具默认可直接用：已安装并授权 Termux 时自动走 Termux 的完整 Linux 环境（bash、python、node、git、pip 等），否则用内置命令行以应用自身权限执行，无需 Root/Shizuku；仅当需要系统级权限时，才提示用户切到 Shizuku/Root 模式。
+涉及用户的 GitHub 仓库时先用 github_status 确认接入状态；未配置时引导用户在「设置 → GitHub」填写 Token（或让用户把 Token 发给你，用 github_save_config 保存）。已接入后可直接读取/提交仓库文件、查看提交记录、创建 Issue 与 Pull Request。
 面向用户的文字要简洁、口语化，直接说明你正在做什么或最终结果，不要输出 JSON、代码块或工具参数。
 任务完成或无法继续时，调用 finish，并在 summary 里用一两句话向用户总结结果。"""
 

@@ -22,6 +22,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvSkillsEntry: TextView
     private lateinit var tvMemoryEntry: TextView
     private lateinit var tvModelEntry: TextView
+    private lateinit var tvGithubEntry: TextView
     private lateinit var btnBridge: Button
 
     private val shizukuPermissionListener =
@@ -41,6 +42,7 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_settings)
 
         tvModelEntry = findViewById(R.id.tvModelEntry)
+        tvGithubEntry = findViewById(R.id.tvGithubEntry)
         etMaxSteps = findViewById(R.id.etMaxSteps)
         etSystemPrompt = findViewById(R.id.etSystemPrompt)
         tvStatus = findViewById(R.id.tvStatus)
@@ -55,6 +57,9 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnSave).setOnClickListener { saveConfig() }
         tvModelEntry.setOnClickListener {
             startActivity(Intent(this, ProvidersActivity::class.java))
+        }
+        tvGithubEntry.setOnClickListener {
+            startActivity(Intent(this, GitHubActivity::class.java))
         }
         tvSkillsEntry.setOnClickListener {
             startActivity(Intent(this, SkillsActivity::class.java))
@@ -196,6 +201,15 @@ class SettingsActivity : AppCompatActivity() {
         } else {
             getString(R.string.model_entry_empty)
         }
+
+        tvGithubEntry.text = getString(
+            R.string.github_entry,
+            if (GitHubConfig.isConfigured(this)) {
+                getString(R.string.github_entry_on, GitHubConfig.login(this).ifBlank { "?" })
+            } else {
+                getString(R.string.github_entry_off)
+            },
+        )
     }
 
     private fun maybeRequestNotificationPermission() {

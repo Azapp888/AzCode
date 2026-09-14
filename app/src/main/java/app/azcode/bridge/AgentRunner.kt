@@ -346,6 +346,34 @@ class AgentRunner(
 
             "remove_plugin" -> removePlugin(args)
 
+            "github_status" -> githubStatus()
+
+            "github_save_config" -> githubSaveConfig(args)
+
+            "github_list_repos" -> githubListRepos(args)
+
+            "github_get_repo" -> githubGetRepo(args)
+
+            "github_list_branches" -> githubListBranches(args)
+
+            "github_read_file" -> githubReadFile(args)
+
+            "github_write_file" -> githubWriteFile(args)
+
+            "github_list_commits" -> githubListCommits(args)
+
+            "github_list_issues" -> githubListIssues(args)
+
+            "github_create_issue" -> githubCreateIssue(args)
+
+            "github_comment_issue" -> githubCommentIssue(args)
+
+            "github_list_pulls" -> githubListPulls(args)
+
+            "github_create_pull" -> githubCreatePull(args)
+
+            "github_search_repos" -> githubSearchRepos(args)
+
             else -> err("未知工具 ${call.name}")
             }
         } catch (e: Exception) {
@@ -849,6 +877,139 @@ class AgentRunner(
                     .put("name", str("插件名称（用名称匹配，id 可省略）")),
                 emptyList(),
             ))
+
+            // ---- GitHub 仓库接入：读取/提交文件、Issue、Pull Request ----
+
+            put(fn(
+                "github_status",
+                "查看 GitHub 接入状态：是否已配置 Token、当前登录账号、默认仓库与分支。用户提到「我的 GitHub 仓库」或需要操作仓库前先调用。",
+                JSONObject(), emptyList(),
+            ))
+
+            put(fn(
+                "github_save_config",
+                "保存 GitHub 接入配置（Personal Access Token 与可选默认仓库/分支）。当用户提供 Token 或要求接入其 GitHub 仓库时调用；保存前会先校验 Token。",
+                JSONObject()
+                    .put("token", str("GitHub Personal Access Token（fine-grained 或 classic，需 repo 权限）"))
+                    .put("defaultRepo", str("默认仓库，形如 owner/repo，可省略"))
+                    .put("defaultBranch", str("默认分支，留空使用仓库默认分支")),
+                listOf("token"),
+            ))
+
+            put(fn(
+                "github_list_repos",
+                "列出当前 Token 可访问的仓库（含私有仓库），按最近更新排序。",
+                JSONObject().put("limit", num("最多返回条数，默认 30")),
+                emptyList(),
+            ))
+
+            put(fn(
+                "github_get_repo",
+                "查看某个仓库的概览：默认分支、是否私有、star 数、开放 Issue 数等。",
+                JSONObject().put("repo", str("仓库 owner/repo，省略则用默认仓库")),
+                emptyList(),
+            ))
+
+            put(fn(
+                "github_list_branches",
+                "列出仓库的分支。",
+                JSONObject().put("repo", str("仓库 owner/repo，省略则用默认仓库")),
+                emptyList(),
+            ))
+
+            put(fn(
+                "github_read_file",
+                "读取仓库中某个文件的内容与当前 sha（更新文件时需要 sha）。",
+                JSONObject()
+                    .put("repo", str("仓库 owner/repo，省略则用默认仓库"))
+                    .put("path", str("文件路径，如 src/main.py"))
+                    .put("ref", str("分支或 commit，省略则用默认分支")),
+                listOf("path"),
+            ))
+
+            put(fn(
+                "github_write_file",
+                "创建或更新仓库中的文件并产生一次提交。更新已有文件时必须先 github_read_file 拿到 sha 并在参数中回传；新建文件 sha 留空。",
+                JSONObject()
+                    .put("repo", str("仓库 owner/repo，省略则用默认仓库"))
+                    .put("path", str("文件路径"))
+                    .put("content", str("文件完整内容"))
+                    .put("message", str("提交信息"))
+                    .put("branch", str("提交到哪个分支，省略则用默认分支"))
+                    .put("sha", str("更新已有文件时的当前 sha；新建文件留空")),
+                listOf("path", "content"),
+            ))
+
+            put(fn(
+                "github_list_commits",
+                "列出仓库的提交记录。",
+                JSONObject()
+                    .put("repo", str("仓库 owner/repo，省略则用默认仓库"))
+                    .put("ref", str("分支或 commit，省略则用默认分支"))
+                    .put("limit", num("最多返回条数，默认 20")),
+                emptyList(),
+            ))
+
+            put(fn(
+                "github_list_issues",
+                "列出仓库的 Issue（含 PR，可按需过滤）。",
+                JSONObject()
+                    .put("repo", str("仓库 owner/repo，省略则用默认仓库"))
+                    .put("state", str("open / closed / all，默认 open"))
+                    .put("limit", num("最多返回条数，默认 20")),
+                emptyList(),
+            ))
+
+            put(fn(
+                "github_create_issue",
+                "在仓库中新建一个 Issue。",
+                JSONObject()
+                    .put("repo", str("仓库 owner/repo，省略则用默认仓库"))
+                    .put("title", str("Issue 标题"))
+                    .put("body", str("Issue 正文，支持 Markdown")),
+                listOf("title"),
+            ))
+
+            put(fn(
+                "github_comment_issue",
+                "给某个 Issue 或 PR 添加评论。",
+                JSONObject()
+                    .put("repo", str("仓库 owner/repo，省略则用默认仓库"))
+                    .put("number", num("Issue/PR 编号"))
+                    .put("body", str("评论内容")),
+                listOf("number", "body"),
+            ))
+
+            put(fn(
+                "github_list_pulls",
+                "列出仓库的 Pull Request。",
+                JSONObject()
+                    .put("repo", str("仓库 owner/repo，省略则用默认仓库"))
+                    .put("state", str("open / closed / all，默认 open"))
+                    .put("limit", num("最多返回条数，默认 20")),
+                emptyList(),
+            ))
+
+            put(fn(
+                "github_create_pull",
+                "基于已有分支创建 Pull Request。",
+                JSONObject()
+                    .put("repo", str("仓库 owner/repo，省略则用默认仓库"))
+                    .put("title", str("PR 标题"))
+                    .put("head", str("来源分支"))
+                    .put("base", str("目标分支，如 main"))
+                    .put("body", str("PR 描述，支持 Markdown")),
+                listOf("title", "head", "base"),
+            ))
+
+            put(fn(
+                "github_search_repos",
+                "在 GitHub 上按关键词搜索公开仓库（按 star 排序），用于发现可参考或可安装的项目。",
+                JSONObject()
+                    .put("query", str("搜索关键词"))
+                    .put("limit", num("最多返回条数，默认 10")),
+                listOf("query"),
+            ))
         }
     }
 
@@ -857,7 +1018,7 @@ class AgentRunner(
     private fun searchPlugins(args: JSONObject): String {
         val keyword = args.optString("keyword")
         val limit = args.optInt("limit", 8)
-        val list = PluginCatalog.search(keyword, limit)
+        val list = PluginCatalog.search(keyword, limit, GitHubConfig.token(ctx))
         return JSONObject().apply {
             put("ok", true)
             put("count", list.size)
@@ -914,6 +1075,319 @@ class AgentRunner(
         val skill = resolveSkill(args) ?: return err("未找到该插件")
         SkillStore.remove(ctx, skill.id)
         return JSONObject().put("ok", true).put("removed", skill.name).toString()
+    }
+
+    // ==================== GitHub 仓库 ====================
+
+    private fun githubToken(): String = GitHubConfig.token(ctx)
+
+    private fun resolveRepo(args: JSONObject): String {
+        val repo = args.optString("repo").trim()
+        return repo.ifBlank { GitHubConfig.defaultRepo(ctx) }
+    }
+
+    private fun resolveBranch(args: JSONObject): String {
+        val branch = args.optString("branch").takeIf { args.has("branch") }
+            ?: args.optString("ref").takeIf { args.has("ref") }
+        return branch?.trim().orEmpty().ifBlank { GitHubConfig.defaultBranch(ctx) }
+    }
+
+    private fun requireToken(): String? = if (githubToken().isBlank()) {
+        err("尚未接入 GitHub，请先在「设置 → GitHub」填写 Personal Access Token，或把 Token 发给我代为保存。")
+    } else {
+        null
+    }
+
+    private fun githubStatus(): String {
+        val token = githubToken()
+        val out = JSONObject().apply {
+            put("ok", true)
+            put("configured", token.isNotBlank())
+            put("defaultRepo", GitHubConfig.defaultRepo(ctx))
+            put("defaultBranch", GitHubConfig.defaultBranch(ctx))
+        }
+        if (token.isBlank()) return out.put("hint", "未配置 Token。可让用户提供 Token 后调用 github_save_config。").toString()
+        return try {
+            val user = GitHubClient.whoami(token)
+            out.put("login", user.optString("login"))
+                .put("name", user.optString("name"))
+                .put("publicRepos", user.optInt("public_repos"))
+                .put("totalRepos", user.optInt("total_private_repos") + user.optInt("public_repos"))
+                .put("tokenValid", true)
+            out.toString()
+        } catch (e: Exception) {
+            out.put("tokenValid", false).put("error", e.message ?: "Token 校验失败").toString()
+        }
+    }
+
+    private fun githubSaveConfig(args: JSONObject): String {
+        val token = args.optString("token").trim()
+        if (token.isBlank()) return err("缺少 token")
+        return try {
+            val user = GitHubClient.whoami(token)
+            GitHubConfig.setToken(ctx, token)
+            if (args.has("defaultRepo")) GitHubConfig.setDefaultRepo(ctx, args.optString("defaultRepo"))
+            if (args.has("defaultBranch")) GitHubConfig.setDefaultBranch(ctx, args.optString("defaultBranch"))
+            JSONObject().put("ok", true)
+                .put("login", user.optString("login"))
+                .put("defaultRepo", GitHubConfig.defaultRepo(ctx))
+                .put("defaultBranch", GitHubConfig.defaultBranch(ctx))
+                .toString()
+        } catch (e: Exception) {
+            err(e.message ?: "Token 校验失败")
+        }
+    }
+
+    private fun githubListRepos(args: JSONObject): String {
+        requireToken()?.let { return it }
+        return try {
+            val arr = GitHubClient.listRepos(githubToken(), args.optInt("limit", 30))
+            JSONObject().put("ok", true).put("count", arr.length()).put("repos", JSONArray().apply {
+                for (i in 0 until arr.length()) {
+                    val r = arr.getJSONObject(i)
+                    put(JSONObject()
+                        .put("fullName", r.optString("full_name"))
+                        .put("private", r.optBoolean("private"))
+                        .put("defaultBranch", r.optString("default_branch"))
+                        .put("description", r.optString("description"))
+                        .put("stars", r.optInt("stargazers_count"))
+                        .put("updatedAt", r.optString("updated_at")))
+                }
+            }).toString()
+        } catch (e: Exception) {
+            err(e.message ?: "获取仓库列表失败")
+        }
+    }
+
+    private fun githubGetRepo(args: JSONObject): String {
+        requireToken()?.let { return it }
+        val repo = resolveRepo(args)
+        if (repo.isBlank()) return err("请指定仓库，或先设置默认仓库")
+        return try {
+            val r = GitHubClient.getRepo(githubToken(), repo)
+            JSONObject().put("ok", true)
+                .put("fullName", r.optString("full_name"))
+                .put("private", r.optBoolean("private"))
+                .put("defaultBranch", r.optString("default_branch"))
+                .put("description", r.optString("description"))
+                .put("stars", r.optInt("stargazers_count"))
+                .put("forks", r.optInt("forks_count"))
+                .put("openIssues", r.optInt("open_issues_count"))
+                .put("htmlUrl", r.optString("html_url"))
+                .toString()
+        } catch (e: Exception) {
+            err(e.message ?: "获取仓库失败")
+        }
+    }
+
+    private fun githubListBranches(args: JSONObject): String {
+        requireToken()?.let { return it }
+        val repo = resolveRepo(args)
+        if (repo.isBlank()) return err("请指定仓库，或先设置默认仓库")
+        return try {
+            val arr = GitHubClient.listBranches(githubToken(), repo)
+            JSONObject().put("ok", true).put("branches", JSONArray().apply {
+                for (i in 0 until arr.length()) put(arr.getJSONObject(i).optString("name"))
+            }).toString()
+        } catch (e: Exception) {
+            err(e.message ?: "获取分支失败")
+        }
+    }
+
+    private fun githubReadFile(args: JSONObject): String {
+        requireToken()?.let { return it }
+        val repo = resolveRepo(args)
+        val path = args.optString("path").trim()
+        if (repo.isBlank()) return err("请指定仓库，或先设置默认仓库")
+        if (path.isBlank()) return err("缺少 path")
+        return try {
+            val file = GitHubClient.getFile(githubToken(), repo, path, resolveBranch(args))
+            val encoded = file.optString("content").replace("\n", "")
+            val decoded = runCatching {
+                String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT), Charsets.UTF_8)
+            }.getOrDefault("")
+            JSONObject().put("ok", true)
+                .put("path", file.optString("path"))
+                .put("sha", file.optString("sha"))
+                .put("size", file.optInt("size"))
+                .put("content", decoded)
+                .toString()
+        } catch (e: Exception) {
+            err(e.message ?: "读取文件失败")
+        }
+    }
+
+    private fun githubWriteFile(args: JSONObject): String {
+        requireToken()?.let { return it }
+        val repo = resolveRepo(args)
+        val path = args.optString("path").trim()
+        if (repo.isBlank()) return err("请指定仓库，或先设置默认仓库")
+        if (path.isBlank()) return err("缺少 path")
+        val content = args.optString("content")
+        val branch = resolveBranch(args)
+        return try {
+            // 未提供 sha 时自动探测：文件已存在则用其 sha 更新，否则按新建提交。
+            var sha = args.optString("sha").trim()
+            if (sha.isBlank()) {
+                sha = runCatching { GitHubClient.getFile(githubToken(), repo, path, branch).optString("sha") }
+                    .getOrDefault("")
+            }
+            val res = GitHubClient.putFile(
+                token = githubToken(),
+                repo = repo,
+                path = path,
+                content = content,
+                message = args.optString("message"),
+                branch = branch,
+                sha = sha,
+            )
+            val commit = res.optJSONObject("commit")
+            JSONObject().put("ok", true)
+                .put("path", path)
+                .put("updated", sha.isNotBlank())
+                .put("commit", commit?.optString("sha").orEmpty())
+                .put("htmlUrl", commit?.optString("html_url").orEmpty())
+                .toString()
+        } catch (e: Exception) {
+            err(e.message ?: "提交失败")
+        }
+    }
+
+    private fun githubListCommits(args: JSONObject): String {
+        requireToken()?.let { return it }
+        val repo = resolveRepo(args)
+        if (repo.isBlank()) return err("请指定仓库，或先设置默认仓库")
+        return try {
+            val arr = GitHubClient.listCommits(githubToken(), repo, resolveBranch(args), args.optInt("limit", 20))
+            JSONObject().put("ok", true).put("commits", JSONArray().apply {
+                for (i in 0 until arr.length()) {
+                    val c = arr.getJSONObject(i)
+                    put(JSONObject()
+                        .put("sha", c.optString("sha").take(8))
+                        .put("message", c.optJSONObject("commit")?.optString("message")?.lineSequence()?.firstOrNull().orEmpty())
+                        .put("author", c.optJSONObject("commit")?.optJSONObject("author")?.optString("name").orEmpty())
+                        .put("date", c.optJSONObject("commit")?.optJSONObject("author")?.optString("date").orEmpty()))
+                }
+            }).toString()
+        } catch (e: Exception) {
+            err(e.message ?: "获取提交记录失败")
+        }
+    }
+
+    private fun githubListIssues(args: JSONObject): String {
+        requireToken()?.let { return it }
+        val repo = resolveRepo(args)
+        if (repo.isBlank()) return err("请指定仓库，或先设置默认仓库")
+        return try {
+            val arr = GitHubClient.listIssues(githubToken(), repo, args.optString("state", "open"), args.optInt("limit", 20))
+            JSONObject().put("ok", true).put("issues", JSONArray().apply {
+                for (i in 0 until arr.length()) {
+                    val it = arr.getJSONObject(i)
+                    put(JSONObject()
+                        .put("number", it.optInt("number"))
+                        .put("title", it.optString("title"))
+                        .put("state", it.optString("state"))
+                        .put("isPull", it.has("pull_request"))
+                        .put("user", it.optJSONObject("user")?.optString("login").orEmpty()))
+                }
+            }).toString()
+        } catch (e: Exception) {
+            err(e.message ?: "获取 Issue 失败")
+        }
+    }
+
+    private fun githubCreateIssue(args: JSONObject): String {
+        requireToken()?.let { return it }
+        val repo = resolveRepo(args)
+        val title = args.optString("title").trim()
+        if (repo.isBlank()) return err("请指定仓库，或先设置默认仓库")
+        if (title.isBlank()) return err("缺少 title")
+        return try {
+            val res = GitHubClient.createIssue(githubToken(), repo, title, args.optString("body"))
+            JSONObject().put("ok", true)
+                .put("number", res.optInt("number"))
+                .put("htmlUrl", res.optString("html_url"))
+                .toString()
+        } catch (e: Exception) {
+            err(e.message ?: "创建 Issue 失败")
+        }
+    }
+
+    private fun githubCommentIssue(args: JSONObject): String {
+        requireToken()?.let { return it }
+        val repo = resolveRepo(args)
+        val number = args.optInt("number", 0)
+        val body = args.optString("body")
+        if (repo.isBlank()) return err("请指定仓库，或先设置默认仓库")
+        if (number <= 0) return err("缺少 number")
+        if (body.isBlank()) return err("缺少 body")
+        return try {
+            val res = GitHubClient.commentIssue(githubToken(), repo, number, body)
+            JSONObject().put("ok", true).put("htmlUrl", res.optString("html_url")).toString()
+        } catch (e: Exception) {
+            err(e.message ?: "评论失败")
+        }
+    }
+
+    private fun githubListPulls(args: JSONObject): String {
+        requireToken()?.let { return it }
+        val repo = resolveRepo(args)
+        if (repo.isBlank()) return err("请指定仓库，或先设置默认仓库")
+        return try {
+            val arr = GitHubClient.listPulls(githubToken(), repo, args.optString("state", "open"), args.optInt("limit", 20))
+            JSONObject().put("ok", true).put("pulls", JSONArray().apply {
+                for (i in 0 until arr.length()) {
+                    val p = arr.getJSONObject(i)
+                    put(JSONObject()
+                        .put("number", p.optInt("number"))
+                        .put("title", p.optString("title"))
+                        .put("state", p.optString("state"))
+                        .put("head", p.optJSONObject("head")?.optString("ref").orEmpty())
+                        .put("base", p.optJSONObject("base")?.optString("ref").orEmpty()))
+                }
+            }).toString()
+        } catch (e: Exception) {
+            err(e.message ?: "获取 Pull Request 失败")
+        }
+    }
+
+    private fun githubCreatePull(args: JSONObject): String {
+        requireToken()?.let { return it }
+        val repo = resolveRepo(args)
+        val title = args.optString("title").trim()
+        val head = args.optString("head").trim()
+        val base = args.optString("base").trim()
+        if (repo.isBlank()) return err("请指定仓库，或先设置默认仓库")
+        if (title.isBlank() || head.isBlank() || base.isBlank()) return err("缺少 title/head/base")
+        return try {
+            val res = GitHubClient.createPull(githubToken(), repo, title, head, base, args.optString("body"))
+            JSONObject().put("ok", true)
+                .put("number", res.optInt("number"))
+                .put("htmlUrl", res.optString("html_url"))
+                .toString()
+        } catch (e: Exception) {
+            err(e.message ?: "创建 Pull Request 失败")
+        }
+    }
+
+    private fun githubSearchRepos(args: JSONObject): String {
+        val query = args.optString("query").trim()
+        if (query.isBlank()) return err("缺少 query")
+        return try {
+            val arr = GitHubClient.searchRepos(githubToken(), query, args.optInt("limit", 10))
+            JSONObject().put("ok", true).put("repos", JSONArray().apply {
+                for (i in 0 until arr.length()) {
+                    val r = arr.getJSONObject(i)
+                    put(JSONObject()
+                        .put("fullName", r.optString("full_name"))
+                        .put("description", r.optString("description"))
+                        .put("stars", r.optInt("stargazers_count"))
+                        .put("htmlUrl", r.optString("html_url")))
+                }
+            }).toString()
+        } catch (e: Exception) {
+            err(e.message ?: "搜索失败")
+        }
     }
 
 }
