@@ -18,6 +18,20 @@ public sealed class AppConfig
     /// <summary>用户自定义系统提示词；留空使用内置默认人设（稳定前缀）。</summary>
     public string SystemPrompt { get; set; } = "";
 
+    /// <summary>GitHub Personal Access Token（用户自己的凭据，仅存本机配置）。</summary>
+    public string GitHubToken { get; set; } = "";
+
+    /// <summary>默认仓库，形如 owner/repo；留空则在调用时指定。</summary>
+    public string GitHubDefaultRepo { get; set; } = "";
+
+    /// <summary>默认分支；留空表示使用仓库默认分支。</summary>
+    public string GitHubDefaultBranch { get; set; } = "";
+
+    /// <summary>校验通过后缓存的登录名，仅用于界面展示。</summary>
+    public string GitHubLogin { get; set; } = "";
+
+    public bool GitHubConfigured => GitHubToken.Length > 0;
+
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,

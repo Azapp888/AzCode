@@ -17,6 +17,9 @@ public partial class MainWindow : Window
         TxtBase.Text = _cfg.DeepSeekBaseUrl;
         TxtModel.Text = _cfg.Model;
         TxtMaxSteps.Text = _cfg.MaxSteps.ToString();
+        TxtGithubToken.Password = _cfg.GitHubToken;
+        TxtGithubRepo.Text = _cfg.GitHubDefaultRepo;
+        TxtGithubBranch.Text = _cfg.GitHubDefaultBranch;
         TxtStatus.Text = $"配置路径：{AppConfig.ConfigPath}";
     }
 
@@ -88,6 +91,9 @@ public partial class MainWindow : Window
             _cfg.MaxSteps = steps;
         else
             _cfg.MaxSteps = 0;
+        _cfg.GitHubToken = TxtGithubToken.Password.Trim();
+        _cfg.GitHubDefaultRepo = TxtGithubRepo.Text.Trim();
+        _cfg.GitHubDefaultBranch = TxtGithubBranch.Text.Trim();
     }
 
     private void AppendLog(string line)

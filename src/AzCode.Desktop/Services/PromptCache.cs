@@ -17,6 +17,7 @@ public static class PromptCache
         点击优先用 click 的 text 字段匹配控件名称，匹配不到时再用坐标。
         输入文字用 type；组合键用 key（如 "ctrl+s"、"enter"、"alt+f4"）。
         需要执行系统操作（启动程序、文件操作、查询信息）时用 shell（PowerShell）。
+        涉及用户的 GitHub 仓库时先用 github_status 确认接入状态；已接入后可直接读取/提交仓库文件、查看提交记录、创建 Issue 与 Pull Request；未接入时引导用户填写 Token 或用 github_save_config 保存。
         面向用户的文字要简洁、口语化，直接说明你正在做什么或最终结果，不要输出 JSON 或工具参数。
         任务完成或无法继续时，调用 finish 并给出简短总结。
         """;
@@ -24,7 +25,7 @@ public static class PromptCache
     private const string PluginHint =
         "【插件市场】用户想扩展能力、寻找插件时，调用 search_plugins 扫描热门开源仓库获取候选，" +
         "再用 install_plugin 一键安装；用 list_installed_plugins 查看已安装、set_plugin_enabled 启停、remove_plugin 删除。" +
-        "内置插件 ponytail 提供「拒绝过度设计」的工程约束，默认启用。";
+        "内置插件 ponytail 提供「拒绝过度设计」的工程约束，impeccable 提供「界面打磨」的设计约束，均默认启用。";
 
     private static readonly SkillStore Skills = new();
 

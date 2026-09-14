@@ -189,7 +189,7 @@ public sealed class SkillStore
     };
 
     /// <summary>内置精选 + GitHub star 排序结果。</summary>
-    public async Task<List<Plugin>> SearchAsync(string keyword, int limit = 8, CancellationToken ct = default)
+    public async Task<List<Plugin>> SearchAsync(string keyword, int limit = 8, string token = "", CancellationToken ct = default)
     {
         var kw = (keyword ?? "").Trim();
         var result = new List<Plugin>();
@@ -219,6 +219,7 @@ public sealed class SkillStore
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Add("Accept", "application/vnd.github+json");
             req.Headers.Add("User-Agent", "AzCode-Windows");
+            if (token.Length > 0) req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
             using var resp = await Http.SendAsync(req, ct);
             if (!resp.IsSuccessStatusCode) return result.Take(limit + Curated.Count).ToList();
             var node = JsonNode.Parse(await resp.Content.ReadAsStringAsync(ct));
@@ -247,10 +248,10 @@ public sealed class SkillStore
     }
 
     /// <summary>一键安装：下载并解析仓库中的 SKILL.md 写入技能库。</summary>
-    public async Task<Skill> InstallAsync(string installUrl, CancellationToken ct = default)
+    public async Task<Skill> InstallAsync(string installUrl, CancellationToken ct = default, string token = "")
     {
         var rawUrl = ResolveRawUrl(installUrl);
-        var body = await DownloadAsync(rawUrl, ct);
+        var body = await DownloadAsync(rawUrl, ct, token);
         var (name, description, content) = Parse(body);
         var skill = new Skill
         {
@@ -299,11 +300,12 @@ public sealed class SkillStore
         throw new InvalidOperationException("请指向 SKILL.md 文件或仓库目录");
     }
 
-    private static async Task<string> DownloadAsync(string url, CancellationToken ct)
+    private static async Task<string> DownloadAsync(string url, CancellationToken ct, string token = "")
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.Add("Accept", "text/plain, text/markdown, */*");
         req.Headers.Add("User-Agent", "AzCode-Windows");
+        if (token.Length > 0) req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
         using var resp = await Http.SendAsync(req, ct);
         if (!resp.IsSuccessStatusCode)
             throw new InvalidOperationException($"下载失败（HTTP {(int)resp.StatusCode}）");
