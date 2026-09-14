@@ -85,6 +85,18 @@ owner/repo
 - **扫描热门插件**：技能页「扫描热门插件」按钮按关键词搜索 GitHub 上 star 较多的 Agent 技能仓库，点选即可一键安装；可留空查看内置精选。
 - **Agent 自助**：模型也可调用 `search_plugins` / `install_plugin` / `list_installed_plugins` / `set_plugin_enabled` / `remove_plugin` 完成同样的操作。
 
+### GitHub 接入
+
+在设置页 → 「GitHub」填写 Personal Access Token（需 `repo` scope），可选填默认仓库与分支，保存前会调用 GitHub API 校验 Token。Token 属于用户自有凭据，仅存于应用私有存储，不读取任何环境变量或平台内部变量。接入后 Agent 可以：
+
+- 读取与提交仓库文件（`github_read_file` / `github_write_file`，写文件自动探测 sha）；
+- 浏览仓库、分支与提交记录；
+- 管理 Issue 与评论、查看与创建 Pull Request；
+- 搜索公开仓库；
+- 插件搜索与技能安装时自动复用该 Token，可安装私有仓库中的技能。
+
+工具集中不包含删除仓库等不可逆操作。
+
 Agent 工具集：
 
 | 工具 | 说明 |
@@ -97,6 +109,11 @@ Agent 工具集：
 | `generate_image` | 文生图（需配置生图模型） |
 | `ask_question_for_user` | 在输入框下方问答区向用户提问（支持一次多个问题） |
 | `search_plugins` / `install_plugin` / `list_installed_plugins` / `set_plugin_enabled` / `remove_plugin` | 插件市场 |
+| `github_status` / `github_save_config` | 查看与保存 GitHub 接入状态 |
+| `github_list_repos` / `github_get_repo` / `github_list_branches` / `github_list_commits` | 浏览仓库、分支与提交 |
+| `github_read_file` / `github_write_file` | 读取与提交仓库文件（写文件自动探测 sha） |
+| `github_list_issues` / `github_create_issue` / `github_comment_issue` | 管理 Issue 与评论 |
+| `github_list_pulls` / `github_create_pull` / `github_search_repos` | Pull Request 与仓库搜索 |
 | `list_model_providers` / `fetch_models` / `save_model_provider` / `remove_model_provider` / `import_providers_md` | 模型配置 |
 | `finish` | 结束任务并总结 |
 
@@ -185,13 +202,15 @@ gradle assembleDebug
 app/src/main/java/app/azcode/bridge/
   MainActivity.kt            聊天界面：气泡消息 + 可折叠工具卡片 + 附件
   SettingsActivity.kt        设置页：模型/系统提示词 + 设备能力 + 桥接/权限模式
+  GitHubActivity.kt          GitHub 接入页：Token / 默认仓库 / 默认分支
   SkillsActivity.kt          技能管理：启停、删除、从 GitHub 安装、扫描热门插件
   AgentRunner.kt             设备端 Agent 决策循环，向 UI 输出结构化事件
   PromptCache.kt             降缓存未命中：稳定前缀 + 运行时上下文追加 + 工具顺序固定
   DeepSeekClient.kt          DeepSeek function calling + 多模态内容构造
   AgentConfig.kt             多提供商 / 模型 / 最大步数 / 系统提示词持久化
-  SkillStore.kt              技能持久化 + 内置 ponytail
+  SkillStore.kt              技能持久化 + 内置 ponytail / impeccable
   PluginCatalog.kt           热门插件扫描（GitHub 搜索）与一键安装
+  GitHubClient.kt            GitHub REST 客户端与 Token 私有存储
   GitHubSkillFetcher.kt      GitHub SKILL.md 下载与解析
   AttachmentReader.kt        附件读取：图片/PDF/Office/文本
   AzAccessibilityService.kt  读屏 / 点击 / 滑动 / 全局动作
