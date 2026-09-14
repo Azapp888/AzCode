@@ -67,8 +67,9 @@ class DepthSliderView @JvmOverloads constructor(
     private val colorTrack = ContextCompat.getColor(context, R.color.surface_muted)
     private val colorThumb = ContextCompat.getColor(context, R.color.surface)
 
-    private val trackHeight = dp(14f)
+    // 轨道加粗到与滑块圆球直径相当，视觉上更厚重、便于拖动。
     private val thumbRadius = dp(16f)
+    private val trackHeight = thumbRadius * 2f
     private val ringWidth = dp(3f)
 
     private class Bubble(var x: Float, var y: Float, var r: Float, var speed: Float, var alpha: Int)
@@ -80,7 +81,19 @@ class DepthSliderView @JvmOverloads constructor(
     init {
         isClickable = true
         isFocusable = true
-        minimumHeight = dp(60f).toInt()
+    }
+
+    /**
+     * 自定义 View 的默认 onMeasure 在 AT_MOST（wrap_content）下会直接返回父级允许的
+     * 全部高度，导致滑块被拉伸、把整个模型/思考深度面板撑满屏幕。这里显式给出固有高度：
+     * 圆球直径 + 上下各 8dp 余量。
+     */
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val desiredHeight = (thumbRadius * 2f + dp(16f)).toInt() + paddingTop + paddingBottom
+        setMeasuredDimension(
+            resolveSize(suggestedMinimumWidth, widthMeasureSpec),
+            resolveSize(desiredHeight, heightMeasureSpec),
+        )
     }
 
     /** 静默设置进度：不回调、不触发费用确认，但会同步特效状态。 */
