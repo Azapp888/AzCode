@@ -9,7 +9,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import __version__, store
+from . import __version__, github_client, store
 from .agent import Agent, AgentError
 from .config import CONFIG_PATH, Config, Provider
 
@@ -104,11 +104,15 @@ def _show_config(cfg: Config) -> None:
     print(f"配置文件：{CONFIG_PATH}")
     if not cfg.providers:
         print("（尚未配置任何提供商）")
-        return
     for p in cfg.providers:
         mark = "*" if active and p.id == active.id else " "
         key = "已设置" if p.api_key or os.environ.get("LISTEN_API_KEY") else "未设置"
         print(f" {mark} {p.name}  {p.base_url}  模型={p.model}  Key={key}")
+    if cfg.github_configured:
+        repo = cfg.github_default_repo or "（未设默认仓库）"
+        print(f" GitHub：已接入 {cfg.github_login or ''}  默认仓库={repo}")
+    else:
+        print(" GitHub：未接入（listen github set --token <PAT>）")
 
 
 def _show_plugins() -> None:
@@ -154,11 +158,13 @@ def cmd_config(args) -> int:
 
 
 def cmd_plugins(args) -> int:
+    cfg = Config.load()
+    token = cfg.github_token
     if args.action == "list" or args.action is None:
         _show_plugins()
         return 0
     if args.action == "search":
-        for p in store.search_plugins(args.keyword or ""):
+        for p in store.search_plugins(args.keyword or "", token=token):
             stars = f" ★{p.stars}" if p.stars else ""
             print(f" {p.name}{stars}\n   {p.description}\n   {p.install_url}")
         return 0
@@ -167,7 +173,7 @@ def cmd_plugins(args) -> int:
             print("需要仓库地址或 installUrl", file=sys.stderr)
             return 2
         try:
-            skill = store.install_plugin(args.url)
+            skill = store.install_plugin(args.url, token=token)
             print(f"已安装：{skill.name}")
             return 0
         except Exception as e:  # noqa: BLE001
@@ -217,6 +223,53 @@ def _has_desktop() -> bool:
     return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
 
+def cmd_github(args) -> int:
+    cfg = Config.load()
+    action = args.action or "status"
+    if action == "status":
+        if not cfg.github_configured:
+            print("未接入 GitHub。用 `listen github set --token <PAT>` 接入。")
+            return 0
+        try:
+            user = github_client.whoami(cfg.github_token)
+        except Exception as e:  # noqa: BLE001
+            print(f"Token 校验失败：{e}", file=sys.stderr)
+            return 1
+        print(f"已接入：{user.get('login', '')}")
+        print(f"默认仓库：{cfg.github_default_repo or '（未设置）'}")
+        print(f"默认分支：{cfg.github_default_branch or '（仓库默认分支）'}")
+        return 0
+    if action == "set":
+        token = (args.token or "").strip()
+        if not token:
+            print("需要 --token", file=sys.stderr)
+            return 2
+        try:
+            user = github_client.whoami(token)
+        except Exception as e:  # noqa: BLE001
+            print(f"Token 校验失败：{e}", file=sys.stderr)
+            return 1
+        cfg.github_token = token
+        if args.repo:
+            cfg.github_default_repo = args.repo.strip()
+        if args.branch:
+            cfg.github_default_branch = args.branch.strip()
+        cfg.github_login = user.get("login", "")
+        cfg.save()
+        print(f"已接入 GitHub：{cfg.github_login}")
+        return 0
+    if action == "clear":
+        cfg.github_token = ""
+        cfg.github_default_repo = ""
+        cfg.github_default_branch = ""
+        cfg.github_login = ""
+        cfg.save()
+        print("已断开 GitHub 接入。")
+        return 0
+    print(f"未知操作：{action}", file=sys.stderr)
+    return 2
+
+
 # ------------------------------------------------------------------- parser
 
 def build_parser() -> argparse.ArgumentParser:
@@ -248,6 +301,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_doc = sub.add_parser("doctor", help="环境自检")
     p_doc.set_defaults(func=cmd_doctor)
+
+    p_gh = sub.add_parser("github", help="接入与管理用户 GitHub 仓库")
+    p_gh.add_argument("action", nargs="?", choices=["status", "set", "clear"], default="status")
+    p_gh.add_argument("--token", default="")
+    p_gh.add_argument("--repo", default="")
+    p_gh.add_argument("--branch", default="")
+    p_gh.set_defaults(func=cmd_github)
 
     return parser
 

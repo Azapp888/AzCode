@@ -6,16 +6,25 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
 import subprocess
 from pathlib import Path
 
-from . import store
+from . import github_client, store
 
 MAX_OUTPUT = 8000
 DEFAULT_TIMEOUT = 60
+
+# 由 Agent 在启动时注入的配置对象，供 GitHub 工具读取用户 Token 与默认仓库。
+_config = None
+
+
+def configure(cfg) -> None:
+    global _config
+    _config = cfg
 
 
 def _ok(**kw) -> str:
@@ -150,7 +159,7 @@ def press_key(keys: str) -> str:
 # ------------------------------------------------------------- plugin tools
 
 def search_plugins(keyword: str = "", limit: int = 8) -> str:
-    plugins = store.search_plugins(keyword, limit)
+    plugins = store.search_plugins(keyword, limit, token=_gh_token())
     return json.dumps({
         "ok": True,
         "count": len(plugins),
@@ -166,7 +175,7 @@ def install_plugin(url: str) -> str:
     if not (url or "").strip():
         return _err("缺少 url")
     try:
-        skill = store.install_plugin(url)
+        skill = store.install_plugin(url, token=_gh_token())
         return _ok(installed=skill.name)
     except Exception as e:  # noqa: BLE001
         return _err(str(e))
@@ -212,6 +221,281 @@ def remove_plugin(skill_id: str = "", name: str = "") -> str:
     return _ok(removed=skill.name)
 
 
+# ------------------------------------------------------------- github tools
+
+_NOTHING_TOKEN = "尚未接入 GitHub，请让用户在配置中填写 Personal Access Token，或调用 github_save_config 保存。"
+
+
+def _gh_token() -> str:
+    return (_config.github_token if _config is not None else "").strip()
+
+
+def _gh_repo(repo: str = "") -> str:
+    repo = (repo or "").strip()
+    if repo:
+        return repo
+    default = (_config.github_default_repo if _config is not None else "").strip()
+    return default
+
+
+def _gh_branch(branch: str = "") -> str:
+    branch = (branch or "").strip()
+    if branch:
+        return branch
+    return (_config.github_default_branch if _config is not None else "").strip()
+
+
+def github_status() -> str:
+    if _config is None or not _gh_token():
+        return json.dumps({"ok": False, "configured": False, "hint": _NOTHING_TOKEN}, ensure_ascii=False)
+    try:
+        user = github_client.whoami(_gh_token())
+    except Exception as e:  # noqa: BLE001
+        return _err(str(e))
+    return json.dumps({
+        "ok": True,
+        "configured": True,
+        "login": user.get("login", ""),
+        "defaultRepo": _config.github_default_repo,
+        "defaultBranch": _config.github_default_branch,
+    }, ensure_ascii=False)
+
+
+def github_save_config(token: str = "", default_repo: str = "", default_branch: str = "") -> str:
+    if _config is None:
+        return _err("配置尚未初始化")
+    token = (token or "").strip()
+    if not token:
+        return _err("缺少 token")
+    try:
+        user = github_client.whoami(token)
+    except Exception as e:  # noqa: BLE001
+        return _err(str(e))
+    _config.github_token = token
+    if default_repo:
+        _config.github_default_repo = default_repo.strip()
+    if default_branch:
+        _config.github_default_branch = default_branch.strip()
+    _config.github_login = user.get("login", "")
+    _config.save()
+    return _ok(login=_config.github_login, defaultRepo=_config.github_default_repo,
+               defaultBranch=_config.github_default_branch)
+
+
+def github_list_repos(limit: int = 30) -> str:
+    if not _gh_token():
+        return _err(_NOTHING_TOKEN)
+    try:
+        arr = github_client.list_repos(_gh_token(), limit)
+    except Exception as e:  # noqa: BLE001
+        return _err(str(e))
+    return _ok(repos=[{
+        "fullName": r.get("full_name", ""),
+        "private": r.get("private", False),
+        "defaultBranch": r.get("default_branch", ""),
+        "description": r.get("description") or "",
+    } for r in arr])
+
+
+def github_get_repo(repo: str = "") -> str:
+    if not _gh_token():
+        return _err(_NOTHING_TOKEN)
+    repo = _gh_repo(repo)
+    if not repo:
+        return _err("请指定仓库，或先设置默认仓库")
+    try:
+        r = github_client.get_repo(_gh_token(), repo)
+    except Exception as e:  # noqa: BLE001
+        return _err(str(e))
+    return _ok(fullName=r.get("full_name", ""), private=r.get("private", False),
+               defaultBranch=r.get("default_branch", ""), description=r.get("description") or "",
+               stars=r.get("stargazers_count", 0), openIssues=r.get("open_issues_count", 0),
+               htmlUrl=r.get("html_url", ""))
+
+
+def github_list_branches(repo: str = "") -> str:
+    if not _gh_token():
+        return _err(_NOTHING_TOKEN)
+    repo = _gh_repo(repo)
+    if not repo:
+        return _err("请指定仓库，或先设置默认仓库")
+    try:
+        arr = github_client.list_branches(_gh_token(), repo)
+    except Exception as e:  # noqa: BLE001
+        return _err(str(e))
+    return _ok(branches=[b.get("name", "") for b in arr])
+
+
+def github_read_file(repo: str = "", path: str = "", ref: str = "") -> str:
+    if not _gh_token():
+        return _err(_NOTHING_TOKEN)
+    repo = _gh_repo(repo)
+    path = (path or "").strip()
+    if not repo:
+        return _err("请指定仓库，或先设置默认仓库")
+    if not path:
+        return _err("缺少 path")
+    try:
+        file = github_client.get_file(_gh_token(), repo, path, _gh_branch(ref))
+    except Exception as e:  # noqa: BLE001
+        return _err(str(e))
+    encoded = (file.get("content") or "").replace("\n", "")
+    try:
+        decoded = base64.b64decode(encoded).decode("utf-8", "ignore")
+    except Exception:  # noqa: BLE001
+        decoded = ""
+    return _ok(path=file.get("path", path), sha=file.get("sha", ""),
+               size=file.get("size", 0), content=decoded)
+
+
+def github_write_file(repo: str = "", path: str = "", content: str = "",
+                      message: str = "", branch: str = "", sha: str = "") -> str:
+    if not _gh_token():
+        return _err(_NOTHING_TOKEN)
+    repo = _gh_repo(repo)
+    path = (path or "").strip()
+    if not repo:
+        return _err("请指定仓库，或先设置默认仓库")
+    if not path:
+        return _err("缺少 path")
+    branch = _gh_branch(branch)
+    sha = (sha or "").strip()
+    if not sha:
+        try:
+            sha = github_client.get_file(_gh_token(), repo, path, branch).get("sha", "")
+        except Exception:  # noqa: BLE001
+            sha = ""
+    try:
+        res = github_client.put_file(_gh_token(), repo, path, content, message, branch, sha)
+    except Exception as e:  # noqa: BLE001
+        return _err(str(e))
+    commit = res.get("commit") or {}
+    return _ok(path=path, updated=bool(sha), commit=commit.get("sha", ""),
+               htmlUrl=commit.get("html_url", ""))
+
+
+def github_list_commits(repo: str = "", ref: str = "", limit: int = 20) -> str:
+    if not _gh_token():
+        return _err(_NOTHING_TOKEN)
+    repo = _gh_repo(repo)
+    if not repo:
+        return _err("请指定仓库，或先设置默认仓库")
+    try:
+        arr = github_client.list_commits(_gh_token(), repo, _gh_branch(ref), limit)
+    except Exception as e:  # noqa: BLE001
+        return _err(str(e))
+    return _ok(commits=[{
+        "sha": (c.get("sha") or "")[:8],
+        "message": ((c.get("commit") or {}).get("message") or "").split("\n")[0],
+        "author": ((c.get("commit") or {}).get("author") or {}).get("name", ""),
+        "date": ((c.get("commit") or {}).get("author") or {}).get("date", ""),
+    } for c in arr])
+
+
+def github_list_issues(repo: str = "", state: str = "open", limit: int = 20) -> str:
+    if not _gh_token():
+        return _err(_NOTHING_TOKEN)
+    repo = _gh_repo(repo)
+    if not repo:
+        return _err("请指定仓库，或先设置默认仓库")
+    try:
+        arr = github_client.list_issues(_gh_token(), repo, state or "open", limit)
+    except Exception as e:  # noqa: BLE001
+        return _err(str(e))
+    return _ok(issues=[{
+        "number": it.get("number", 0),
+        "title": it.get("title", ""),
+        "state": it.get("state", ""),
+        "isPull": it.get("pull_request") is not None,
+        "user": (it.get("user") or {}).get("login", ""),
+    } for it in arr])
+
+
+def github_create_issue(repo: str = "", title: str = "", body: str = "") -> str:
+    if not _gh_token():
+        return _err(_NOTHING_TOKEN)
+    repo = _gh_repo(repo)
+    title = (title or "").strip()
+    if not repo:
+        return _err("请指定仓库，或先设置默认仓库")
+    if not title:
+        return _err("缺少 title")
+    try:
+        res = github_client.create_issue(_gh_token(), repo, title, body)
+    except Exception as e:  # noqa: BLE001
+        return _err(str(e))
+    return _ok(number=res.get("number", 0), htmlUrl=res.get("html_url", ""))
+
+
+def github_comment_issue(repo: str = "", number: int = 0, body: str = "") -> str:
+    if not _gh_token():
+        return _err(_NOTHING_TOKEN)
+    repo = _gh_repo(repo)
+    if not repo:
+        return _err("请指定仓库，或先设置默认仓库")
+    if not number:
+        return _err("缺少 number")
+    if not (body or "").strip():
+        return _err("缺少 body")
+    try:
+        res = github_client.comment_issue(_gh_token(), repo, int(number), body)
+    except Exception as e:  # noqa: BLE001
+        return _err(str(e))
+    return _ok(htmlUrl=res.get("html_url", ""))
+
+
+def github_list_pulls(repo: str = "", state: str = "open", limit: int = 20) -> str:
+    if not _gh_token():
+        return _err(_NOTHING_TOKEN)
+    repo = _gh_repo(repo)
+    if not repo:
+        return _err("请指定仓库，或先设置默认仓库")
+    try:
+        arr = github_client.list_pulls(_gh_token(), repo, state or "open", limit)
+    except Exception as e:  # noqa: BLE001
+        return _err(str(e))
+    return _ok(pulls=[{
+        "number": p.get("number", 0),
+        "title": p.get("title", ""),
+        "state": p.get("state", ""),
+        "head": (p.get("head") or {}).get("ref", ""),
+        "base": (p.get("base") or {}).get("ref", ""),
+    } for p in arr])
+
+
+def github_create_pull(repo: str = "", title: str = "", head: str = "",
+                       base: str = "", body: str = "") -> str:
+    if not _gh_token():
+        return _err(_NOTHING_TOKEN)
+    repo = _gh_repo(repo)
+    title, head, base = (title or "").strip(), (head or "").strip(), (base or "").strip()
+    if not repo:
+        return _err("请指定仓库，或先设置默认仓库")
+    if not (title and head and base):
+        return _err("缺少 title/head/base")
+    try:
+        res = github_client.create_pull(_gh_token(), repo, title, head, base, body)
+    except Exception as e:  # noqa: BLE001
+        return _err(str(e))
+    return _ok(number=res.get("number", 0), htmlUrl=res.get("html_url", ""))
+
+
+def github_search_repos(query: str = "", limit: int = 10) -> str:
+    query = (query or "").strip()
+    if not query:
+        return _err("缺少 query")
+    try:
+        arr = github_client.search_repos(_gh_token(), query, limit)
+    except Exception as e:  # noqa: BLE001
+        return _err(str(e))
+    return _ok(repos=[{
+        "fullName": r.get("full_name", ""),
+        "description": r.get("description") or "",
+        "stars": r.get("stargazers_count", 0),
+        "htmlUrl": r.get("html_url", ""),
+    } for r in arr])
+
+
 def finish(summary: str) -> str:
     return _ok(summary=summary)
 
@@ -239,6 +523,32 @@ def dispatch(name: str, args: dict) -> str:
         "set_plugin_enabled": lambda a: set_plugin_enabled(
             a.get("id", ""), a.get("name", ""), bool(a.get("enabled", True))),
         "remove_plugin": lambda a: remove_plugin(a.get("id", ""), a.get("name", "")),
+        "github_status": lambda a: github_status(),
+        "github_save_config": lambda a: github_save_config(
+            a.get("token", ""), a.get("defaultRepo", ""), a.get("defaultBranch", "")),
+        "github_list_repos": lambda a: github_list_repos(int(a.get("limit", 30) or 30)),
+        "github_get_repo": lambda a: github_get_repo(a.get("repo", "")),
+        "github_list_branches": lambda a: github_list_branches(a.get("repo", "")),
+        "github_read_file": lambda a: github_read_file(
+            a.get("repo", ""), a.get("path", ""), a.get("ref", "")),
+        "github_write_file": lambda a: github_write_file(
+            a.get("repo", ""), a.get("path", ""), a.get("content", ""),
+            a.get("message", ""), a.get("branch", ""), a.get("sha", "")),
+        "github_list_commits": lambda a: github_list_commits(
+            a.get("repo", ""), a.get("ref", ""), int(a.get("limit", 20) or 20)),
+        "github_list_issues": lambda a: github_list_issues(
+            a.get("repo", ""), a.get("state", "open"), int(a.get("limit", 20) or 20)),
+        "github_create_issue": lambda a: github_create_issue(
+            a.get("repo", ""), a.get("title", ""), a.get("body", "")),
+        "github_comment_issue": lambda a: github_comment_issue(
+            a.get("repo", ""), int(a.get("number", 0) or 0), a.get("body", "")),
+        "github_list_pulls": lambda a: github_list_pulls(
+            a.get("repo", ""), a.get("state", "open"), int(a.get("limit", 20) or 20)),
+        "github_create_pull": lambda a: github_create_pull(
+            a.get("repo", ""), a.get("title", ""), a.get("head", ""),
+            a.get("base", ""), a.get("body", "")),
+        "github_search_repos": lambda a: github_search_repos(
+            a.get("query", ""), int(a.get("limit", 10) or 10)),
         "finish": lambda a: finish(a.get("summary", "")),
     }
     handler = handlers.get(name)
@@ -291,5 +601,45 @@ TOOL_DEFINITIONS: list[dict] = [
     _fn("set_plugin_enabled", "启用或停用一个已安装插件。",
         {"id": _str("插件 id"), "name": _str("插件名称"), "enabled": {"type": "boolean", "description": "是否启用"}}, []),
     _fn("remove_plugin", "删除一个已安装插件。", {"id": _str("插件 id"), "name": _str("插件名称")}, []),
+    _fn("github_status", "查看 GitHub 接入状态：是否已配置 Token、当前登录账号、默认仓库与分支。操作仓库前先调用。", {}, []),
+    _fn("github_save_config", "保存 GitHub 接入配置（Token 与可选默认仓库/分支），保存前会校验 Token。",
+        {"token": _str("GitHub Personal Access Token（需 repo 权限）"),
+         "defaultRepo": _str("默认仓库 owner/repo，可省略"),
+         "defaultBranch": _str("默认分支，留空用仓库默认分支")}, ["token"]),
+    _fn("github_list_repos", "列出当前 Token 可访问的仓库（含私有）。",
+        {"limit": _num("最多返回条数，默认 30")}, []),
+    _fn("github_get_repo", "查看仓库概览：默认分支、是否私有、star、开放 Issue 数等。",
+        {"repo": _str("仓库 owner/repo，省略用默认仓库")}, []),
+    _fn("github_list_branches", "列出仓库分支。",
+        {"repo": _str("仓库 owner/repo，省略用默认仓库")}, []),
+    _fn("github_read_file", "读取仓库文件内容与 sha（更新文件时需要）。",
+        {"repo": _str("仓库 owner/repo，省略用默认仓库"), "path": _str("文件路径"),
+         "ref": _str("分支或 commit，省略用默认分支")}, ["path"]),
+    _fn("github_write_file", "创建或更新仓库文件并产生一次提交。更新已有文件可先读取文件，或由工具自动探测 sha。",
+        {"repo": _str("仓库 owner/repo，省略用默认仓库"), "path": _str("文件路径"),
+         "content": _str("文件完整内容"), "message": _str("提交信息"),
+         "branch": _str("提交到的分支，省略用默认分支"),
+         "sha": _str("更新已有文件时的 sha；新建留空")}, ["path", "content"]),
+    _fn("github_list_commits", "列出仓库提交记录。",
+        {"repo": _str("仓库 owner/repo，省略用默认仓库"), "ref": _str("分支或 commit，省略用默认分支"),
+         "limit": _num("最多返回条数，默认 20")}, []),
+    _fn("github_list_issues", "列出仓库 Issue。",
+        {"repo": _str("仓库 owner/repo，省略用默认仓库"), "state": _str("open / closed / all，默认 open"),
+         "limit": _num("最多返回条数，默认 20")}, []),
+    _fn("github_create_issue", "新建 Issue。",
+        {"repo": _str("仓库 owner/repo，省略用默认仓库"), "title": _str("Issue 标题"),
+         "body": _str("Issue 正文")}, ["title"]),
+    _fn("github_comment_issue", "给 Issue 或 PR 添加评论。",
+        {"repo": _str("仓库 owner/repo，省略用默认仓库"), "number": _num("Issue/PR 编号"),
+         "body": _str("评论内容")}, ["number", "body"]),
+    _fn("github_list_pulls", "列出仓库 Pull Request。",
+        {"repo": _str("仓库 owner/repo，省略用默认仓库"), "state": _str("open / closed / all，默认 open"),
+         "limit": _num("最多返回条数，默认 20")}, []),
+    _fn("github_create_pull", "基于已有分支创建 Pull Request。",
+        {"repo": _str("仓库 owner/repo，省略用默认仓库"), "title": _str("PR 标题"),
+         "head": _str("来源分支"), "base": _str("目标分支"), "body": _str("PR 描述")},
+        ["title", "head", "base"]),
+    _fn("github_search_repos", "在 GitHub 搜索公开仓库（按 star 排序）。",
+        {"query": _str("搜索关键词"), "limit": _num("最多返回条数，默认 10")}, ["query"]),
     _fn("finish", "任务结束并给出总结。", {"summary": _str("结果总结")}, ["summary"]),
 ]

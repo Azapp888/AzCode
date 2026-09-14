@@ -51,6 +51,12 @@ class Config:
     temperature: float = 0.2
     system_prompt: str = ""
 
+    # GitHub 接入：用户自己的 Personal Access Token 与可选默认仓库/分支。
+    github_token: str = ""
+    github_default_repo: str = ""
+    github_default_branch: str = ""
+    github_login: str = ""
+
     # ---------- 持久化 ----------
 
     @staticmethod
@@ -65,6 +71,10 @@ class Config:
                     max_steps=raw.get("max_steps", 0),
                     temperature=raw.get("temperature", 0.2),
                     system_prompt=raw.get("system_prompt", ""),
+                    github_token=raw.get("github_token", ""),
+                    github_default_repo=raw.get("github_default_repo", ""),
+                    github_default_branch=raw.get("github_default_branch", ""),
+                    github_login=raw.get("github_login", ""),
                 )
         except Exception:
             pass
@@ -78,8 +88,16 @@ class Config:
             "max_steps": self.max_steps,
             "temperature": self.temperature,
             "system_prompt": self.system_prompt,
+            "github_token": self.github_token,
+            "github_default_repo": self.github_default_repo,
+            "github_default_branch": self.github_default_branch,
+            "github_login": self.github_login,
         }
         CONFIG_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    @property
+    def github_configured(self) -> bool:
+        return bool(self.github_token.strip())
 
     # ---------- 账号 ----------
 

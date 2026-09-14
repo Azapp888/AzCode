@@ -209,7 +209,7 @@ CURATED = [
 _GITHUB_SEARCH = "https://api.github.com/search/repositories"
 
 
-def search_plugins(keyword: str, limit: int = 8) -> list[Plugin]:
+def search_plugins(keyword: str, limit: int = 8, token: str = "") -> list[Plugin]:
     kw = (keyword or "").strip()
     result: list[Plugin] = []
     seen: set[str] = set()
@@ -231,10 +231,13 @@ def search_plugins(keyword: str, limit: int = 8) -> list[Plugin]:
     try:
         q = urllib.parse.quote(f"{kw} SKILL.md in:name,description,readme")
         url = f"{_GITHUB_SEARCH}?q={q}&sort=stars&order=desc&per_page={max(1, min(limit, 20))}"
-        req = urllib.request.Request(url, headers={
+        headers = {
             "Accept": "application/vnd.github+json",
             "User-Agent": "magic-listen",
-        })
+        }
+        if (token or "").strip():
+            headers["Authorization"] = f"Bearer {token.strip()}"
+        req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=15) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
         for item in payload.get("items", []):
@@ -289,11 +292,14 @@ def _resolve_raw_url(value: str) -> str:
     raise ValueError("请指向 SKILL.md 文件或仓库目录")
 
 
-def _download(url: str, max_bytes: int = 512 * 1024) -> str:
-    req = urllib.request.Request(url, headers={
+def _download(url: str, max_bytes: int = 512 * 1024, token: str = "") -> str:
+    headers = {
         "Accept": "text/plain, text/markdown, */*",
         "User-Agent": "magic-listen",
-    })
+    }
+    if (token or "").strip():
+        headers["Authorization"] = f"Bearer {token.strip()}"
+    req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=25) as resp:
         data = resp.read(max_bytes + 1)
     if len(data) > max_bytes:
@@ -332,9 +338,9 @@ def _parse_skill(raw: str) -> tuple[str, str, str]:
     return name, description, content
 
 
-def install_plugin(install_url: str) -> Skill:
+def install_plugin(install_url: str, token: str = "") -> Skill:
     raw_url = _resolve_raw_url(install_url)
-    body = _download(raw_url)
+    body = _download(raw_url, token=token)
     name, description, content = _parse_skill(body)
     skill = Skill(
         id="gh-" + uuid.uuid5(uuid.NAMESPACE_URL, raw_url).hex[:12],

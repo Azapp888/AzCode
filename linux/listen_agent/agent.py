@@ -36,6 +36,7 @@ class Agent:
 
     def run(self, task: str, attachments: list[str] | None = None) -> str:
         self._cancelled = False
+        tools.configure(self.cfg)
         provider = self.cfg.active()
         if provider is None:
             raise AgentError("尚未配置模型提供商：请编辑 ~/.config/magic-listen/config.json 或运行 `listen config`")

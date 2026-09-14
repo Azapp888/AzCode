@@ -8,7 +8,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 
-from . import __version__, store
+from . import __version__, github_client, store
 from .agent import Agent, AgentError
 from .config import Config, Provider
 
@@ -25,6 +25,7 @@ class MagicApp:
         root.geometry("900x640")
         self._build()
         self._load_active_provider()
+        self._load_github()
         root.after(80, self._drain_events)
 
     # ------------------------------------------------------------------ UI
@@ -54,6 +55,27 @@ class MagicApp:
         ttk.Label(row2, text="模型").pack(side="left")
         ttk.Entry(row2, textvariable=self.var_model, width=20).pack(side="left", padx=4)
         ttk.Button(row2, text="保存配置", command=self._save_provider).pack(side="left", padx=6)
+
+        gh = ttk.LabelFrame(self.root, text="GitHub 接入（用户自有 Token，仅存本机）")
+        gh.pack(fill="x", **pad)
+
+        self.var_gh_token = tk.StringVar()
+        self.var_gh_repo = tk.StringVar()
+        self.var_gh_branch = tk.StringVar()
+
+        gh_row = ttk.Frame(gh)
+        gh_row.pack(fill="x", padx=6, pady=4)
+        ttk.Label(gh_row, text="Token").pack(side="left")
+        ttk.Entry(gh_row, textvariable=self.var_gh_token, width=30, show="•").pack(side="left", padx=4)
+        ttk.Label(gh_row, text="默认仓库").pack(side="left")
+        ttk.Entry(gh_row, textvariable=self.var_gh_repo, width=22).pack(side="left", padx=4)
+        ttk.Label(gh_row, text="分支").pack(side="left")
+        ttk.Entry(gh_row, textvariable=self.var_gh_branch, width=12).pack(side="left", padx=4)
+        ttk.Button(gh_row, text="保存 GitHub", command=self._save_github).pack(side="left", padx=6)
+        self.btn_gh_clear = ttk.Button(gh_row, text="断开", command=self._clear_github)
+        self.btn_gh_clear.pack(side="left")
+        self.var_gh_status = tk.StringVar(value="未接入")
+        ttk.Label(gh_row, textvariable=self.var_gh_status, foreground="#888").pack(side="left", padx=8)
 
         self.log = ScrolledText(self.root, wrap="word", state="disabled", font=("TkFixedFont", 10))
         self.log.pack(fill="both", expand=True, **pad)
@@ -97,6 +119,49 @@ class MagicApp:
             self.cfg.set_active(provider.id)
         self.cfg.save()
         self._append(f"已保存提供商：{provider.name}\n")
+
+    def _load_github(self) -> None:
+        self.var_gh_token.set(self.cfg.github_token)
+        self.var_gh_repo.set(self.cfg.github_default_repo)
+        self.var_gh_branch.set(self.cfg.github_default_branch)
+        self._refresh_github_status()
+
+    def _refresh_github_status(self) -> None:
+        if self.cfg.github_configured:
+            login = self.cfg.github_login or "已配置"
+            self.var_gh_status.set(f"已接入：{login}")
+        else:
+            self.var_gh_status.set("未接入")
+
+    def _save_github(self) -> None:
+        token = self.var_gh_token.get().strip()
+        if not token:
+            self._append("请先填写 GitHub Token（需 repo 权限）。\n")
+            return
+        try:
+            user = github_client.whoami(token)
+        except Exception as e:  # noqa: BLE001
+            self._append(f"GitHub Token 校验失败：{e}\n")
+            return
+        self.cfg.github_token = token
+        self.cfg.github_default_repo = self.var_gh_repo.get().strip()
+        self.cfg.github_default_branch = self.var_gh_branch.get().strip()
+        self.cfg.github_login = user.get("login", "")
+        self.cfg.save()
+        self._refresh_github_status()
+        self._append(f"已接入 GitHub：{self.cfg.github_login}\n")
+
+    def _clear_github(self) -> None:
+        self.cfg.github_token = ""
+        self.cfg.github_default_repo = ""
+        self.cfg.github_default_branch = ""
+        self.cfg.github_login = ""
+        self.cfg.save()
+        self.var_gh_token.set("")
+        self.var_gh_repo.set("")
+        self.var_gh_branch.set("")
+        self._refresh_github_status()
+        self._append("已断开 GitHub 接入。\n")
 
     # --------------------------------------------------------------- events
 

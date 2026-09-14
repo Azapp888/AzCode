@@ -43,6 +43,10 @@ listen plugins list                # 已安装插件
 listen plugins on|off <名称>        # 启停
 listen plugins remove <名称>        # 删除
 
+listen github status                        # 查看 GitHub 接入状态
+listen github set --token <PAT> --repo owner/repo --branch main
+listen github clear                         # 断开接入（仅清本机凭据）
+
 magic                       # 图形界面
 ```
 
@@ -64,9 +68,21 @@ export LISTEN_MODEL=deepseek-chat
 | `screenshot` | 截图保存为图片（gnome-screenshot / scrot / imagemagick） |
 | `click` / `type_text` / `press_key` | 鼠标点击、文本输入、组合键 |
 | `search_plugins` / `install_plugin` / `list_installed_plugins` / `set_plugin_enabled` / `remove_plugin` | 插件市场 |
+| `github_status` / `github_save_config` | 查看与保存 GitHub 接入状态 |
+| `github_list_repos` / `github_get_repo` / `github_list_branches` / `github_list_commits` | 浏览仓库、分支与提交 |
+| `github_read_file` / `github_write_file` | 读取与提交仓库文件（写文件自动探测 sha） |
+| `github_list_issues` / `github_create_issue` / `github_comment_issue` | 管理 Issue 与评论 |
+| `github_list_pulls` / `github_create_pull` | 查看与创建 Pull Request |
+| `github_search_repos` | 搜索公开仓库 |
 | `finish` | 结束任务并总结 |
 
 键鼠与截图能力依赖外部命令，缺失时 `listen doctor` 会明确列出；Agent 会收到「命令不存在」并改用其他手段。
+
+## GitHub 接入
+
+Token 属于用户自己的凭据，仅存于本机配置文件（`~/.config/magic-listen/config.json`），应用不读取任何环境变量或平台内部变量。图形界面在「GitHub 接入」一栏填写 Token / 默认仓库 / 分支后点击保存即可；保存前会调用 GitHub API 校验 Token 并缓存登录名。Token 需要 `repo` scope。
+
+接入后 Agent 可以读取与提交仓库文件、查看提交记录、管理 Issue 与 Pull Request；插件搜索与安装也会自动复用该 Token，可安装私有仓库中的技能。工具中不包含删除仓库等不可逆操作。
 
 ## 降缓存未命中机制
 
@@ -86,7 +102,8 @@ linux/
   install.sh                 一行安装脚本
   listen_agent/
     __init__.py              版本
-    config.py                多提供商配置读写
+    config.py                多提供商配置读写（含 GitHub 接入字段）
+    github_client.py         GitHub REST 客户端
     llm.py                   OpenAI 兼容 chat/completions 客户端
     tools.py                 Linux 自动化工具 + 插件市场工具
     store.py                 技能/记忆存储与插件扫描安装
