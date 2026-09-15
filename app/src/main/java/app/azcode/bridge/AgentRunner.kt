@@ -118,6 +118,8 @@ class AgentRunner(
 
         try {
             var step = 0
+            // 生图失败会作为工具结果回灌给模型，若模型反复重试会长时间空转；连续失败达到上限即停止。
+            var imageFailures = 0
             while (maxSteps <= 0 || step < maxSteps) {
                 step++
                 if (cancelled) { listener(AgentEvent.Notice("已停止")); return }
@@ -172,6 +174,23 @@ class AgentRunner(
                             .toString()
                     }
                     listener(AgentEvent.ToolResult(c.name, ok, modelResult))
+
+                    if (c.name == "generate_image") {
+                        if (ok) {
+                            imageFailures = 0
+                        } else {
+                            imageFailures++
+                            if (imageFailures >= 3) {
+                                val reason = runCatching { JSONObject(modelResult).optString("error") }
+                                    .getOrDefault("")
+                                listener(AgentEvent.Failure(
+                                    "图片生成连续失败 3 次，已停止重试。" +
+                                        if (reason.isNotBlank()) "原因：$reason" else ""
+                                ))
+                                return
+                            }
+                        }
+                    }
 
                     messages.put(JSONObject().apply {
                         put("role", "tool")

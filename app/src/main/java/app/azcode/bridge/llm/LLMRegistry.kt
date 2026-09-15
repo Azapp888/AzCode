@@ -7,12 +7,14 @@ import app.azcode.bridge.llm.adapters.DeepSeekAdapter
 import app.azcode.bridge.llm.adapters.DoubaoAdapter
 import app.azcode.bridge.llm.adapters.GeminiAdapter
 import app.azcode.bridge.llm.adapters.OpenAiAdapter
+import app.azcode.bridge.llm.adapters.SiliconFlowAdapter
 import app.azcode.bridge.llm.core.BaseAdapter
 
 /** 厂商标识。 */
 enum class LLMVendor(val key: String, val label: String) {
     DEEPSEEK("deepseek", "DeepSeek"),
     DOUBAO("doubao", "火山方舟（豆包）"),
+    SILICONFLOW("siliconflow", "硅基流动 SiliconFlow"),
     OPENAI("openai", "OpenAI"),
     ANTHROPIC("anthropic", "Anthropic Claude"),
     GEMINI("gemini", "Google Gemini"),
@@ -32,6 +34,7 @@ object LLMRegistry {
     private val ADAPTERS: List<BaseAdapter> = listOf(
         DeepSeekAdapter(),
         DoubaoAdapter(),
+        SiliconFlowAdapter(),
         OpenAiAdapter(),
         AnthropicAdapter(),
         GeminiAdapter(),
@@ -49,9 +52,11 @@ object LLMRegistry {
             ProviderProtocol.ANTHROPIC -> LLMVendor.ANTHROPIC
             ProviderProtocol.GEMINI -> LLMVendor.GEMINI
             ProviderProtocol.OPENAI -> when {
-                base.contains("deepseek") || m.startsWith("deepseek") -> LLMVendor.DEEPSEEK
+                base.contains("siliconflow") ||
+                    m.contains("kolors") || m.contains("qwen-image") -> LLMVendor.SILICONFLOW
                 base.contains("volces") || base.contains("ark.") ||
                     m.startsWith("doubao") || m.startsWith("seed-") -> LLMVendor.DOUBAO
+                base.contains("deepseek") || m.startsWith("deepseek") -> LLMVendor.DEEPSEEK
                 base.contains("openai.com") || m.startsWith("gpt-") || m.startsWith("chatgpt") ||
                     m.startsWith("o1") || m.startsWith("o3") || m.startsWith("o4") -> LLMVendor.OPENAI
                 else -> LLMVendor.GENERIC

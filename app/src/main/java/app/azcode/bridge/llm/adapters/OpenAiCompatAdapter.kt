@@ -11,6 +11,9 @@ import app.azcode.bridge.llm.core.LLMThinking
 import app.azcode.bridge.llm.core.LLMTransport
 import org.json.JSONObject
 
+/** 生图请求的读取超时：单张图常需数十秒，留足余量。 */
+private const val IMAGE_READ_TIMEOUT_MS = 180_000
+
 /**
  * OpenAI 兼容协议适配器基类。DeepSeek / 火山方舟 / 硅基流动 / OpenAI 等绝大多数平台
  * 都沿用这套请求与响应格式，差异集中在「思考参数」上，由子类覆写 [applyThinking]。
@@ -51,35 +54,89 @@ abstract class OpenAiCompatAdapter : BaseAdapter() {
 
     override fun translateResponse(raw: JSONObject): LLMResponse = LLMCodec.parseOpenAiResponse(raw)
 
+    /**
+     * 文生图。各厂商在 OpenAI 兼容体上的差异由 [imageEndpoint] / [imageFormatParams] /
+     * [imageBatchSize] / [imageRequestBody] 覆写描述；[generateImage] 负责按批次补足张数与
+     * 返回格式回退，业务代码无需感知。
+     */
     override fun generateImage(
         account: ProviderAccount,
         prompt: String,
         size: String,
         count: Int,
     ): List<String> {
-        val url = account.baseUrl.trimEnd('/') + "/images/generations"
-        val headers = mapOf("Authorization" to "Bearer ${account.apiKey}")
-
-        fun body(format: String): JSONObject = JSONObject().apply {
-            put("model", account.imageModel)
-            put("prompt", prompt)
-            put("n", count.coerceIn(1, 4))
-            put("size", size)
-            put("response_format", format)
+        val total = count.coerceIn(1, 4)
+        val perRequest = imageBatchSize(account).coerceIn(1, total)
+        val urls = mutableListOf<String>()
+        var lastError: LLMException? = null
+        while (urls.size < total) {
+            val want = minOf(perRequest, total - urls.size)
+            val batch = try {
+                requestImages(account, prompt, size, want)
+            } catch (e: LLMException) {
+                lastError = e
+                break
+            }
+            if (batch.isEmpty()) break
+            urls.addAll(batch)
+            // 平台返回数量少于请求时收敛，避免无限循环。
+            if (batch.size < want) break
         }
-
-        val (code, text) = LLMTransport.post(url, headers, body("url").toString())
-        if (code in 200..299) return parseImages(text)
-
-        // 部分网关不支持 response_format=url，回退到 b64_json。
-        val (retryCode, retryText) = LLMTransport.post(url, headers, body("b64_json").toString())
-        if (retryCode in 200..299) return parseImages(retryText)
-        throw translateError(account, code, text)
+        if (urls.isNotEmpty()) return urls
+        throw lastError ?: LLMException(LLMErrorCode.UNKNOWN, "图像生成未返回图片")
     }
 
-    private fun parseImages(text: String): List<String> {
+    /** 依次尝试各返回格式，任一成功即返回。 */
+    private fun requestImages(
+        account: ProviderAccount,
+        prompt: String,
+        size: String,
+        count: Int,
+    ): List<String> {
+        val endpoint = imageEndpoint(account)
+        val headers = headers(account)
+        var lastError: LLMException? = null
+        for (format in imageFormatParams(account)) {
+            val body = imageRequestBody(account, prompt, size, count, format)
+            val (code, text) = LLMTransport.post(endpoint, headers, body.toString(), IMAGE_READ_TIMEOUT_MS)
+            if (code in 200..299) {
+                val parsed = parseImageResponse(text)
+                if (parsed.isNotEmpty()) return parsed
+                lastError = LLMException(LLMErrorCode.UNKNOWN, "图像生成未返回图片：${text.take(200)}")
+                continue
+            }
+            lastError = translateError(account, code, text)
+        }
+        throw lastError ?: LLMException(LLMErrorCode.UNKNOWN, "图像生成失败")
+    }
+
+    protected open fun imageEndpoint(account: ProviderAccount): String =
+        account.baseUrl.trimEnd('/') + "/images/generations"
+
+    /** 需要尝试的 response_format 取值；null 表示不携带该字段。 */
+    protected open fun imageFormatParams(account: ProviderAccount): List<String?> = listOf("url", "b64_json")
+
+    /** 单次请求最多生成的图片数；平台单次仅支持一张时返回 1，由 [generateImage] 多次请求补足。 */
+    protected open fun imageBatchSize(account: ProviderAccount): Int = 4
+
+    protected open fun imageRequestBody(
+        account: ProviderAccount,
+        prompt: String,
+        size: String,
+        count: Int,
+        format: String?,
+    ): JSONObject = JSONObject().apply {
+        put("model", account.imageModel)
+        put("prompt", prompt)
+        put("n", count.coerceIn(1, 4))
+        put("size", size)
+        if (format != null) put("response_format", format)
+    }
+
+    /** 解析厂商返回体中的图片（远程 URL 或 data:image base64）。 */
+    protected open fun parseImageResponse(text: String): List<String> {
         val data = JSONObject(text).optJSONArray("data")
-            ?: throw LLMException(LLMErrorCode.INVALID_REQUEST, "图像生成返回格式异常：${text.take(200)}")
+            ?: throw LLMException(LLMErrorCode.UNKNOWN, "图像生成返回格式异常：${text.take(200)}")
         val urls = mutableListOf<String>()
         for (i in 0 until data.length()) {
             val item = data.optJSONObject(i) ?: continue
@@ -91,7 +148,6 @@ abstract class OpenAiCompatAdapter : BaseAdapter() {
             val b64 = item.optString("b64_json")
             if (b64.isNotBlank()) urls.add("data:image/png;base64,$b64")
         }
-        if (urls.isEmpty()) throw LLMException(LLMErrorCode.INVALID_REQUEST, "图像生成未返回图片")
         return urls
     }
 
