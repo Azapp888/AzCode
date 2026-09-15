@@ -145,6 +145,7 @@ object ModelProviders {
             baseUrl = "https://ark.cn-beijing.volces.com/api/v3",
             models = listOf("doubao-seed-1-6-250615", "doubao-1-5-pro-32k-250115"),
             imageModels = listOf("doubao-seedream-3-0-t2i-250415"),
+            supportsReasoningEffort = true,
         ),
         ProviderTemplate(
             id = "siliconflow",

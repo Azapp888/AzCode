@@ -131,13 +131,31 @@ Agent 工具集：
 
 ```
 Android (app.azcode.bridge)
-  MainActivity ── AgentRunner ── DeepSeekClient ──▶ DeepSeek API
-                      │
-                      ├── AzAccessibilityService  读屏 / 点击 / 滑动 / 全局动作
-                      └── DeviceControl           Shizuku / Root shell 通道
+  MainActivity ── AgentRunner ── LLMService ──▶ 厂商适配器 ──▶ 各厂商官方 API
+                       │              │
+                       │              └── llm/core      内部统一格式 LLMRequest / LLMResponse
+                       │                  llm/adapters   DeepSeek / 豆包 / OpenAI / Claude / Gemini
+                       │                  llm/LLMRegistry 厂商识别与适配器注册
+                       │
+                       ├── AzAccessibilityService  读屏 / 点击 / 滑动 / 全局动作
+                       └── DeviceControl           Shizuku / Root shell 通道
 
   （可选）AgentBridge 127.0.0.1:8848 ── adb forward ──▶ Windows 端
 ```
+
+### 大模型适配层（llm 包）
+
+业务代码只与内部统一格式 `LLMRequest` / `LLMResponse` 打交道（含 `messages`、`tools`、`thinking`、`stream`、`usage` 等），由 `BaseAdapter` 的子类负责与厂商官方 API 之间的翻译：
+
+- `translateRequest(request)`：内部统一请求 → 厂商请求体；
+- `translateResponse(raw)`：厂商响应 → 内部统一响应；
+- 厂商差异（如 DeepSeek 的 `think_effort`、豆包的 `reasoning`、Claude 的 system+blocks、Gemini 的 contents/parts）全部封装在适配器内；
+- 网关不识别思考参数时，`LLMService` 自动去掉该参数重试一次；
+- 网络错误统一为 `LLMException`（含中文提示与标准错误码）。
+
+新增一个模型厂商只需两步：在 `llm/adapters` 下新建适配器类，再到 `LLMRegistry` 注册；基类与业务代码无需改动。
+
+
 
 ## 能力桥 API（可选，供 Windows 端调用）
 

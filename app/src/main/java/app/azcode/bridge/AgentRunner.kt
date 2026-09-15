@@ -1,6 +1,13 @@
 package app.azcode.bridge
 
 import android.content.Context
+import app.azcode.bridge.llm.LLMContent
+import app.azcode.bridge.llm.LLMService
+import app.azcode.bridge.llm.core.LLMCodec
+import app.azcode.bridge.llm.core.LLMRequest
+import app.azcode.bridge.llm.core.LLMResponse
+import app.azcode.bridge.llm.core.LLMThinking
+import app.azcode.bridge.llm.core.LLMToolCall
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -51,7 +58,7 @@ data class AgentQuestion(
 )
 
 /**
- * 设备端 Agent 决策循环：按需读取屏幕 → 交 DeepSeek 决策 → 直接调用本机无障碍/Shizuku 执行 → 回灌结果。
+ * 设备端 Agent 决策循环：按需读取屏幕 → 交大模型决策 → 直接调用本机无障碍/Shizuku 执行 → 回灌结果。
  *
  * 会话续接：每个任务的上下文（历史消息）保存在 [ChatSession.agentMessages] 中，
  * 下一轮请求会在系统提示词之后接续这些历史，从而让同一会话里的多轮对话保持连贯。
@@ -104,11 +111,10 @@ class AgentRunner(
             if (PromptCache.latestRuntimeContext(this) != runtime) {
                 put(JSONObject().put("role", "system").put("content", runtime))
             }
-            put(JSONObject().put("role", "user").put("content", DeepSeekClient.buildUserContent(task, attachments)))
+            put(JSONObject().put("role", "user").put("content", LLMContent.buildUserContent(task, attachments)))
         }
         val tools = buildTools()
         val depth = AgentConfig.thinkingDepth(ctx)
-        val effort = if (provider.supportsReasoningEffort) depth.effort else null
 
         try {
             var step = 0
@@ -120,7 +126,16 @@ class AgentRunner(
                 messages = compactIfNeeded(messages, provider)
 
                 val reply = try {
-                    DeepSeekClient.chat(provider, messages, tools, effort)
+                    LLMService.chat(
+                        provider,
+                        LLMRequest(
+                            model = provider.model,
+                            messages = LLMCodec.openAiToMessages(messages),
+                            tools = LLMCodec.openAiToTools(tools),
+                            thinking = LLMThinking.from(depth.key),
+                            omitThinkingParam = !provider.supportsReasoningEffort,
+                        ),
+                    )
                 } catch (e: Exception) {
                     if (cancelled) listener(AgentEvent.Notice("已停止"))
                     else listener(AgentEvent.Failure(e.message ?: "请求模型失败"))
@@ -236,7 +251,7 @@ class AgentRunner(
         return JSONObject().put("role", "user").put("content", out)
     }
 
-    private fun assistantMessage(reply: AssistantReply): JSONObject = JSONObject().apply {
+    private fun assistantMessage(reply: LLMResponse): JSONObject = JSONObject().apply {
         put("role", "assistant")
         put("content", reply.content ?: JSONObject.NULL)
         if (reply.toolCalls.isNotEmpty()) {
@@ -256,7 +271,7 @@ class AgentRunner(
 
     // ==================== 工具执行 ====================
 
-    private fun execute(call: ToolCall): String {
+    private fun execute(call: LLMToolCall): String {
         val args = runCatching { JSONObject(call.arguments.ifBlank { "{}" }) }.getOrElse { JSONObject() }
         return try {
             when (call.name) {
@@ -311,8 +326,8 @@ class AgentRunner(
                         val model = selectedImageModel
                             ?.takeIf { imageProvider.allImageModels.contains(it) }
                             ?: imageProvider.imageModel
-                        val urls = DeepSeekClient.generateImage(
-                            provider = imageProvider.copy(imageModel = model),
+                        val urls = LLMService.generateImage(
+                            account = imageProvider.copy(imageModel = model),
                             prompt = prompt,
                             size = args.optString("size", "1024x1024"),
                             count = args.optInt("count", 1),
@@ -519,7 +534,7 @@ class AgentRunner(
             }
         )
         if (baseUrl.isBlank()) return err("缺少 baseUrl")
-        val models = DeepSeekClient.listModels(protocol, baseUrl, apiKey)
+        val models = LLMService.listModels(protocol, baseUrl, apiKey)
         return JSONObject().put("ok", true)
             .put("models", JSONArray(models))
             .put("count", models.size)
@@ -560,7 +575,8 @@ class AgentRunner(
             model = model,
             supportsReasoningEffort = args.optBoolean(
                 "supportsReasoningEffort",
-                existing?.supportsReasoningEffort ?: (protocol == ProviderProtocol.OPENAI && baseUrl.contains("deepseek")),
+                existing?.supportsReasoningEffort ?: (protocol == ProviderProtocol.OPENAI &&
+                    (baseUrl.contains("deepseek") || baseUrl.contains("volces") || baseUrl.contains("ark."))),
             ),
             imageEnabled = imageEnabled,
             imageModels = imageModels,
@@ -677,7 +693,15 @@ class AgentRunner(
             put(JSONObject().put("role", "user").put("content", sb.toString().take(12000)))
         }
         return runCatching {
-            DeepSeekClient.chat(provider, prompt, JSONArray(), null).content?.trim().orEmpty()
+            LLMService.chat(
+                provider,
+                LLMRequest(
+                    model = provider.model,
+                    messages = LLMCodec.openAiToMessages(prompt),
+                    thinking = LLMThinking.OFF,
+                    omitThinkingParam = true,
+                ),
+            ).content?.trim().orEmpty()
         }.getOrDefault("")
     }
 
@@ -811,7 +835,7 @@ class AgentRunner(
                         .put("items", JSONObject().put("type", "string")))
                     .put("enabled", JSONObject().put("type", "boolean").put("description", "是否启用，默认 true"))
                     .put("setActive", JSONObject().put("type", "boolean").put("description", "是否设为当前使用，默认 false"))
-                    .put("supportsReasoningEffort", JSONObject().put("type", "boolean").put("description", "是否支持 reasoning_effort"))
+                    .put("supportsReasoningEffort", JSONObject().put("type", "boolean").put("description", "是否支持思考参数（如 reasoning_effort / reasoning），默认 false"))
                     .put("imageEnabled", JSONObject().put("type", "boolean").put("description", "是否加入生图模型"))
                     .put("imageModel", str("生图模型名（单个）"))
                     .put("imageModels", JSONObject()

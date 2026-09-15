@@ -1,6 +1,10 @@
 package app.azcode.bridge
 
 import android.content.Context
+import app.azcode.bridge.llm.LLMService
+import app.azcode.bridge.llm.core.LLMCodec
+import app.azcode.bridge.llm.core.LLMRequest
+import app.azcode.bridge.llm.core.LLMThinking
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -31,7 +35,15 @@ object ProviderImporter {
             put(JSONObject().put("role", "system").put("content", SYSTEM_PROMPT))
             put(JSONObject().put("role", "user").put("content", content.take(20000)))
         }
-        val reply = DeepSeekClient.chat(provider, messages, JSONArray(), null)
+        val reply = LLMService.chat(
+            provider,
+            LLMRequest(
+                model = provider.model,
+                messages = LLMCodec.openAiToMessages(messages),
+                thinking = LLMThinking.OFF,
+                omitThinkingParam = true,
+            ),
+        )
         val text = reply.content?.trim()
             ?: throw RuntimeException("模型未返回解析结果")
         val arr = JSONArray(extractJsonArray(text))
