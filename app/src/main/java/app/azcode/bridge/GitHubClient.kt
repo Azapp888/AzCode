@@ -87,6 +87,7 @@ object GitHubClient {
             setRequestProperty("Accept", accept)
             setRequestProperty("User-Agent", UA)
             setRequestProperty("X-GitHub-Api-Version", API_VERSION)
+            setRequestProperty("Connection", "close")
             if (token.isNotBlank()) setRequestProperty("Authorization", "Bearer $token")
             if (body != null) {
                 doOutput = true

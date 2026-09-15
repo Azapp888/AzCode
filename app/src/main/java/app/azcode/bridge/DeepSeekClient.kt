@@ -500,36 +500,101 @@ object DeepSeekClient {
         }
     }
 
-    private fun httpGet(url: String, headers: Map<String, String>): Pair<Int, String> {
-        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 15_000
-            readTimeout = 30_000
-            setRequestProperty("Accept", "application/json")
-            headers.forEach { (k, v) -> setRequestProperty(k, v) }
-        }
-        val code = conn.responseCode
-        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-        val text = stream?.bufferedReader()?.use { it.readText() } ?: ""
-        return code to text
-    }
+    private fun httpGet(url: String, headers: Map<String, String>): Pair<Int, String> =
+        request(url, "GET", headers, null, 30_000)
 
     // ==================== HTTP ====================
 
-    private fun httpPost(url: String, headers: Map<String, String>, body: String): Pair<Int, String> {
-        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            connectTimeout = 15_000
-            readTimeout = 120_000
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-            headers.forEach { (k, v) -> setRequestProperty(k, v) }
+    private fun httpPost(url: String, headers: Map<String, String>, body: String): Pair<Int, String> =
+        request(url, "POST", headers, body, 120_000)
+
+    /** 瞬时网络错误的重试次数（连接被中断、超时等）。 */
+    private val httpAttempts = 3
+
+    /**
+     * 统一 HTTP 请求入口。
+     *
+     * Android 的 HttpURLConnection 默认复用 keep-alive 连接；当对端或中间网关先关闭了空闲连接，
+     * 复用旧连接就会抛出 `SocketException: Software caused connection abort`。这里显式
+     * `Connection: close` 且请求结束即 disconnect，避免复用陈旧连接；同时对连接类异常自动重试。
+     */
+    private fun request(
+        url: String,
+        method: String,
+        headers: Map<String, String>,
+        body: String?,
+        readTimeoutMs: Int,
+    ): Pair<Int, String> {
+        var last: Exception? = null
+        for (attempt in 0 until httpAttempts) {
+            try {
+                return requestOnce(url, method, headers, body, readTimeoutMs)
+            } catch (e: Exception) {
+                if (!isTransientNetworkError(e) || attempt == httpAttempts - 1) {
+                    if (isTransientNetworkError(e)) throw RuntimeException(networkErrorMessage(e), e)
+                    throw e
+                }
+                last = e
+                Thread.sleep(400L * (attempt + 1))
+            }
         }
-        conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-        val code = conn.responseCode
-        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-        val text = stream?.bufferedReader()?.use { it.readText() } ?: ""
-        return code to text
+        throw RuntimeException(networkErrorMessage(last), last)
+    }
+
+    private fun requestOnce(
+        url: String,
+        method: String,
+        headers: Map<String, String>,
+        body: String?,
+        readTimeoutMs: Int,
+    ): Pair<Int, String> {
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = method
+            connectTimeout = 15_000
+            readTimeout = readTimeoutMs
+            instanceFollowRedirects = true
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Connection", "close")
+            headers.forEach { (k, v) -> setRequestProperty(k, v) }
+            if (body != null) {
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+            }
+        }
+        try {
+            if (body != null) conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
+            return code to text
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    private fun isTransientNetworkError(e: Throwable): Boolean = when (e) {
+        is java.net.SocketException,
+        is java.net.SocketTimeoutException,
+        is java.net.ConnectException,
+        is java.io.InterruptedIOException,
+        -> true
+        else -> false
+    }
+
+    private fun networkErrorMessage(e: Throwable?): String {
+        val raw = e?.message.orEmpty()
+        return when {
+            e is java.net.SocketTimeoutException || raw.contains("timed out", ignoreCase = true) ->
+                "网络请求超时，请检查网络后重试"
+            e is java.net.UnknownHostException ->
+                "无法解析服务器地址，请检查网络与 Base URL"
+            raw.contains("abort", ignoreCase = true) || e is java.net.SocketException ->
+                "网络连接被中断，已自动重试仍失败，请检查网络或稍后再试"
+            e is java.net.ConnectException ->
+                "无法连接服务器，请检查网络与 Base URL"
+            raw.isNotBlank() -> "网络请求失败：$raw"
+            else -> "网络请求失败，请检查网络后重试"
+        }
     }
 
     private fun apiError(provider: ProviderAccount, code: Int, text: String): RuntimeException =
