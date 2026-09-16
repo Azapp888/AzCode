@@ -64,6 +64,7 @@ abstract class OpenAiCompatAdapter : BaseAdapter() {
         prompt: String,
         size: String,
         count: Int,
+        watermark: Boolean,
     ): List<String> {
         val total = count.coerceIn(1, 4)
         val perRequest = imageBatchSize(account).coerceIn(1, total)
@@ -72,7 +73,7 @@ abstract class OpenAiCompatAdapter : BaseAdapter() {
         while (urls.size < total) {
             val want = minOf(perRequest, total - urls.size)
             val batch = try {
-                requestImages(account, prompt, size, want)
+                requestImages(account, prompt, size, want, watermark)
             } catch (e: LLMException) {
                 lastError = e
                 break
@@ -92,12 +93,13 @@ abstract class OpenAiCompatAdapter : BaseAdapter() {
         prompt: String,
         size: String,
         count: Int,
+        watermark: Boolean,
     ): List<String> {
         val endpoint = imageEndpoint(account)
         val headers = headers(account)
         var lastError: LLMException? = null
         for (format in imageFormatParams(account)) {
-            val body = imageRequestBody(account, prompt, size, count, format)
+            val body = imageRequestBody(account, prompt, size, count, format, watermark)
             val (code, text) = LLMTransport.post(endpoint, headers, body.toString(), IMAGE_READ_TIMEOUT_MS)
             if (code in 200..299) {
                 val parsed = parseImageResponse(text)
@@ -119,12 +121,17 @@ abstract class OpenAiCompatAdapter : BaseAdapter() {
     /** 单次请求最多生成的图片数；平台单次仅支持一张时返回 1，由 [generateImage] 多次请求补足。 */
     protected open fun imageBatchSize(account: ProviderAccount): Int = 4
 
+    /**
+     * 生图请求体。`watermark` 为全局水印开关，仅支持该参数的厂商（如火山方舟 Seedream）
+     * 需要覆写使用，其余厂商忽略。
+     */
     protected open fun imageRequestBody(
         account: ProviderAccount,
         prompt: String,
         size: String,
         count: Int,
         format: String?,
+        watermark: Boolean,
     ): JSONObject = JSONObject().apply {
         put("model", account.imageModel)
         put("prompt", prompt)

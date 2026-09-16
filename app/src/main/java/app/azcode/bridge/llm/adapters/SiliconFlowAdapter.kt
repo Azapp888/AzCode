@@ -29,6 +29,7 @@ class SiliconFlowAdapter : OpenAiCompatAdapter() {
         size: String,
         count: Int,
         format: String?,
+        watermark: Boolean,
     ): JSONObject = JSONObject().apply {
         put("model", account.imageModel)
         put("prompt", prompt)

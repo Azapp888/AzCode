@@ -10,7 +10,7 @@ import org.json.JSONObject
  * 与 OpenAI 兼容体的差异：
  * - 思考字段为 `reasoning`，取值为 `enabled` / `disabled`；
  * - 文生图（Seedream）不支持 `n`，多图用 `sequential_image_generation` +
- *   `sequential_image_generation_options.max_images` 表达，且默认会加水印，这里显式关闭；
+ *   `sequential_image_generation_options.max_images` 表达，水印由全局开关控制；
  * - 模型字段若网关要求 `model_name`，覆写 [modelField] 为 `"model_name"` 即可。
  */
 class DoubaoAdapter : OpenAiCompatAdapter() {
@@ -39,12 +39,13 @@ class DoubaoAdapter : OpenAiCompatAdapter() {
         size: String,
         count: Int,
         format: String?,
+        watermark: Boolean,
     ): JSONObject = JSONObject().apply {
         put("model", account.imageModel)
         put("prompt", prompt)
         put("size", size)
-        // 默认会给图片加“AI生成”水印，这里显式关闭。
-        put("watermark", false)
+        // 平台默认会给图片加“AI生成”水印，这里按用户设置显式指定。
+        put("watermark", watermark)
         if (format != null) put("response_format", format)
         if (supportsSequential(account)) {
             if (count > 1) {

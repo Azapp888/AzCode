@@ -46,6 +46,8 @@
     <string name="hint_max_steps">最大步数（0 表示无限）</string>
     <string name="hint_system_prompt">系统提示词</string>
     <string name="hint_system_prompt_placeholder">留空使用内置默认提示词；可在此自定义 Agent 的角色与行为</string>
+    <string name="hint_image_watermark">生成图片水印</string>
+    <string name="hint_image_watermark_desc">开启后，支持水印参数的生图模型（如火山方舟 Seedream）会在图片上添加水印，其余厂商自动忽略</string>
     <string name="btn_save_config">保存配置</string>
     <string name="toast_saved">配置已保存</string>
 

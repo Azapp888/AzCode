@@ -350,6 +350,7 @@ class AgentRunner(
                             prompt = prompt,
                             size = args.optString("size", "1024x1024"),
                             count = args.optInt("count", 1),
+                            watermark = AgentConfig.imageWatermark(ctx),
                         )
                         JSONObject().put("ok", true).put("images", JSONArray(urls)).toString()
                     }

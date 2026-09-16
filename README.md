@@ -150,7 +150,7 @@ Android (app.azcode.bridge)
 - `translateRequest(request)`：内部统一请求 → 厂商请求体；
 - `translateResponse(raw)`：厂商响应 → 内部统一响应；
 - 厂商差异（如 DeepSeek 的 `think_effort`、豆包的 `reasoning`、Claude 的 system+blocks、Gemini 的 contents/parts）全部封装在适配器内；
-- 文生图同样按厂商翻译：火山方舟用组图字段替代 `n` 并关闭水印、硅基流动用 `image_size` 逐张生成、OpenAI `gpt-image-*` 不带 `response_format`、`dall-e-3` 自动拆成多次请求；
+- 文生图同样按厂商翻译：火山方舟用组图字段替代 `n`、水印由「设置 → 生成图片水印」开关控制、硅基流动用 `image_size` 逐张生成、OpenAI `gpt-image-*` 不带 `response_format`、`dall-e-3` 自动拆成多次请求；
 - 网关不识别思考参数时，`LLMService` 自动去掉该参数重试一次；
 - 网络错误统一为 `LLMException`（含中文提示与标准错误码）；生图连续失败 3 次会主动停止，避免长时间空转。
 

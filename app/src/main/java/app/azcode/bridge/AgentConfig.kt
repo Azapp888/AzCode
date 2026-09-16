@@ -33,6 +33,7 @@ object AgentConfig {
     private const val KEY_DEPTH = "thinking_depth"
     private const val KEY_MAX_STEPS = "max_steps"
     private const val KEY_SYSTEM_PROMPT = "system_prompt"
+    private const val KEY_IMAGE_WATERMARK = "image_watermark"
 
     // 旧版单账号字段，仅用于迁移。
     private const val LEGACY_API = "api_key"
@@ -184,6 +185,13 @@ shell 工具默认可直接用：已安装并授权 Termux 时自动走 Termux �
 
     fun setSystemPrompt(ctx: Context, value: String) {
         prefs(ctx).edit().putString(KEY_SYSTEM_PROMPT, value).apply()
+    }
+
+    /** 文生图水印开关。仅对支持水印参数的厂商（如火山方舟 Seedream）生效，其余厂商忽略。 */
+    fun imageWatermark(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_IMAGE_WATERMARK, false)
+
+    fun setImageWatermark(ctx: Context, value: Boolean) {
+        prefs(ctx).edit().putBoolean(KEY_IMAGE_WATERMARK, value).apply()
     }
 
     // ==================== 内部：解析与旧数据迁移 ====================

@@ -54,6 +54,7 @@ abstract class BaseAdapter {
         prompt: String,
         size: String,
         count: Int,
+        watermark: Boolean,
     ): List<String> = throw LLMException(
         LLMErrorCode.INVALID_REQUEST,
         "${account.name} 协议的文生图暂未支持，请改用 OpenAI 兼容协议",

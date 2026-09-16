@@ -38,14 +38,15 @@ object LLMService {
         throw adapter.translateError(account, code, text)
     }
 
-    /** 文生图，返回图片地址列表（远程 URL 或 data:image base64）。 */
+    /** 文生图，返回图片地址列表（远程 URL 或 data:image base64）。`watermark` 仅对支持该参数的厂商生效。 */
     fun generateImage(
         account: ProviderAccount,
         prompt: String,
         size: String = "1024x1024",
         count: Int = 1,
+        watermark: Boolean = false,
     ): List<String> = LLMRegistry.adapterFor(account, account.imageModel)
-        .generateImage(account, prompt, size, count)
+        .generateImage(account, prompt, size, count, watermark)
 
     /** 拉取可用模型名列表。 */
     fun listModels(protocol: ProviderProtocol, baseUrl: String, apiKey: String): List<String> =
