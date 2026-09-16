@@ -48,14 +48,14 @@ object LLMTransport {
                 return requestOnce(url, method, headers, body, readTimeoutMs)
             } catch (e: Exception) {
                 if (!isTransient(e) || attempt == httpAttempts - 1) {
-                    if (isTransient(e)) throw networkException(e)
+                    if (isTransient(e)) throw networkException(e, url)
                     throw e
                 }
                 last = e
                 Thread.sleep(400L * (attempt + 1))
             }
         }
-        throw networkException(last)
+        throw networkException(last, url)
     }
 
     private fun requestOnce(
@@ -89,27 +89,29 @@ object LLMTransport {
         }
     }
 
-    private fun isTransient(e: Throwable): Boolean = when (e) {
-        is SocketException,
-        is SocketTimeoutException,
-        is ConnectException,
-        is InterruptedIOException,
-        -> true
-
+    /**
+     * 连接被重置/连接超时等瞬时错误重试；读超时通常意味着对端处理慢（如生图、长输出），
+     * 重试只会成倍拉长等待时间，这里立即失败并给出明确提示。
+     */
+    private fun isTransient(e: Throwable): Boolean = when {
+        e is SocketTimeoutException -> e.message?.contains("connect", ignoreCase = true) == true
+        e is SocketException || e is ConnectException || e is InterruptedIOException -> true
         else -> false
     }
 
-    fun networkException(e: Throwable?): LLMException {
+    fun networkException(e: Throwable?, url: String): LLMException {
         val raw = e?.message.orEmpty()
+        val host = runCatching { URL(url).host }.getOrNull().orEmpty()
+        val where = if (host.isBlank()) "" else "（$host）"
         val timeout = e is SocketTimeoutException || raw.contains("timed out", ignoreCase = true)
         val message = when {
-            timeout -> "网络请求超时，请检查网络后重试"
-            e is UnknownHostException -> "无法解析服务器地址，请检查网络与 Base URL"
+            timeout -> "网络请求超时$where，请检查网络后重试"
+            e is UnknownHostException -> "无法解析服务器地址$where，请检查网络与 Base URL"
             raw.contains("abort", ignoreCase = true) || e is SocketException ->
-                "网络连接被中断，已自动重试仍失败，请检查网络或稍后再试"
-            e is ConnectException -> "无法连接服务器，请检查网络与 Base URL"
+                "网络连接被中断$where，已自动重试仍失败，请检查网络或稍后再试"
+            e is ConnectException -> "无法连接服务器$where，请检查网络与 Base URL"
             raw.isNotBlank() -> "网络请求失败：$raw"
-            else -> "网络请求失败，请检查网络后重试"
+            else -> "网络请求失败$where，请检查网络后重试"
         }
         return LLMException(
             code = if (timeout) LLMErrorCode.TIMEOUT else LLMErrorCode.NETWORK,

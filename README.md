@@ -156,6 +156,22 @@ Android (app.azcode.bridge)
 
 新增一个模型厂商只需两步：在 `llm/adapters` 下新建适配器类，再到 `LLMRegistry` 注册；基类与业务代码无需改动。
 
+### 文生图服务商一览（端点与用法）
+
+App 的生图走各厂商 `POST {Base URL}/images/generations`（OpenAI 风格），端点均经过实测校验。当前支持与各主流平台对照如下：
+
+| 平台 | Base URL | 生图模型 | App 内置适配 | 备注 |
+| --- | --- | --- | --- | --- |
+| 火山方舟（豆包） | `https://ark.cn-beijing.volces.com/api/v3` | `doubao-seedream-4-0-250828` / `doubao-seedream-3-0-t2i-250415` | 是（`DoubaoAdapter`） | 需在方舟控制台开通对应模型的推理服务，并使用 `sk-` 开头的 API Key；「豆包 App 会员/Agent 套餐」不是 API 凭据 |
+| OpenAI | `https://api.openai.com/v1` | `gpt-image-1` / `dall-e-3` | 是（`OpenAiAdapter`） | `gpt-image-*` 返回 b64，`dall-e-3` 单次仅 1 张 |
+| 硅基流动 | `https://api.siliconflow.cn/v1` | `Kwai-Kolors/Kolors` / `Qwen/Qwen-Image` | 是（`SiliconFlowAdapter`） | 尺寸字段为 `image_size`，逐张生成 |
+| 智谱 AI | `https://open.bigmodel.cn/api/paas/v4` | `cogview-4` 等 | 走通用 OpenAI 兼容 | 端点实测有效（401 待鉴权），按 OpenAI 兼容协议填写即可试用 |
+| 阿里云百炼 | `https://dashscope.aliyuncs.com` | `wanx2.1` / `Qwen-Image` | 暂不支持 | 原生 API 为「提交任务 + 轮询」异步式，与 OpenAI 风格不兼容，需单独适配 |
+| Google | `https://generativelanguage.googleapis.com` | `gemini-2.5-flash-image` / `Imagen` | 暂不支持 | 走 `generateContent` / `predict`，需单独适配 |
+| DeepSeek | `https://api.deepseek.com/v1` | - | - | 官方无生图 API |
+
+排查生图失败的顺序：1) 网络能否访问对应 Base URL（报「网络请求超时（主机名）」即此问题）；2) API Key 是否有效、模型是否已在厂商控制台开通；3) 模型名拼写是否与厂商文档一致；4) 报错正文会随失败原因原样展示，可直接对照厂商错误码文档。
+
 
 
 ## 能力桥 API（可选，供 Windows 端调用）
