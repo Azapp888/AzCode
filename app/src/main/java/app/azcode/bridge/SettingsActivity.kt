@@ -10,16 +10,16 @@ import android.provider.Settings
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.widget.SwitchCompat
 
 /** 设置页：模型管理入口 + 步数/提示词 + 设备能力，主界面只保留聊天。 */
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var etMaxSteps: EditText
     private lateinit var etSystemPrompt: EditText
-    private lateinit var swImageWatermark: SwitchCompat
+    private lateinit var swImageWatermark: Switch
     private lateinit var tvStatus: TextView
     private lateinit var tvSkillsEntry: TextView
     private lateinit var tvMemoryEntry: TextView
