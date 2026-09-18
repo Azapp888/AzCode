@@ -37,6 +37,28 @@ object Markdown {
     }
 
     /**
+     * 把文本渲染成带公式的 [CharSequence]，用于 [TextView] 之外无法直接走
+     * [Markwon.setMarkdown] 的控件（如 RadioButton / CheckBox 的选项文案）。
+     * 渲染失败时原样返回，保证文案不丢失。
+     */
+    fun toSpanned(context: Context, md: String): CharSequence =
+        runCatching { markwon(context).toMarkdown(normalizeLatex(md)) }.getOrDefault(md)
+
+    /**
+     * 单行、无块级元素的文本（会话标题、模型名、按钮文案等）走轻量渲染：
+     * 只做行内公式替换，避免 Markwon 把标题里的 `#`、`-` 等当成结构语法。
+     */
+    fun renderInline(tv: TextView, text: String) {
+        val normalized = normalizeLatex(text)
+        if (normalized == text) {
+            tv.text = text
+            return
+        }
+        runCatching { markwon(tv.context).setMarkdown(tv, normalized) }
+            .onFailure { tv.text = text }
+    }
+
+    /**
      * 把单 `$` 行内公式改写成 ext-latex 能识别的 `$$...$$`。
      * 会跳过代码块与行内代码，避免误伤代码里的 `$`。
      */

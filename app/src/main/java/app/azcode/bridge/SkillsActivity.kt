@@ -44,8 +44,10 @@ class SkillsActivity : AppCompatActivity() {
         skills.forEach { skill ->
             val v = layoutInflater.inflate(R.layout.item_skill, container, false)
             v.findViewById<TextView>(R.id.tvName).text = skill.name
-            v.findViewById<TextView>(R.id.tvDesc).text =
-                skill.description.ifBlank { "（无描述）" }
+            Markdown.render(
+                v.findViewById(R.id.tvDesc),
+                skill.description.ifBlank { "（无描述）" },
+            )
             v.findViewById<TextView>(R.id.tvSource).text =
                 skill.source.ifBlank { getString(R.string.skill_custom_source) }
 

@@ -254,7 +254,7 @@ class MainActivity : AppCompatActivity() {
         val prefix = if (question.total > 1) {
             getString(R.string.question_progress, question.index, question.total)
         } else ""
-        title.text = prefix + question.question
+        Markdown.render(title, prefix + question.question)
 
         var confirmAction: () -> String? = { null }
 
@@ -262,7 +262,7 @@ class MainActivity : AppCompatActivity() {
             val boxes = mutableListOf<CheckBox>()
             question.options.forEach { option ->
                 val cb = CheckBox(this).apply {
-                    text = option
+                    text = Markdown.toSpanned(this@MainActivity, option)
                     textSize = 14f
                     setTextColor(getColor(R.color.text_primary))
                 }
@@ -290,7 +290,7 @@ class MainActivity : AppCompatActivity() {
             question.options.forEach { option ->
                 group.addView(RadioButton(this).apply {
                     id = View.generateViewId()
-                    text = option
+                    text = Markdown.toSpanned(this@MainActivity, option)
                     textSize = 14f
                     setTextColor(getColor(R.color.text_primary))
                 })
@@ -920,7 +920,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun addUserMessage(text: String, attachmentNames: List<String> = emptyList(), persist: Boolean = true) {
         val v = layoutInflater.inflate(R.layout.item_msg_user, chatContainer, false)
-        v.findViewById<TextView>(R.id.tvMsg).text = text
+        // 用户输入按纯文本处理，只把 `$...$` 公式渲染出来，避免 `#`、`-` 被当成 markdown 结构。
+        Markdown.renderInline(v.findViewById(R.id.tvMsg), text)
         if (attachmentNames.isNotEmpty()) {
             val tvAtt = v.findViewById<TextView>(R.id.tvAttachments)
             tvAtt.visibility = View.VISIBLE
@@ -1007,7 +1008,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun addNotice(text: String, persist: Boolean = true) {
         val v = layoutInflater.inflate(R.layout.item_msg_system, chatContainer, false)
-        v.findViewById<TextView>(R.id.tvMsg).text = text
+        Markdown.render(v.findViewById(R.id.tvMsg), text)
         chatContainer.addView(v)
         if (persist) appendTurn(ChatTurn(kind = "notice", text = text))
         scrollToBottom()
@@ -1015,7 +1016,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun addError(text: String, persist: Boolean = true) {
         val v = layoutInflater.inflate(R.layout.item_msg_error, chatContainer, false)
-        v.findViewById<TextView>(R.id.tvMsg).text = text
+        Markdown.render(v.findViewById(R.id.tvMsg), text)
         chatContainer.addView(v)
         if (persist) appendTurn(ChatTurn(kind = "error", text = text))
         scrollToBottom()
@@ -1028,7 +1029,7 @@ class MainActivity : AppCompatActivity() {
         v.findViewById<TextView>(R.id.tvToolName).text = toolLabel(name)
         card.status.text = getString(R.string.tool_running)
         card.status.setTextColor(colorRunning)
-        card.args.text = prettyArgs(argsRaw)
+        Markdown.render(card.args, prettyArgs(argsRaw))
         v.findViewById<View>(R.id.toolHeader).setOnClickListener { card.toggle() }
         chatContainer.addView(v)
         card.turnName = name
@@ -1042,7 +1043,7 @@ class MainActivity : AppCompatActivity() {
         val card = activeTool ?: return
         card.status.text = getString(if (ok) R.string.tool_ok else R.string.tool_fail)
         card.status.setTextColor(if (ok) colorOk else colorFail)
-        card.result.text = truncate(prettyResult(output), 3000)
+        Markdown.render(card.result, truncate(prettyResult(output), 3000))
         if (!ok) card.expand()
         if (persist) {
             val last = session.turns.lastOrNull()

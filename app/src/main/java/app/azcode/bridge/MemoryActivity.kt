@@ -71,7 +71,8 @@ class MemoryActivity : AppCompatActivity() {
 
         val tvContent = v.findViewById<TextView>(R.id.tvContent)
         val isRevealed = !entry.sensitive || revealed.contains(entry.id)
-        tvContent.text = if (entry.sensitive && !isRevealed) MemoryStore.mask(entry.content) else entry.content
+        val contentText = if (entry.sensitive && !isRevealed) MemoryStore.mask(entry.content) else entry.content
+        Markdown.render(tvContent, contentText)
         if (entry.sensitive) {
             tvContent.setOnClickListener {
                 if (revealed.contains(entry.id)) revealed.remove(entry.id) else revealed.add(entry.id)
