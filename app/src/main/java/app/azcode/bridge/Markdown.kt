@@ -12,6 +12,7 @@ import io.noties.markwon.ext.latex.JLatexMathTheme
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
 import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tasklist.TaskListPlugin
+import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
 
 /**
  * 基于 Markwon 的 markdown 渲染辅助。所有助手文本统一走此渲染，
@@ -27,7 +28,8 @@ object Markdown {
 
     fun render(tv: TextView, md: String) {
         tv.movementMethod = LinkMovementMethod.getInstance()
-        markwon(tv.context).setMarkdown(tv, md)
+        runCatching { markwon(tv.context).setMarkdown(tv, md) }
+            .onFailure { tv.text = md }
     }
 
     /** 提取 markdown 图片语法 `![alt](url)` 中的 URL，返回 (替换掉图片语法的文本, 图片 URL 列表)。 */
@@ -43,6 +45,11 @@ object Markdown {
 
     private val IMAGE_RE = Regex("!\\[[^\\]]*]\\(([^)\\s]+)\\)")
 
+    /** 公式不做背景色，与消息气泡融为一体。 */
+    private val TRANSPARENT_BACKGROUND = object : JLatexMathTheme.BackgroundProvider {
+        override fun provide(): Drawable = ColorDrawable(Color.TRANSPARENT)
+    }
+
     private fun markwon(context: Context): Markwon {
         instance?.let { return it }
         synchronized(this) {
@@ -51,25 +58,31 @@ object Markdown {
             val textColor = runCatching { app.getColor(R.color.text_primary) }.getOrDefault(Color.BLACK)
             @Suppress("DEPRECATION")
             val density = app.resources.displayMetrics.scaledDensity
-            val m = Markwon.builder(app)
-                .usePlugin(TablePlugin.create(app))
-                .usePlugin(StrikethroughPlugin.create())
-                .usePlugin(TaskListPlugin.create(app))
-                .usePlugin(
-                    JLatexMathPlugin.create(density) { builder ->
-                        builder.inlinesEnabled(true)
-                        builder.theme().textColor(textColor)
-                        builder.theme().backgroundProvider(TRANSPARENT_BACKGROUND)
-                    },
-                )
-                .build()
+            val m = runCatching {
+                Markwon.builder(app)
+                    .usePlugin(MarkwonInlineParserPlugin.create())
+                    .usePlugin(TablePlugin.create(app))
+                    .usePlugin(StrikethroughPlugin.create())
+                    .usePlugin(TaskListPlugin.create(app))
+                    .usePlugin(
+                        JLatexMathPlugin.create(density) { builder ->
+                            builder.inlinesEnabled(true)
+                            builder.theme().textColor(textColor)
+                            builder.theme().backgroundProvider(TRANSPARENT_BACKGROUND)
+                        },
+                    )
+                    .build()
+            }.getOrElse {
+                // 公式插件初始化失败时退回基础 markdown，保证消息仍可阅读。
+                Markwon.builder(app)
+                    .usePlugin(MarkwonInlineParserPlugin.create())
+                    .usePlugin(TablePlugin.create(app))
+                    .usePlugin(StrikethroughPlugin.create())
+                    .usePlugin(TaskListPlugin.create(app))
+                    .build()
+            }
             instance = m
             return m
         }
-    }
-
-    /** 公式不做背景色，与消息气泡融为一体。 */
-    private val TRANSPARENT_BACKGROUND = object : JLatexMathTheme.BackgroundProvider {
-        override fun provide(): Drawable = ColorDrawable(Color.TRANSPARENT)
     }
 }
