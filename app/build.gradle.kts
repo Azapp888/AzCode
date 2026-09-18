@@ -11,8 +11,8 @@ android {
         applicationId = "app.azcode.bridge"
         minSdk = 26
         targetSdk = 34
-        versionCode = 31
-        versionName = "1.4.2"
+        versionCode = 32
+        versionName = "1.5.0"
     }
 
     buildTypes {
@@ -45,4 +45,8 @@ dependencies {
     implementation("io.noties.markwon:ext-tables:4.6.2")
     implementation("io.noties.markwon:ext-strikethrough:4.6.2")
     implementation("io.noties.markwon:ext-tasklist:4.6.2")
+    implementation("io.noties.markwon:ext-latex:4.6.2")
+    implementation("ru.noties:jlatexmath-android:0.2.0")
+    implementation("ru.noties:jlatexmath-android-font-greek:0.2.0")
+    implementation("ru.noties:jlatexmath-android-font-cyrillic:0.2.0")
 }
