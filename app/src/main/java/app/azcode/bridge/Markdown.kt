@@ -152,8 +152,13 @@ object Markdown {
             instance?.let { return it }
             val app = context.applicationContext
             val textColor = runCatching { app.getColor(R.color.text_primary) }.getOrDefault(Color.BLACK)
+            // create(inlineTextSize, blockTextSize, configure)：两个字号单位是 px。
+            // 用单参重载会把块级字号留成 0，公式会被画成一个点，因此显式传两个字号。
+            val metrics = app.resources.displayMetrics
             @Suppress("DEPRECATION")
-            val density = app.resources.displayMetrics.scaledDensity
+            val fontScale = app.resources.configuration.fontScale
+            val inlineSizePx = 16f * metrics.density * fontScale
+            val blockSizePx = 17f * metrics.density * fontScale
             val m = runCatching {
                 Markwon.builder(app)
                     .usePlugin(MarkwonInlineParserPlugin.create())
@@ -161,7 +166,7 @@ object Markdown {
                     .usePlugin(StrikethroughPlugin.create())
                     .usePlugin(TaskListPlugin.create(app))
                     .usePlugin(
-                        JLatexMathPlugin.create(density) { builder ->
+                        JLatexMathPlugin.create(inlineSizePx, blockSizePx) { builder ->
                             builder.inlinesEnabled(true)
                             builder.theme().textColor(textColor)
                             builder.theme().backgroundProvider(TRANSPARENT_BACKGROUND)

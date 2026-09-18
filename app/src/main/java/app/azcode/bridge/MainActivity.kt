@@ -682,21 +682,18 @@ class MainActivity : AppCompatActivity() {
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
         )
-        val popupWidth = content.measuredWidth
         val popupHeight = content.measuredHeight
-        val loc = IntArray(2)
-        btnAttach.getLocationOnScreen(loc)
-        val gap = dp(6)
+        val gap = dp(8)
 
-        // 气泡右边缘对齐附件按钮右边缘。
-        val anchorRight = loc[0] + btnAttach.width
-        val xOff = anchorRight - popupWidth
+        // 锚定在输入框上方：左边缘与附件按钮对齐，整体位于输入区之上。
+        val anchor = findViewById<View>(R.id.inputBar)
+        val anchorLoc = IntArray(2)
+        anchor.getLocationOnScreen(anchorLoc)
+        val btnLoc = IntArray(2)
+        btnAttach.getLocationOnScreen(btnLoc)
+        val xOff = btnLoc[0] - anchorLoc[0]
 
-        if (loc[1] > popupHeight + gap) {
-            popup.showAsDropDown(btnAttach, xOff, -(popupHeight + btnAttach.height + gap), Gravity.START)
-        } else {
-            popup.showAsDropDown(btnAttach, xOff, gap, Gravity.START)
-        }
+        popup.showAsDropDown(anchor, xOff, -(popupHeight + anchor.height + gap), Gravity.START)
     }
 
     private fun ensureCameraThenCapture() {
