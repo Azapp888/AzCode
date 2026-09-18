@@ -246,6 +246,14 @@
     <string name="section_memory">记忆</string>
     <string name="memory_entry">记忆（共 %1$d 条）</string>
     <string name="title_memory">记忆</string>
+    <string name="title_logs">运行日志</string>
+    <string name="logs_value">共 %1$d 个文件</string>
+    <string name="logs_empty">暂无日志。应用出现闪退或异常后，这里会记录详细信息。</string>
+    <string name="btn_copy_logs">复制全部</string>
+    <string name="btn_clear_logs">清空日志</string>
+    <string name="logs_copied">日志已复制到剪贴板</string>
+    <string name="logs_cleared">日志已清空</string>
+    <string name="title_crash_logs">运行日志</string>
     <string name="btn_add_memory">添加记忆</string>
     <string name="memory_empty">还没有记忆。点右上角「+」分条保存 token、习惯或技能方法。</string>
     <string name="memory_category_label">分类</string>

@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
+import android.app.AlertDialog
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Switch
@@ -23,6 +24,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvStatus: TextView
     private lateinit var tvSkillsEntry: TextView
     private lateinit var tvMemoryEntry: TextView
+    private lateinit var tvLogsEntry: TextView
     private lateinit var tvModelEntry: TextView
     private lateinit var tvGithubEntry: TextView
     private lateinit var tvVersion: TextView
@@ -52,6 +54,7 @@ class SettingsActivity : AppCompatActivity() {
         tvStatus = findViewById(R.id.tvStatus)
         tvSkillsEntry = findViewById(R.id.tvSkillsEntry)
         tvMemoryEntry = findViewById(R.id.tvMemoryEntry)
+        tvLogsEntry = findViewById(R.id.tvLogsEntry)
         tvVersion = findViewById(R.id.tvVersion)
         btnBridge = findViewById(R.id.btnBridge)
 
@@ -85,6 +88,7 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.rowMemory).setOnClickListener {
             startActivity(Intent(this, MemoryActivity::class.java))
         }
+        findViewById<View>(R.id.rowLogs).setOnClickListener { showLogs() }
         findViewById<View>(R.id.btnAccessibility).setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
@@ -214,6 +218,36 @@ class SettingsActivity : AppCompatActivity() {
         } else {
             getString(R.string.settings_value_not_connected)
         }
+
+        tvLogsEntry.text = getString(R.string.logs_value, CrashLog.files(this).size)
+    }
+
+    /** 展示运行日志：可复制全部或清空，便于把闪退信息反馈出来。 */
+    private fun showLogs() {
+        val content = CrashLog.readAll(this).ifBlank { getString(R.string.logs_empty) }
+        val tv = TextView(this).apply {
+            text = content
+            textSize = 11f
+            typeface = android.graphics.Typeface.MONOSPACE
+            setTextIsSelectable(true)
+            setPadding(28, 28, 28, 28)
+        }
+        val scroll = android.widget.ScrollView(this).apply { addView(tv) }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.title_logs)
+            .setView(scroll)
+            .setPositiveButton(R.string.btn_copy_logs) { _, _ ->
+                val cm = getSystemService(android.content.ClipboardManager::class.java)
+                cm?.setPrimaryClip(android.content.ClipData.newPlainText("AzCode logs", content))
+                Toast.makeText(this, R.string.logs_copied, Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton(R.string.btn_clear_logs) { _, _ ->
+                CrashLog.clear(this)
+                refreshStatus()
+                Toast.makeText(this, R.string.logs_cleared, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
     }
 
     private fun maybeRequestNotificationPermission() {

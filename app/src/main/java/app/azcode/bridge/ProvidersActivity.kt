@@ -176,8 +176,10 @@ class ProvidersActivity : AppCompatActivity() {
         }
         Thread({
             val result = runCatching { ProviderImporter.parse(this, content) }
+                .onFailure { CrashLog.w("ProvidersActivity", "解析导入内容失败: ${it.message}", it) }
             runOnUiThread {
-                progress.dismiss()
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                runCatching { progress.dismiss() }
                 result.onSuccess { accounts ->
                     if (accounts.isEmpty()) {
                         Toast.makeText(this, R.string.import_none, Toast.LENGTH_LONG).show()

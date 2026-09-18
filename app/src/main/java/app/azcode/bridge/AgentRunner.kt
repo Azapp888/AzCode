@@ -74,11 +74,15 @@ class AgentRunner(
 ) {
     @Volatile private var cancelled = false
 
+    /** 供 UI 判断任务是否已被请求取消，用于中断阻塞等待。 */
+    val isCancelled: Boolean get() = cancelled
+
     /** 本次任务选定的生图提供商与模型（用户要求生成图片时解析）。 */
     private var selectedImageProvider: ProviderAccount? = null
     private var selectedImageModel: String? = null
 
     private companion object {
+        const val TAG = "AgentRunner"
         /** 上下文估算字符数超过该阈值时触发压缩。 */
         const val COMPACT_THRESHOLD = 40000
         /** 压缩时保留最近若干个 user 轮次不参与摘要。 */
@@ -124,6 +128,7 @@ class AgentRunner(
                 step++
                 if (cancelled) { listener(AgentEvent.Notice("已停止")); return }
                 listener(AgentEvent.Thinking)
+                CrashLog.i(TAG, "第 $step 步：请求模型 ${provider.model}")
 
                 messages = compactIfNeeded(messages, provider)
 
@@ -139,11 +144,13 @@ class AgentRunner(
                         ),
                     )
                 } catch (e: Exception) {
+                    CrashLog.w(TAG, "第 $step 步请求失败: ${e.message}", e)
                     if (cancelled) listener(AgentEvent.Notice("已停止"))
                     else listener(AgentEvent.Failure(e.message ?: "请求模型失败"))
                     return
                 }
                 if (cancelled) { listener(AgentEvent.Notice("已停止")); return }
+                CrashLog.i(TAG, "第 $step 步：模型返回，工具调用 ${reply.toolCalls.size} 个")
 
                 messages.put(assistantMessage(reply))
 
@@ -657,6 +664,7 @@ class AgentRunner(
     private fun compactIfNeeded(messages: JSONArray, provider: ProviderAccount): JSONArray {
         if (estimateChars(messages) < COMPACT_THRESHOLD) return messages
         if (messages.length() <= 1) return messages
+        CrashLog.i(TAG, "上下文过长，开始压缩历史")
 
         val userIndices = mutableListOf<Int>()
         for (i in 1 until messages.length()) {

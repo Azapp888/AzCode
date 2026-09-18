@@ -34,6 +34,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.Calendar
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -183,9 +184,14 @@ class MainActivity : AppCompatActivity() {
         destroyed = true
         pendingQuestionLatch?.countDown()
         runner?.cancel()
+        // 让排队中的会话写入先落盘，再释放线程（不阻塞主线程）。
+        runCatching { saveExecutor.shutdown() }
         runCatching { rikka.shizuku.Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener) }
         super.onDestroy()
     }
+
+    /** 弹窗前确认 Activity 仍可用，避免已销毁后 show 抛 BadTokenException 导致闪退。 */
+    private fun canShowUi(): Boolean = !destroyed && !isFinishing && !isDestroyed
 
     /** 返回手势（含侧滑）默认会直接退出应用，改为两秒内二次返回才退出，避免误触。 */
     @Deprecated("Deprecated in Java")
@@ -221,7 +227,7 @@ class MainActivity : AppCompatActivity() {
         val answer = AtomicReference<String?>(null)
         pendingQuestionLatch = latch
         runOnUiThread {
-            if (destroyed) {
+            if (!canShowUi()) {
                 latch.countDown()
                 return@runOnUiThread
             }
@@ -230,9 +236,15 @@ class MainActivity : AppCompatActivity() {
                 latch.countDown()
             }
         }
-        runCatching { latch.await() }
+        // 分段等待并检查取消/销毁，避免用户点停止或退出后仍永久阻塞工作线程。
+        while (latch.count > 0) {
+            if (destroyed || runner?.isCancelled == true) break
+            if (runCatching { latch.await(150, TimeUnit.MILLISECONDS) }.getOrDefault(false)) break
+        }
         pendingQuestionLatch = null
-        return answer.get()
+        // 等待期间若被取消，收起未作答的问答区，避免残留面板。
+        if (latch.count > 0L) runOnUiThread { runCatching { findViewById<View>(R.id.questionPanel).visibility = View.GONE } }
+        return if (latch.count == 0L) answer.get() else null
     }
 
     /**
@@ -362,8 +374,21 @@ class MainActivity : AppCompatActivity() {
         tvHeaderTitle.text = session.title.ifBlank { getString(R.string.session_default_title) }
     }
 
+    /**
+     * 会话保存移到单线程执行器：消息渲染不再被磁盘 I/O 阻塞（长会话下易触发 ANR），
+     * 单线程也保证同一会话的写入顺序，配合 [SessionStore.save] 的原子写避免文件损坏。
+     */
+    private val saveExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "azcode-save").apply { isDaemon = true }
+    }
+
     private fun persistSession() {
-        SessionStore.save(this, session)
+        val snapshot = session
+        val app = applicationContext
+        saveExecutor.execute {
+            runCatching { SessionStore.save(app, snapshot) }
+                .onFailure { CrashLog.w(TAG, "保存会话失败: ${it.message}", it) }
+        }
     }
 
     // ==================== 模型 / 思考深度 ====================
@@ -532,6 +557,7 @@ class MainActivity : AppCompatActivity() {
     /** 拉满思考深度前提示可能的额外费用。 */
     private fun promptMaxDepth() {
         maxDepthPrompting = true
+        if (!canShowUi()) return
         AlertDialog.Builder(this)
             .setTitle(R.string.depth_max_title)
             .setMessage(R.string.depth_max_message)
@@ -810,6 +836,7 @@ class MainActivity : AppCompatActivity() {
         runner = r
         val runningSession = session
         setRunning(true)
+        CrashLog.i(TAG, "任务开始 session=${runningSession.id} 附件=${attachments.size} 模型=${AgentConfig.activeProvider(this)?.model}")
 
         worker = Thread({
             try {
@@ -824,17 +851,23 @@ class MainActivity : AppCompatActivity() {
                 }
                 r.run(displayTask, prepared, runningSession)
             } catch (e: Exception) {
-                runOnUiThread { handleEvent(AgentEvent.Failure(e.message ?: "任务异常结束")) }
+                CrashLog.e(TAG, "任务线程异常: ${e.message}", e)
+                runOnUiThread { if (!destroyed) handleEvent(AgentEvent.Failure(e.message ?: "任务异常结束")) }
             } finally {
-                SessionStore.save(this, runningSession)
-                val success = taskError == null && !stoppedByUser
-                TaskNotifier.notifyFinished(this, runningSession.title, lastSummary, success)
+                // 保存与通知即使失败也不能让线程静默退出，否则 UI 会一直停在「运行中」。
+                runCatching { SessionStore.save(this, runningSession) }
+                    .onFailure { CrashLog.w(TAG, "任务结束保存会话失败: ${it.message}", it) }
+                runCatching {
+                    val success = taskError == null && !stoppedByUser
+                    TaskNotifier.notifyFinished(this, runningSession.title, lastSummary, success)
+                }.onFailure { CrashLog.w(TAG, "任务结束通知失败: ${it.message}", it) }
                 runOnUiThread {
                     if (!destroyed) {
                         runner = null
                         setRunning(false)
                     }
                 }
+                CrashLog.i(TAG, "任务结束 stopped=$stoppedByUser error=$taskError")
             }
         }, "azcode-agent").apply { start() }
     }
@@ -842,6 +875,8 @@ class MainActivity : AppCompatActivity() {
     private fun stopTask() {
         stoppedByUser = true
         runner?.cancel()
+        // 立即释放正在等待作答的问答区，让工作线程马上从等待中返回。
+        pendingQuestionLatch?.countDown()
         btnStop.isEnabled = false
         addNotice(getString(R.string.stopping))
     }
@@ -867,6 +902,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleEvent(event: AgentEvent) {
         if (destroyed) return
+        // 单条事件渲染失败（如畸形 markdown/公式）不应让整个应用闪退。
+        runCatching { dispatchEvent(event) }
+            .onFailure {
+                CrashLog.e(TAG, "渲染事件失败: $event", it)
+                runCatching { removeTyping() }
+            }
+    }
+
+    private fun dispatchEvent(event: AgentEvent) {
         when (event) {
             is AgentEvent.Thinking -> showTyping()
             is AgentEvent.AssistantText -> {
@@ -963,6 +1007,7 @@ class MainActivity : AppCompatActivity() {
 
     /** 全屏查看图片，并提供保存到相册的入口。 */
     private fun showImageDialog(url: String) {
+        if (!canShowUi()) return
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(24), dp(16), dp(24))
@@ -994,12 +1039,13 @@ class MainActivity : AppCompatActivity() {
             Thread {
                 val ok = ImageLoader.saveToGallery(this, url)
                 runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
                     Toast.makeText(
                         this,
                         if (ok) R.string.image_saved else R.string.image_save_failed,
                         Toast.LENGTH_SHORT,
                     ).show()
-                    if (ok) dialog.dismiss()
+                    if (ok) runCatching { dialog.dismiss() }
                 }
             }.start()
         }
@@ -1046,11 +1092,17 @@ class MainActivity : AppCompatActivity() {
         Markdown.render(card.result, truncate(prettyResult(output), 3000))
         if (!ok) card.expand()
         if (persist) {
-            val last = session.turns.lastOrNull()
-            if (last != null && last.kind == "tool") {
-                session.turns[session.turns.lastIndex] = last.copy(toolOk = ok, toolResult = output)
-                persistSession()
+            // 在列表锁内完成「读取最后一条 + 替换」，避免与工作线程保存时产生竞态。
+            val updated = synchronized(session.turns) {
+                val last = session.turns.lastOrNull()
+                if (last != null && last.kind == "tool") {
+                    session.turns[session.turns.lastIndex] = last.copy(toolOk = ok, toolResult = output)
+                    true
+                } else {
+                    false
+                }
             }
+            if (updated) persistSession()
         }
         activeTool = null
         scrollToBottom()
@@ -1191,6 +1243,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun confirmDeleteSession(s: ChatSession) {
+        if (!canShowUi()) return
         AlertDialog.Builder(this)
             .setTitle(R.string.delete_session_title)
             .setMessage(
@@ -1216,6 +1269,7 @@ class MainActivity : AppCompatActivity() {
 
     /** 顶栏绘画按钮：输入描述后按生图任务发送，由 Agent 调用 generate_image。 */
     private fun showDrawDialog() {
+        if (!canShowUi()) return
         val content = layoutInflater.inflate(R.layout.dialog_draw, null)
         val et = content.findViewById<EditText>(R.id.etDrawPrompt)
         AlertDialog.Builder(this)
@@ -1235,6 +1289,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val TAG = "MainActivity"
         private const val REQ_NOTIF = 2002
     }
 }

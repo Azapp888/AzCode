@@ -128,6 +128,21 @@
                     <ImageView style="@style/SettingsRowChevron" />
                 </LinearLayout>
 
+                <LinearLayout
+                    android:id="@+id/rowLogs"
+                    style="@style/SettingsRow">
+
+                    <ImageView style="@style/SettingsRowIcon" android:src="@drawable/ic_prompt" />
+
+                    <TextView style="@style/SettingsRowTitle" android:text="@string/title_logs" />
+
+                    <TextView
+                        android:id="@+id/tvLogsEntry"
+                        style="@style/SettingsRowValue" />
+
+                    <ImageView style="@style/SettingsRowChevron" />
+                </LinearLayout>
+
                 <LinearLayout style="@style/SettingsRow" android:clickable="false" android:focusable="false">
 
                     <ImageView style="@style/SettingsRowIcon" android:src="@drawable/ic_step" />

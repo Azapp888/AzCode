@@ -105,7 +105,9 @@ class GitHubActivity : AppCompatActivity() {
         tvStatus.text = getString(R.string.github_status_on, "…", repo, branch)
         Thread({
             val result = runCatching { GitHubClient.whoami(token).optString("login") }
+                .onFailure { CrashLog.w("GitHubActivity", "校验 Token 失败: ${it.message}", it) }
             runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess { login ->
                     GitHubConfig.setLogin(this, login)
                     tvStatus.text = getString(R.string.github_status_on, login, repo, branch)

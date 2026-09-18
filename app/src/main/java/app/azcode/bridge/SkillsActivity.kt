@@ -221,6 +221,7 @@ class SkillsActivity : AppCompatActivity() {
                 emptyList()
             }
             runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
                 tvInstallStatus.visibility = View.GONE
                 if (plugins.isEmpty()) {
                     toast(getString(R.string.plugin_scan_empty))
@@ -252,11 +253,14 @@ class SkillsActivity : AppCompatActivity() {
                 val skill = GitHubSkillFetcher.install(url)
                 SkillStore.add(this, skill)
                 runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
                     tvInstallStatus.text = getString(R.string.skill_installed, skill.name)
                     refresh()
                 }
             } catch (e: Exception) {
+                CrashLog.w("SkillsActivity", "安装技能失败: ${e.message}", e)
                 runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
                     tvInstallStatus.text = getString(R.string.skill_install_failed, e.message ?: "未知错误")
                 }
             }

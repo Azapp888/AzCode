@@ -13,6 +13,7 @@ import com.google.android.material.color.DynamicColors
 class AzCodeApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        CrashLog.install(this)
         runCatching { DynamicColors.applyToActivitiesIfAvailable(this) }
     }
 }

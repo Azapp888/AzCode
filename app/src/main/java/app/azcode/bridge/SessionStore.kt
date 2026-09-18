@@ -4,6 +4,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.Collections
 import java.util.UUID
 
 /**
@@ -23,13 +24,16 @@ data class ChatTurn(
 
 /**
  * 一个「任务」会话：拥有独立标题、聊天记录，以及供模型续接的上下文消息。
+ *
+ * [turns] 会被 UI 线程（追加消息）与工作线程（任务结束时保存）同时访问，
+ * 因此使用同步列表，避免 `ConcurrentModificationException` 导致闪退。
  */
 data class ChatSession(
     val id: String,
     var title: String,
     var updatedAt: Long,
-    val turns: MutableList<ChatTurn> = mutableListOf(),
-    var agentMessages: String = "[]",
+    val turns: MutableList<ChatTurn> = Collections.synchronizedList(mutableListOf()),
+    @Volatile var agentMessages: String = "[]",
 )
 
 /**
@@ -39,6 +43,9 @@ object SessionStore {
 
     private const val PREFS = "azcode_sessions"
     private const val KEY_CURRENT = "current_id"
+
+    /** 保护临时文件写入与重命名，避免同一会话被并发写。 */
+    private val WRITE_LOCK = Any()
 
     private fun dir(ctx: Context) = File(ctx.filesDir, "sessions").apply { mkdirs() }
     private fun file(ctx: Context, id: String) = File(dir(ctx), "$id.json")
@@ -78,10 +85,17 @@ object SessionStore {
         }
     }
 
+    /**
+     * 原子写盘：先写临时文件再 rename，避免 UI 线程与工作线程同时保存时
+     * 产生半个文件导致会话 JSON 损坏、下次读取失败而丢会话。
+     *
+     * [turns] 遍历时持有列表锁，防止与 UI 线程的追加操作并发。
+     */
     fun save(ctx: Context, session: ChatSession) {
         session.updatedAt = System.currentTimeMillis()
         val turns = JSONArray()
-        session.turns.forEach { t ->
+        val snapshot = synchronized(session.turns) { session.turns.toList() }
+        snapshot.forEach { t ->
             turns.put(JSONObject().apply {
                 put("kind", t.kind)
                 put("text", t.text)
@@ -100,7 +114,16 @@ object SessionStore {
             put("turns", turns)
             put("agentMessages", session.agentMessages)
         }
-        file(ctx, session.id).writeText(obj.toString())
+        val target = file(ctx, session.id)
+        val tmp = File(target.parentFile, "${session.id}.tmp")
+        synchronized(WRITE_LOCK) {
+            tmp.writeText(obj.toString())
+            if (!tmp.renameTo(target)) {
+                // rename 在个别文件系统上可能失败，退化为直接写。
+                target.writeText(obj.toString())
+                tmp.delete()
+            }
+        }
     }
 
     private fun read(f: File): ChatSession? = runCatching {
@@ -127,7 +150,7 @@ object SessionStore {
             id = obj.getString("id"),
             title = obj.optString("title", "新任务"),
             updatedAt = obj.optLong("updatedAt"),
-            turns = turns,
+            turns = Collections.synchronizedList(turns),
             agentMessages = obj.optString("agentMessages", "[]"),
         )
     }.getOrNull()
