@@ -5,7 +5,6 @@ import android.app.Dialog
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
-import androidx.drawerlayout.widget.DrawerLayout
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -13,7 +12,6 @@ import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
-import android.text.format.DateUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -46,7 +44,6 @@ import java.util.concurrent.atomic.AtomicReference
  */
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var drawerRoot: DrawerLayout
     private lateinit var chatContainer: LinearLayout
     private lateinit var svChat: ScrollView
     private lateinit var etTask: EditText
@@ -59,6 +56,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnModelBox: TextView
     private lateinit var sessionsContainer: LinearLayout
     private lateinit var tvSessionsEmpty: TextView
+    private lateinit var scrim: View
+    private lateinit var historyPanel: View
+    private lateinit var svHistory: ScrollView
+    private var historyVisible = false
     private lateinit var tvDepthLabel: TextView
     private lateinit var depthSlider: DepthSliderView
     private var modelPopup: PopupWindow? = null
@@ -129,7 +130,6 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        drawerRoot = findViewById(R.id.drawerRoot)
         chatContainer = findViewById(R.id.chatContainer)
         svChat = findViewById(R.id.svChat)
         etTask = findViewById(R.id.etTask)
@@ -142,12 +142,15 @@ class MainActivity : AppCompatActivity() {
         btnModelBox = findViewById(R.id.btnModelBox)
         sessionsContainer = findViewById(R.id.sessionsContainer)
         tvSessionsEmpty = findViewById(R.id.tvSessionsEmpty)
+        scrim = findViewById(R.id.scrim)
+        historyPanel = findViewById(R.id.historyPanel)
+        svHistory = findViewById(R.id.svHistory)
 
-        findViewById<View>(R.id.btnMenu).setOnClickListener {
-            drawerRoot.openDrawer(findViewById<View>(R.id.drawerPanel))
-        }
+        findViewById<View>(R.id.btnMenu).setOnClickListener { toggleHistory() }
+        findViewById<View>(R.id.btnHistoryClose).setOnClickListener { hideHistory() }
+        scrim.setOnClickListener { hideHistory() }
+        findViewById<View>(R.id.btnNewChat).setOnClickListener { newSession() }
         findViewById<View>(R.id.btnDraw).setOnClickListener { showDrawDialog() }
-        findViewById<View>(R.id.btnNewSession).setOnClickListener { newSession() }
         findViewById<View>(R.id.btnSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
@@ -190,8 +193,8 @@ class MainActivity : AppCompatActivity() {
     /** 返回手势（含侧滑）默认会直接退出应用，改为两秒内二次返回才退出，避免误触。 */
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (drawerRoot.isDrawerOpen(findViewById<View>(R.id.drawerPanel))) {
-            drawerRoot.closeDrawer(findViewById<View>(R.id.drawerPanel))
+        if (historyVisible) {
+            hideHistory()
             return
         }
         val panel = findViewById<View>(R.id.questionPanel)
@@ -1113,18 +1116,49 @@ class MainActivity : AppCompatActivity() {
         svChat.post { svChat.fullScroll(View.FOCUS_DOWN) }
     }
 
-    // ==================== 侧边栏 ====================
+    // ==================== 历史记录（顶部下拉） ====================
+
+    private fun toggleHistory() {
+        if (historyVisible) hideHistory() else showHistory()
+    }
+
+    private fun showHistory() {
+        refreshDrawer()
+        historyVisible = true
+        scrim.alpha = 0f
+        scrim.visibility = View.VISIBLE
+        historyPanel.visibility = View.VISIBLE
+        historyPanel.post {
+            historyPanel.translationY = -historyPanel.height.toFloat()
+            historyPanel.animate().translationY(0f).setDuration(200).start()
+            scrim.animate().alpha(1f).setDuration(200).start()
+        }
+    }
+
+    private fun hideHistory() {
+        if (!historyVisible) return
+        historyVisible = false
+        historyPanel.animate()
+            .translationY(-historyPanel.height.toFloat())
+            .setDuration(180)
+            .withEndAction {
+                historyPanel.visibility = View.GONE
+                scrim.visibility = View.GONE
+            }
+            .start()
+        scrim.animate().alpha(0f).setDuration(180).start()
+    }
 
     private fun newSession() {
         SessionStore.create(this)
-        drawerRoot.closeDrawer(findViewById<View>(R.id.drawerPanel))
+        hideHistory()
         session = SessionStore.current(this)
         lastLoadedId = session.id
         renderSession()
         refreshDrawer()
     }
 
-    /** 重建侧边栏：会话按时间分组，当前会话高亮，行尾可删除。 */
+    /** 重建历史列表：会话按时间分组，当前会话高亮，行尾可删除。 */
     private fun refreshDrawer() {
         val container = sessionsContainer
         container.removeAllViews()
@@ -1140,6 +1174,16 @@ class MainActivity : AppCompatActivity() {
                 container.addView(drawerSection(group))
             }
             container.addView(drawerSessionRow(s, s.id == currentId))
+        }
+
+        val maxHeight = (resources.displayMetrics.heightPixels * 0.55f).toInt()
+        container.post {
+            val params = svHistory.layoutParams
+            val target = container.height.coerceAtMost(maxHeight)
+            if (params.height != target) {
+                params.height = target
+                svHistory.layoutParams = params
+            }
         }
     }
 
@@ -1170,17 +1214,12 @@ class MainActivity : AppCompatActivity() {
         )
         v.findViewById<TextView>(R.id.tvTitle).text =
             s.title.ifBlank { getString(R.string.session_default_title) }
-        val whenText = DateUtils.getRelativeTimeSpanString(
-            s.updatedAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS,
-        ).toString()
-        v.findViewById<TextView>(R.id.tvMeta).text =
-            getString(R.string.session_meta, s.turns.size, whenText)
         v.setOnClickListener {
             SessionStore.setCurrentId(this, s.id)
             session = SessionStore.get(this, s.id) ?: SessionStore.current(this)
             lastLoadedId = session.id
             renderSession()
-            drawerRoot.closeDrawer(findViewById<View>(R.id.drawerPanel))
+            hideHistory()
             refreshDrawer()
         }
         v.findViewById<View>(R.id.btnDelete).setOnClickListener { confirmDeleteSession(s) }

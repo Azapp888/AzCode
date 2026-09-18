@@ -10,34 +10,18 @@
     android:orientation="horizontal"
     android:paddingStart="12dp"
     android:paddingEnd="4dp"
-    android:paddingTop="9dp"
-    android:paddingBottom="9dp">
+    android:paddingTop="7dp"
+    android:paddingBottom="7dp">
 
-    <LinearLayout
+    <TextView
+        android:id="@+id/tvTitle"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:orientation="vertical">
-
-        <TextView
-            android:id="@+id/tvTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="@color/text_primary"
-            android:textSize="14sp" />
-
-        <TextView
-            android:id="@+id/tvMeta"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="@color/text_caption"
-            android:textSize="11sp" />
-    </LinearLayout>
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/text_primary"
+        android:textSize="12sp" />
 
     <ImageButton
         android:id="@+id/btnDelete"

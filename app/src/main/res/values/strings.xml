@@ -224,6 +224,7 @@
     <string name="title_sessions">任务历史</string>
     <string name="session_default_title">新任务</string>
     <string name="btn_new_session">新建任务</string>
+    <string name="btn_close">关闭</string>
     <string name="sessions_empty">还没有任务。点右上角「+」新建一个任务。</string>
     <string name="session_meta">%1$d 条消息 · %2$s</string>
     <string name="delete_session_title">删除任务</string>
