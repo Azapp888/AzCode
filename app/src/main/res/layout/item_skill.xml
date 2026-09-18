@@ -54,6 +54,14 @@
             android:textSize="11sp" />
 
         <ImageButton
+            android:id="@+id/btnEdit"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_edit"
+            android:contentDescription="@string/btn_edit" />
+
+        <ImageButton
             android:id="@+id/btnDelete"
             android:layout_width="36dp"
             android:layout_height="36dp"

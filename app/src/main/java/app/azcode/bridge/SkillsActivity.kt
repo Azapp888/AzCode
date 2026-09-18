@@ -27,7 +27,7 @@ class SkillsActivity : AppCompatActivity() {
         tvInstallStatus = findViewById(R.id.tvInstallStatus)
 
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
-        findViewById<View>(R.id.btnAdd).setOnClickListener { showAddDialog() }
+        findViewById<View>(R.id.btnAdd).setOnClickListener { showAddChooser() }
         findViewById<View>(R.id.btnScan).setOnClickListener { showScanDialog() }
     }
 
@@ -47,13 +47,21 @@ class SkillsActivity : AppCompatActivity() {
             v.findViewById<TextView>(R.id.tvDesc).text =
                 skill.description.ifBlank { "（无描述）" }
             v.findViewById<TextView>(R.id.tvSource).text =
-                skill.source.ifBlank { "内置" }
+                skill.source.ifBlank { getString(R.string.skill_custom_source) }
 
             val sw = v.findViewById<Switch>(R.id.swEnabled)
             sw.setOnCheckedChangeListener(null)
             sw.isChecked = skill.enabled
             sw.setOnCheckedChangeListener { _, checked ->
                 SkillStore.setEnabled(this, skill.id, checked)
+            }
+
+            v.findViewById<View>(R.id.btnEdit).setOnClickListener {
+                if (skill.id.startsWith("builtin-")) {
+                    toast(getString(R.string.warn_builtin_not_editable))
+                } else {
+                    showSkillEditor(skill)
+                }
             }
 
             v.findViewById<View>(R.id.btnDelete).setOnClickListener {
@@ -69,6 +77,85 @@ class SkillsActivity : AppCompatActivity() {
             }
             container.addView(v)
         }
+    }
+
+    /** 「+」入口：可选择新建自定义技能，或从 GitHub 安装。 */
+    private fun showAddChooser() {
+        val options = arrayOf(
+            getString(R.string.btn_new_custom_skill),
+            getString(R.string.btn_install_from_github),
+        )
+        AlertDialog.Builder(this)
+            .setTitle(R.string.dialog_add_skill_title)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showSkillEditor(null)
+                    else -> showAddDialog()
+                }
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
+    }
+
+    /**
+     * 新建或编辑技能。skill 为 null 时表示新建。
+     * 可自定义名称、简介与提示词内容。
+     */
+    private fun showSkillEditor(skill: Skill?) {
+        val content = layoutInflater.inflate(R.layout.dialog_custom_skill, null)
+        val etName = content.findViewById<EditText>(R.id.etSkillName)
+        val etDesc = content.findViewById<EditText>(R.id.etSkillDesc)
+        val etContent = content.findViewById<EditText>(R.id.etSkillContent)
+
+        if (skill != null) {
+            etName.setText(skill.name)
+            etDesc.setText(skill.description)
+            etContent.setText(skill.content)
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(
+                if (skill == null) {
+                    R.string.dialog_custom_skill_title
+                } else {
+                    R.string.dialog_edit_custom_skill_title
+                },
+            )
+            .setView(content)
+            .setPositiveButton(R.string.btn_confirm, null)
+            .setNegativeButton(R.string.btn_cancel, null)
+            .create()
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val name = etName.text.toString().trim()
+            val desc = etDesc.text.toString().trim()
+            val body = etContent.text.toString().trim()
+            when {
+                name.isBlank() -> toast(getString(R.string.warn_skill_name_required))
+                body.isBlank() -> toast(getString(R.string.warn_skill_content_required))
+                else -> {
+                    saveCustomSkill(skill, name, desc, body)
+                    dialog.dismiss()
+                }
+            }
+        }
+    }
+
+    private fun saveCustomSkill(existing: Skill?, name: String, desc: String, body: String) {
+        val id = existing?.id ?: "custom-" + System.currentTimeMillis().toString(36)
+        SkillStore.add(
+            this,
+            Skill(
+                id = id,
+                name = name,
+                description = desc,
+                content = body,
+                source = existing?.source.orEmpty(),
+                enabled = existing?.enabled ?: true,
+            ),
+        )
+        toast(getString(if (existing == null) R.string.skill_created else R.string.skill_updated, name))
+        refresh()
     }
 
     private fun showAddDialog() {

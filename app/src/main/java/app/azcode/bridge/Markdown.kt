@@ -19,6 +19,9 @@ import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
  * 支持标题、加粗/斜体、代码块、列表、引用、链接、表格、删除线、任务列表，
  * 以及 `$...$`（行内）与 `$$...$$`（块级）LaTeX 数学公式。
  * 公式由 jlatexmath-android 在本地排版，不依赖网络。
+ *
+ * 注意：Markwon 的 ext-latex 只识别 `$$...$$`，因此渲染前会把单 `$` 行内公式
+ * 规范化为 `$$...$$`（见 [normalizeLatex]）。
  * 图片链接由 [extractImages] 分离后另行下载展示。
  */
 object Markdown {
@@ -28,9 +31,102 @@ object Markdown {
 
     fun render(tv: TextView, md: String) {
         tv.movementMethod = LinkMovementMethod.getInstance()
-        runCatching { markwon(tv.context).setMarkdown(tv, md) }
+        val normalized = normalizeLatex(md)
+        runCatching { markwon(tv.context).setMarkdown(tv, normalized) }
             .onFailure { tv.text = md }
     }
+
+    /**
+     * 把单 `$` 行内公式改写成 ext-latex 能识别的 `$$...$$`。
+     * 会跳过代码块与行内代码，避免误伤代码里的 `$`。
+     */
+    fun normalizeLatex(md: String): String {
+        if (!md.contains('$')) return md
+        val out = StringBuilder(md.length + 16)
+        val lines = md.split('\n')
+        var inFence = false
+        lines.forEachIndexed { index, line ->
+            val trimmed = line.trimStart()
+            if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
+                inFence = !inFence
+                out.append(line)
+            } else if (inFence) {
+                out.append(line)
+            } else {
+                out.append(convertInlineDollars(line))
+            }
+            if (index != lines.lastIndex) out.append('\n')
+        }
+        return out.toString()
+    }
+
+    /** 单行内把 `$...$` 转为 `$$...$$`；已是 `$$...$$` 的保持原样。 */
+    private fun convertInlineDollars(line: String): String {
+        val out = StringBuilder(line.length + 8)
+        var i = 0
+        while (i < line.length) {
+            val c = line[i]
+            if (c == '`') {
+                // 行内代码整体跳过。
+                val end = line.indexOf('`', i + 1)
+                if (end < 0) {
+                    out.append(line, i, line.length)
+                    break
+                }
+                out.append(line, i, end + 1)
+                i = end + 1
+                continue
+            }
+            if (c == '\\' && i + 1 < line.length && line[i + 1] == '$') {
+                // 转义的 \$ 原样保留。
+                out.append("\\$")
+                i += 2
+                continue
+            }
+            if (c == '$') {
+                if (i + 1 < line.length && line[i + 1] == '$') {
+                    out.append("$$")
+                    i += 2
+                    continue
+                }
+                val close = line.indexOf('$', i + 1)
+                if (close > i + 1) {
+                    val body = line.substring(i + 1, close)
+                    if (looksLikeMath(body)) {
+                        out.append("$$").append(body).append("$$")
+                        i = close + 1
+                        continue
+                    }
+                }
+                // 未闭合或不像公式的单个 $，按普通字符输出。
+                out.append(c)
+                i++
+                continue
+            }
+            out.append(c)
+            i++
+        }
+        return out.toString()
+    }
+
+    /**
+     * 判断 `$...$` 中间的内容是否像数学公式，避免把「价格 5$ 和 10$」这类货币文本误转。
+     * 含数学符号或字母即视为公式；纯数字（如 `$100$`）不算。
+     */
+    private fun looksLikeMath(body: String): Boolean {
+        if (body.isEmpty() || body.length > 400) return false
+        if (body.first() == ' ' || body.last() == ' ') return false
+        if (body.contains('\n')) return false
+        var hasSymbol = false
+        var hasLetter = false
+        body.forEach { ch ->
+            if (MATH_SYMBOLS.indexOf(ch) >= 0) hasSymbol = true
+            if (ch.isLetter()) hasLetter = true
+        }
+        return hasSymbol || hasLetter
+    }
+
+    private const val MATH_SYMBOLS = "\\^_{}=+-*/<>()[]|&%"
 
     /** 提取 markdown 图片语法 `![alt](url)` 中的 URL，返回 (替换掉图片语法的文本, 图片 URL 列表)。 */
     fun extractImages(md: String): Pair<String, List<String>> {
