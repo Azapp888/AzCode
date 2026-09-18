@@ -11,8 +11,8 @@ android {
         applicationId = "app.azcode.bridge"
         minSdk = 26
         targetSdk = 34
-        versionCode = 39
-        versionName = "1.6.5"
+        versionCode = 40
+        versionName = "1.6.6"
     }
 
     buildTypes {

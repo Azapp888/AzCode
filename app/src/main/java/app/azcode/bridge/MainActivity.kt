@@ -170,8 +170,9 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         refreshDrawer()
         syncModelSelector()
-        val currentId = SessionStore.current(this).id
-        if (currentId != lastLoadedId && runner == null) {
+        // 用 SharedPreferences 中的当前 id 判断即可，无需读取解析会话文件。
+        val currentId = SessionStore.currentId(this)
+        if (currentId != null && currentId != lastLoadedId && runner == null) {
             session = SessionStore.get(this, currentId) ?: SessionStore.current(this)
             lastLoadedId = session.id
             renderSession()
@@ -352,7 +353,15 @@ class MainActivity : AppCompatActivity() {
             showWelcome()
             return
         }
-        session.turns.forEach { renderTurn(it) }
+        // 批量渲染：整个会话重建期间挂起布局与绘制，避免每条消息各触发一次
+        // measure/layout（长会话 + 公式渲染时是切换卡顿的主要来源）。
+        val snapshot = synchronized(session.turns) { session.turns.toList() }
+        svChat.suppressLayout(true)
+        try {
+            snapshot.forEach { renderTurn(it) }
+        } finally {
+            svChat.suppressLayout(false)
+        }
         scrollToBottom()
     }
 
@@ -390,6 +399,15 @@ class MainActivity : AppCompatActivity() {
                 .onFailure { CrashLog.w(TAG, "保存会话失败: ${it.message}", it) }
         }
     }
+
+    /** 历史列表扫描线程：读取磁盘与解析 JSON 不占用主线程。 */
+    private val scanExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "azcode-drawer").apply { isDaemon = true }
+    }
+
+    /** 防止历史列表重复排队扫描。 */
+    @Volatile
+    private var drawerScanning = false
 
     // ==================== 模型 / 思考深度 ====================
 
@@ -1176,20 +1194,45 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun newSession() {
-        SessionStore.create(this)
-        closeHistory()
-        session = SessionStore.current(this)
+        // create 已返回新会话对象，无需再读回文件。
+        session = SessionStore.create(this)
         lastLoadedId = session.id
+        closeHistory()
         renderSession()
         refreshDrawer()
     }
 
     /** 重建历史列表：会话按时间分组，当前会话高亮，行尾可删除。 */
     private fun refreshDrawer() {
+        // 先立即用缓存渲染，避免主线程等待磁盘；随后后台扫描一次并刷新。
+        val cached = SessionStore.cachedSummaries(this)
+        renderDrawer(cached)
+        if (drawerScanning) return
+        drawerScanning = true
+        scanExecutor.execute {
+            val fresh = runCatching { SessionStore.refreshSummaries(this) }.getOrDefault(cached)
+            runOnUiThread {
+                drawerScanning = false
+                if (!destroyed) renderDrawer(fresh)
+            }
+        }
+    }
+
+    /** 仅把当前会话高亮切到 [id]，不重建整个列表（切换会话时的快路径）。 */
+    private fun highlightDrawer(id: String) {
+        for (i in 0 until sessionsContainer.childCount) {
+            val child = sessionsContainer.getChildAt(i)
+            val tag = child.tag as? String ?: continue
+            child.setBackgroundResource(
+                if (tag == id) R.drawable.bg_nav_item_selected else R.drawable.bg_nav_item,
+            )
+        }
+    }
+
+    private fun renderDrawer(sessions: List<SessionSummary>) {
         val container = sessionsContainer
         container.removeAllViews()
-        val currentId = SessionStore.current(this).id
-        val sessions = SessionStore.list(this)
+        val currentId = SessionStore.currentId(this)
         tvSessionsEmpty.visibility = if (sessions.isEmpty()) View.VISIBLE else View.GONE
 
         var lastGroup: String? = null
@@ -1223,26 +1266,32 @@ class MainActivity : AppCompatActivity() {
         setPadding(dp(12), dp(12), dp(12), dp(4))
     }
 
-    private fun drawerSessionRow(s: ChatSession, selected: Boolean): View {
+    private fun drawerSessionRow(s: SessionSummary, selected: Boolean): View {
         val v = layoutInflater.inflate(R.layout.item_nav_session, sessionsContainer, false)
+        v.tag = s.id
         v.setBackgroundResource(
             if (selected) R.drawable.bg_nav_item_selected else R.drawable.bg_nav_item,
         )
         v.findViewById<TextView>(R.id.tvTitle).text =
             s.title.ifBlank { getString(R.string.session_default_title) }
         v.setOnClickListener {
+            if (s.id == lastLoadedId) {
+                closeHistory()
+                return@setOnClickListener
+            }
             SessionStore.setCurrentId(this, s.id)
             session = SessionStore.get(this, s.id) ?: SessionStore.current(this)
             lastLoadedId = session.id
             renderSession()
             closeHistory()
-            refreshDrawer()
+            // 切换会话只更新高亮，避免重建整个历史列表造成卡顿。
+            highlightDrawer(s.id)
         }
         v.findViewById<View>(R.id.btnDelete).setOnClickListener { confirmDeleteSession(s) }
         return v
     }
 
-    private fun confirmDeleteSession(s: ChatSession) {
+    private fun confirmDeleteSession(s: SessionSummary) {
         if (!canShowUi()) return
         AlertDialog.Builder(this)
             .setTitle(R.string.delete_session_title)
@@ -1253,8 +1302,10 @@ class MainActivity : AppCompatActivity() {
                 ),
             )
             .setPositiveButton(R.string.btn_delete) { _, _ ->
+                val wasCurrent = SessionStore.currentId(this) == s.id
                 SessionStore.delete(this, s.id)
-                if (SessionStore.current(this).id != lastLoadedId && runner == null) {
+                // 仅当删掉的是当前会话时才需要切换，避免无谓的读取与重渲染。
+                if (wasCurrent) {
                     session = SessionStore.current(this)
                     lastLoadedId = session.id
                     renderSession()

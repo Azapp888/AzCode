@@ -36,9 +36,20 @@ class SessionsActivity : AppCompatActivity() {
     }
 
     private fun refresh() {
+        // 先用缓存立即上屏，再在后台扫描磁盘，避免进入页面时卡顿。
+        render(SessionStore.cachedSummaries(this))
+        scanExecutor.execute {
+            val fresh = runCatching { SessionStore.refreshSummaries(this) }.getOrDefault(emptyList())
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                render(fresh)
+            }
+        }
+    }
+
+    private fun render(sessions: List<SessionSummary>) {
         container.removeAllViews()
-        val currentId = SessionStore.current(this).id
-        val sessions = SessionStore.list(this)
+        val currentId = SessionStore.currentId(this)
         tvEmpty.visibility = if (sessions.isEmpty()) View.VISIBLE else View.GONE
 
         sessions.forEach { s ->
@@ -49,7 +60,7 @@ class SessionsActivity : AppCompatActivity() {
                 s.updatedAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS,
             ).toString()
             v.findViewById<TextView>(R.id.tvMeta).text =
-                getString(R.string.session_meta, s.turns.size, whenText)
+                getString(R.string.session_meta, s.turnCount, whenText)
 
             if (s.id == currentId) v.alpha = 1f else v.alpha = 0.72f
 
@@ -64,7 +75,8 @@ class SessionsActivity : AppCompatActivity() {
         }
     }
 
-    private fun confirmDelete(s: ChatSession) {
+    private fun confirmDelete(s: SessionSummary) {
+        if (isFinishing || isDestroyed) return
         AlertDialog.Builder(this)
             .setTitle(R.string.delete_session_title)
             .setMessage(getString(R.string.delete_session_msg, s.title.ifBlank { getString(R.string.session_default_title) }))
@@ -74,5 +86,14 @@ class SessionsActivity : AppCompatActivity() {
             }
             .setNegativeButton(R.string.btn_cancel, null)
             .show()
+    }
+
+    private val scanExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "azcode-sessions").apply { isDaemon = true }
+    }
+
+    override fun onDestroy() {
+        runCatching { scanExecutor.shutdown() }
+        super.onDestroy()
     }
 }

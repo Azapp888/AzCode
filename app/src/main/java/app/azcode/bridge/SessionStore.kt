@@ -37,7 +37,21 @@ data class ChatSession(
 )
 
 /**
+ * 会话摘要：历史列表只需要标题与时间，无需解析整个会话。
+ * 单独读取可避免切换会话时在文件系统上做大量 JSON 解析。
+ */
+data class SessionSummary(
+    val id: String,
+    val title: String,
+    val updatedAt: Long,
+    val turnCount: Int = 0,
+)
+
+/**
  * 会话持久化：每个会话存为内部存储 files/sessions/<id>.json，当前会话 id 记在 SharedPreferences。
+ *
+ * 历史列表走内存缓存 [summaries]：切换会话时不再逐个读取解析全部文件，
+ * 只有缓存失效或磁盘变化时才在后台重新扫描。
  */
 object SessionStore {
 
@@ -47,6 +61,10 @@ object SessionStore {
     /** 保护临时文件写入与重命名，避免同一会话被并发写。 */
     private val WRITE_LOCK = Any()
 
+    /** 会话摘要缓存，volatile 保证跨线程可见。 */
+    @Volatile
+    private var summaries: List<SessionSummary>? = null
+
     private fun dir(ctx: Context) = File(ctx.filesDir, "sessions").apply { mkdirs() }
     private fun file(ctx: Context, id: String) = File(dir(ctx), "$id.json")
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -54,6 +72,41 @@ object SessionStore {
     fun list(ctx: Context): List<ChatSession> =
         dir(ctx).listFiles { f -> f.isFile && f.name.endsWith(".json") }
             ?.mapNotNull { read(it) }
+            ?.sortedByDescending { it.updatedAt }
+            ?: emptyList()
+
+    /**
+     * 历史列表数据：优先返回缓存；缓存为空时同步扫描一次（仅首次）。
+     * 刷新请调用 [refreshSummaries]（应在后台线程执行）。
+     */
+    fun cachedSummaries(ctx: Context): List<SessionSummary> {
+        summaries?.let { return it }
+        val loaded = scanSummaries(ctx)
+        summaries = loaded
+        return loaded
+    }
+
+    /** 重新扫描磁盘并更新缓存，返回最新摘要列表。耗时操作，应在后台线程调用。 */
+    fun refreshSummaries(ctx: Context): List<SessionSummary> {
+        val loaded = scanSummaries(ctx)
+        summaries = loaded
+        return loaded
+    }
+
+    /** 仅解析标题与时间，跳过 turns 大数组，读取开销远小于 [read]。 */
+    private fun scanSummaries(ctx: Context): List<SessionSummary> =
+        dir(ctx).listFiles { f -> f.isFile && f.name.endsWith(".json") }
+            ?.mapNotNull { f ->
+                runCatching {
+                    val obj = JSONObject(f.readText())
+                    SessionSummary(
+                        id = obj.getString("id"),
+                        title = obj.optString("title", "新任务"),
+                        updatedAt = obj.optLong("updatedAt"),
+                        turnCount = obj.optJSONArray("turns")?.length() ?: 0,
+                    )
+                }.getOrNull()
+            }
             ?.sortedByDescending { it.updatedAt }
             ?: emptyList()
 
@@ -74,6 +127,9 @@ object SessionStore {
         return list(ctx).firstOrNull() ?: create(ctx)
     }
 
+    /** 当前会话 id，不读取会话文件。 */
+    fun currentId(ctx: Context): String? = prefs(ctx).getString(KEY_CURRENT, null)
+
     fun setCurrentId(ctx: Context, id: String) {
         prefs(ctx).edit().putString(KEY_CURRENT, id).apply()
     }
@@ -83,6 +139,7 @@ object SessionStore {
         if (prefs(ctx).getString(KEY_CURRENT, null) == id) {
             prefs(ctx).edit().remove(KEY_CURRENT).apply()
         }
+        summaries = summaries?.filterNot { it.id == id }
     }
 
     /**
@@ -124,6 +181,11 @@ object SessionStore {
                 tmp.delete()
             }
         }
+        // 同步维护摘要缓存，历史列表无需重新扫描磁盘即可反映最新标题与时间。
+        val entry = SessionSummary(session.id, session.title, session.updatedAt, snapshot.size)
+        summaries = (summaries?.filterNot { it.id == session.id } ?: emptyList())
+            .plus(entry)
+            .sortedByDescending { it.updatedAt }
     }
 
     private fun read(f: File): ChatSession? = runCatching {
