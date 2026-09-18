@@ -39,6 +39,20 @@
     <color name="error_bg">#FEF2F2</color>
     <color name="error_border">#FECACA</color>
 
+    <!-- 液态玻璃（顶栏渐变 / 面板 / 侧边栏 / 弹层） -->
+    <color name="glass_bar_solid">#FFF5F6F7</color>
+    <color name="glass_bar_transparent">#00F5F6F7</color>
+    <color name="glass_surface">#E6FFFFFF</color>
+    <color name="glass_surface_strong">#F5FFFFFF</color>
+    <color name="glass_stroke">#14000000</color>
+    <color name="scrim">#59000000</color>
+    <color name="drawer_bg">#FAFBFC</color>
+    <color name="drawer_stroke">#14000000</color>
+    <color name="nav_item_selected">#E8EEFF</color>
+    <color name="card_group">#FFFFFF</color>
+    <color name="attach_card">#F2F3F5</color>
+    <color name="row_pressed">#0F000000</color>
+
     <!-- 按压反馈 -->
     <color name="ripple_neutral">#14263148</color>
     <color name="ripple_on_primary">#33FFFFFF</color>

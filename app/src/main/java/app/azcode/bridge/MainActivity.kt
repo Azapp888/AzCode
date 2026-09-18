@@ -2,8 +2,10 @@ package app.azcode.bridge
 
 import android.app.AlertDialog
 import android.app.Dialog
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import android.content.ClipData
+import androidx.core.content.FileProvider
+import androidx.drawerlayout.widget.DrawerLayout
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -11,8 +13,10 @@ import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.text.format.DateUtils
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.CheckBox
@@ -21,12 +25,15 @@ import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.PopupWindow
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONObject
+import java.io.File
+import java.util.Calendar
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
 
@@ -39,23 +46,49 @@ import java.util.concurrent.atomic.AtomicReference
  */
 class MainActivity : AppCompatActivity() {
 
+    private lateinit var drawerRoot: DrawerLayout
     private lateinit var chatContainer: LinearLayout
     private lateinit var svChat: ScrollView
     private lateinit var etTask: EditText
     private lateinit var btnSend: ImageButton
     private lateinit var btnStop: ImageButton
     private lateinit var btnAttach: ImageButton
-    private lateinit var dotStatus: View
-    private lateinit var tvHeaderStatus: TextView
     private lateinit var tvHeaderTitle: TextView
     private lateinit var svAttachments: HorizontalScrollView
     private lateinit var attachmentsRow: LinearLayout
-    private lateinit var modelPanel: View
     private lateinit var btnModelBox: TextView
-    private lateinit var modelPickRow: View
-    private lateinit var tvCurrentModel: TextView
+    private lateinit var sessionsContainer: LinearLayout
+    private lateinit var tvSessionsEmpty: TextView
     private lateinit var tvDepthLabel: TextView
     private lateinit var depthSlider: DepthSliderView
+    private var modelPopup: PopupWindow? = null
+    private var pickerContainer: LinearLayout? = null
+    private var pickerScroll: ScrollView? = null
+    private var cameraOutputUri: Uri? = null
+
+    private val takePicture =
+        registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+            if (ok) cameraOutputUri?.let { handlePickedUris(listOf(it)) }
+        }
+
+    private val pickImages =
+        registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+            if (!uris.isNullOrEmpty()) handlePickedUris(uris)
+        }
+
+    private val pickFiles =
+        registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            if (!uris.isNullOrEmpty()) handlePickedUris(uris)
+        }
+
+    private val requestCamera =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                launchCamera()
+            } else {
+                Toast.makeText(this, R.string.warn_need_camera, Toast.LENGTH_SHORT).show()
+            }
+        }
     private var depthIndex = 0
     private var maxDepthConfirmed = false
     private var maxDepthPrompting = false
@@ -96,33 +129,31 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        drawerRoot = findViewById(R.id.drawerRoot)
         chatContainer = findViewById(R.id.chatContainer)
         svChat = findViewById(R.id.svChat)
         etTask = findViewById(R.id.etTask)
         btnSend = findViewById(R.id.btnSend)
         btnStop = findViewById(R.id.btnStop)
         btnAttach = findViewById(R.id.btnAttach)
-        dotStatus = findViewById(R.id.dotStatus)
-        tvHeaderStatus = findViewById(R.id.tvHeaderStatus)
         tvHeaderTitle = findViewById(R.id.tvHeaderTitle)
         svAttachments = findViewById(R.id.svAttachments)
         attachmentsRow = findViewById(R.id.attachmentsRow)
-        modelPanel = findViewById(R.id.modelPanel)
         btnModelBox = findViewById(R.id.btnModelBox)
-        modelPickRow = findViewById(R.id.modelPickRow)
-        tvCurrentModel = findViewById(R.id.tvCurrentModel)
-        tvDepthLabel = findViewById(R.id.tvDepthLabel)
-        depthSlider = findViewById(R.id.depthSlider)
+        sessionsContainer = findViewById(R.id.sessionsContainer)
+        tvSessionsEmpty = findViewById(R.id.tvSessionsEmpty)
 
-        findViewById<View>(R.id.btnSessions).setOnClickListener {
-            startActivity(Intent(this, SessionsActivity::class.java))
+        findViewById<View>(R.id.btnMenu).setOnClickListener {
+            drawerRoot.openDrawer(findViewById<View>(R.id.drawerPanel))
         }
+        findViewById<View>(R.id.btnDraw).setOnClickListener { showDrawDialog() }
+        findViewById<View>(R.id.btnNewSession).setOnClickListener { newSession() }
         findViewById<View>(R.id.btnSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
         btnSend.setOnClickListener { sendTask() }
         btnStop.setOnClickListener { stopTask() }
-        btnAttach.setOnClickListener { pickAttachments() }
+        btnAttach.setOnClickListener { showAttachmentMenu() }
 
         runCatching { SkillStore.seedBuiltins(applicationContext) }
         runCatching { rikka.shizuku.Shizuku.addRequestPermissionResultListener(shizukuPermissionListener) }
@@ -131,11 +162,12 @@ class MainActivity : AppCompatActivity() {
         lastLoadedId = session.id
         renderSession()
         refreshAttachments()
+        refreshDrawer()
     }
 
     override fun onResume() {
         super.onResume()
-        refreshHeaderStatus()
+        refreshDrawer()
         syncModelSelector()
         val currentId = SessionStore.current(this).id
         if (currentId != lastLoadedId && runner == null) {
@@ -158,6 +190,10 @@ class MainActivity : AppCompatActivity() {
     /** 返回手势（含侧滑）默认会直接退出应用，改为两秒内二次返回才退出，避免误触。 */
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
+        if (drawerRoot.isDrawerOpen(findViewById<View>(R.id.drawerPanel))) {
+            drawerRoot.closeDrawer(findViewById<View>(R.id.drawerPanel))
+            return
+        }
         val panel = findViewById<View>(R.id.questionPanel)
         if (panel.visibility == View.VISIBLE) {
             findViewById<TextView>(R.id.btnQuestionCancel).performClick()
@@ -361,22 +397,113 @@ class MainActivity : AppCompatActivity() {
         depthIndex = depth.ordinal
         maxDepthConfirmed = depth == ThinkingDepth.entries.last()
 
+        setupModelPopup()
+
+        btnModelBox.setOnClickListener { showModelPopup() }
+        updateModelBox()
+    }
+
+    /** 预先构建模型/思考深度弹层：锚定在模型按钮上方，玻璃圆角面板。 */
+    private fun setupModelPopup() {
+        val content = layoutInflater.inflate(R.layout.popup_model_picker, null)
+        pickerContainer = content.findViewById(R.id.pickerContainer)
+        pickerScroll = content.findViewById(R.id.pickerScroll)
+        tvDepthLabel = content.findViewById(R.id.tvDepthLabel)
+        depthSlider = content.findViewById(R.id.depthSlider)
+
         // 连续滑块，无档位吸附；仅回报最接近的档位。
         depthSlider.depthCount = ThinkingDepth.entries.size
-        depthSlider.setProgressSilently(depthToProgress(depth.ordinal))
+        depthSlider.setProgressSilently(depthToProgress(AgentConfig.thinkingDepth(this).ordinal))
         depthSlider.onProgressChanged = { _, index, fromUser -> onDepthChanged(index, fromUser) }
-        updateDepthLabel(depth.ordinal)
+        updateDepthLabel(AgentConfig.thinkingDepth(this).ordinal)
 
-        modelPickRow.setOnClickListener { showModelPicker() }
-        btnModelBox.setOnClickListener {
-            if (modelPanel.visibility == View.VISIBLE) {
-                modelPanel.visibility = View.GONE
-            } else {
-                syncModelSelector()
-                modelPanel.visibility = View.VISIBLE
+        val popup = PopupWindow(
+            content,
+            dp(300),
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            isFocusable = true
+            isOutsideTouchable = true
+            elevation = dp(8).toFloat()
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        }
+        modelPopup = popup
+    }
+
+    /** 在模型按钮上方弹出选择面板；上方空间不足时改为向下弹出。 */
+    private fun showModelPopup() {
+        val popup = modelPopup ?: return
+        if (popup.isShowing) {
+            popup.dismiss()
+            return
+        }
+        syncModelSelector()
+        buildPickerRows(popup)
+
+        val content = popup.contentView
+        content.measure(
+            View.MeasureSpec.makeMeasureSpec(dp(300), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        val popupHeight = content.measuredHeight
+        val loc = IntArray(2)
+        btnModelBox.getLocationOnScreen(loc)
+        val spaceAbove = loc[1]
+        val gap = dp(6)
+
+        if (spaceAbove > popupHeight + gap) {
+            popup.showAsDropDown(
+                btnModelBox,
+                0,
+                -(popupHeight + btnModelBox.height + gap),
+                Gravity.START,
+            )
+        } else {
+            popup.showAsDropDown(btnModelBox, 0, gap, Gravity.START)
+        }
+    }
+
+    /** 刷新弹层内的提供商分组与模型条目，列表过长时压缩为可滚动区域。 */
+    private fun buildPickerRows(popup: PopupWindow) {
+        val container = pickerContainer ?: return
+        val scroll = pickerScroll ?: return
+        container.removeAllViews()
+        scroll.layoutParams = scroll.layoutParams.apply { height = ViewGroup.LayoutParams.WRAP_CONTENT }
+
+        val activeId = AgentConfig.activeId(this)
+        val activeModel = AgentConfig.activeProvider(this)?.model
+        if (providerOptions.isEmpty()) {
+            container.addView(pickerHeader(getString(R.string.model_picker_empty)))
+            return
+        }
+        var lastProviderId: String? = null
+        providerOptions.forEach { (account, model) ->
+            if (account.id != lastProviderId) {
+                lastProviderId = account.id
+                container.addView(pickerHeader(account.name))
+            }
+            val selected = account.id == activeId && model == activeModel
+            container.addView(
+                pickerRow(model.ifBlank { account.name }, selected) {
+                    if (account.id != AgentConfig.activeId(this)) {
+                        AgentConfig.setActiveId(this, account.id)
+                    }
+                    if (model.isNotBlank() && model != account.model) {
+                        AgentConfig.setActiveModel(this, account.id, model)
+                    }
+                    syncModelSelector()
+                    popup.dismiss()
+                },
+            )
+        }
+
+        scroll.post {
+            val maxHeight = dp(300)
+            if (scroll.height > maxHeight) {
+                scroll.layoutParams = scroll.layoutParams.apply { height = maxHeight }
+                popup.update()
             }
         }
-        updateModelBox()
     }
 
     private fun onDepthChanged(index: Int, fromUser: Boolean) {
@@ -430,80 +557,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateDepthLabel(index: Int) {
         tvDepthLabel.text = ThinkingDepth.entries[index.coerceIn(0, ThinkingDepth.entries.size - 1)].label
-    }
-
-    /**
-     * 按提供商分组的模型选择弹层：底部贴边、内容自适应高度、最高不超过屏幕六成，
-     * 点击遮罩或返回键即关闭。列表区域可上下滚动。
-     */
-    private fun showModelPicker() {
-        providerOptions = buildModelOptions(AgentConfig.providers(this))
-        val content = layoutInflater.inflate(R.layout.sheet_model_picker, null)
-        val container = content.findViewById<LinearLayout>(R.id.pickerContainer)
-        val scroll = content.findViewById<ScrollView>(R.id.pickerScroll)
-        val activeId = AgentConfig.activeId(this)
-        val activeModel = AgentConfig.activeProvider(this)?.model
-
-        val dialog = Dialog(this).apply {
-            requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
-            setContentView(content)
-            setCanceledOnTouchOutside(true)
-            setCancelable(true)
-        }
-
-        if (providerOptions.isEmpty()) {
-            container.addView(pickerHeader(getString(R.string.model_picker_empty)))
-        } else {
-            var lastProviderId: String? = null
-            providerOptions.forEach { (account, model) ->
-                if (account.id != lastProviderId) {
-                    lastProviderId = account.id
-                    container.addView(pickerHeader(account.name))
-                }
-                val selected = account.id == activeId && model == activeModel
-                container.addView(
-                    pickerRow(model.ifBlank { account.name }, selected) {
-                        if (account.id != AgentConfig.activeId(this)) {
-                            AgentConfig.setActiveId(this, account.id)
-                        }
-                        if (model.isNotBlank() && model != account.model) {
-                            AgentConfig.setActiveModel(this, account.id, model)
-                        }
-                        syncModelSelector()
-                        dialog.dismiss()
-                    },
-                )
-            }
-        }
-
-        dialog.window?.apply {
-            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            setDimAmount(0.45f)
-            attributes = attributes.apply { gravity = Gravity.BOTTOM }
-            setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT)
-        }
-        dialog.show()
-        dialog.window?.setLayout(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-        )
-        content.post { capPickerHeight(content, scroll, dialog) }
-    }
-
-    /** 收紧弹层高度：超出屏幕六成时压缩列表区域，保证四周留有可点击关闭的遮罩。 */
-    private fun capPickerHeight(content: View, scroll: ScrollView, dialog: Dialog) {
-        val maxHeight = (resources.displayMetrics.heightPixels * 0.6f).toInt()
-        if (content.height > maxHeight) {
-            val overflow = content.height - maxHeight
-            scroll.layoutParams = scroll.layoutParams.apply {
-                height = (scroll.height - overflow).coerceAtLeast(dp(140))
-            }
-            dialog.window?.setLayout(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-            )
-        }
     }
 
     private fun pickerHeader(text: String): TextView = TextView(this).apply {
@@ -567,7 +620,6 @@ class MainActivity : AppCompatActivity() {
     private fun updateModelBox() {
         val provider = AgentConfig.activeProvider(this)
         val model = provider?.model?.takeIf { it.isNotBlank() } ?: getString(R.string.model_box_unset)
-        tvCurrentModel.text = model
         btnModelBox.text = getString(
             R.string.model_box_format,
             model,
@@ -598,30 +650,77 @@ class MainActivity : AppCompatActivity() {
 
     // ==================== 附件 ====================
 
-    private fun pickAttachments() {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "*/*"
-            putExtra(Intent.EXTRA_MIME_TYPES, AttachmentReader.PICK_MIME_TYPES)
-            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+    /** 弹出「拍照 / 相册 / 文件」三选面板，锚定在附件按钮上方。 */
+    private fun showAttachmentMenu() {
+        val content = layoutInflater.inflate(R.layout.popup_attachments, null)
+        val popup = PopupWindow(
+            content,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            isFocusable = true
+            isOutsideTouchable = true
+            elevation = dp(8).toFloat()
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         }
-        @Suppress("DEPRECATION")
-        startActivityForResult(intent, REQ_PICK)
+
+        content.findViewById<View>(R.id.optCamera).setOnClickListener {
+            popup.dismiss()
+            ensureCameraThenCapture()
+        }
+        content.findViewById<View>(R.id.optGallery).setOnClickListener {
+            popup.dismiss()
+            pickImages.launch("image/*")
+        }
+        content.findViewById<View>(R.id.optFile).setOnClickListener {
+            popup.dismiss()
+            pickFiles.launch(AttachmentReader.PICK_MIME_TYPES)
+        }
+
+        content.measure(
+            View.MeasureSpec.makeMeasureSpec(resources.displayMetrics.widthPixels, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        val popupHeight = content.measuredHeight
+        val loc = IntArray(2)
+        btnAttach.getLocationOnScreen(loc)
+        val gap = dp(6)
+
+        if (loc[1] > popupHeight + gap) {
+            popup.showAsDropDown(btnAttach, 0, -(popupHeight + btnAttach.height + gap), Gravity.START)
+        } else {
+            popup.showAsDropDown(btnAttach, 0, gap, Gravity.START)
+        }
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQ_PICK || resultCode != RESULT_OK || data == null) return
+    private fun ensureCameraThenCapture() {
+        if (checkSelfPermission(android.Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            launchCamera()
+        } else {
+            requestCamera.launch(android.Manifest.permission.CAMERA)
+        }
+    }
 
-        val uris = mutableListOf<Uri>()
-        data.clipData?.let { clip: ClipData ->
-            for (i in 0 until clip.itemCount) uris.add(clip.getItemAt(i).uri)
-        } ?: data.data?.let { uris.add(it) }
+    /** 用 FileProvider 生成临时文件后调起系统相机。 */
+    private fun launchCamera() {
+        runCatching {
+            val dir = File(cacheDir, "captures").apply { mkdirs() }
+            val file = File(dir, "IMG_${System.currentTimeMillis()}.jpg")
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            cameraOutputUri = uri
+            takePicture.launch(uri)
+        }.onFailure {
+            Toast.makeText(this, it.message ?: "无法启动相机", Toast.LENGTH_SHORT).show()
+        }
+    }
 
+    /** 统一处理相册 / 文件 / 拍照返回的 Uri 列表。 */
+    private fun handlePickedUris(uris: List<Uri>) {
         var rejected = 0
         uris.forEach { uri ->
-            runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            runCatching {
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
             val name = queryName(uri)
             val mime = contentResolver.getType(uri).orEmpty()
             try {
@@ -758,7 +857,7 @@ class MainActivity : AppCompatActivity() {
         btnStop.isEnabled = running
         btnAttach.isEnabled = !running
         etTask.isEnabled = !running
-        findViewById<View>(R.id.btnSessions).isEnabled = !running
+        findViewById<View>(R.id.btnDraw).isEnabled = !running
     }
 
     // ==================== 事件处理 ====================
@@ -1014,15 +1113,125 @@ class MainActivity : AppCompatActivity() {
         svChat.post { svChat.fullScroll(View.FOCUS_DOWN) }
     }
 
-    private fun refreshHeaderStatus() {
-        val on = AzAccessibilityService.isEnabled()
-        dotStatus.setBackgroundResource(if (on) R.drawable.dot_on else R.drawable.dot_off)
-        tvHeaderStatus.text =
-            getString(if (on) R.string.status_accessibility_on else R.string.status_accessibility_off)
+    // ==================== 侧边栏 ====================
+
+    private fun newSession() {
+        SessionStore.create(this)
+        drawerRoot.closeDrawer(findViewById<View>(R.id.drawerPanel))
+        session = SessionStore.current(this)
+        lastLoadedId = session.id
+        renderSession()
+        refreshDrawer()
+    }
+
+    /** 重建侧边栏：会话按时间分组，当前会话高亮，行尾可删除。 */
+    private fun refreshDrawer() {
+        val container = sessionsContainer
+        container.removeAllViews()
+        val currentId = SessionStore.current(this).id
+        val sessions = SessionStore.list(this)
+        tvSessionsEmpty.visibility = if (sessions.isEmpty()) View.VISIBLE else View.GONE
+
+        var lastGroup: String? = null
+        sessions.forEach { s ->
+            val group = groupLabel(s.updatedAt)
+            if (group != lastGroup) {
+                lastGroup = group
+                container.addView(drawerSection(group))
+            }
+            container.addView(drawerSessionRow(s, s.id == currentId))
+        }
+    }
+
+    private fun groupLabel(ts: Long): String {
+        val now = Calendar.getInstance()
+        val then = Calendar.getInstance().apply { timeInMillis = ts }
+        val sameYear = now.get(Calendar.YEAR) == then.get(Calendar.YEAR)
+        val dayGap = now.get(Calendar.DAY_OF_YEAR) - then.get(Calendar.DAY_OF_YEAR)
+        return when {
+            sameYear && dayGap == 0 -> getString(R.string.group_today)
+            sameYear && dayGap == 1 -> getString(R.string.group_yesterday)
+            sameYear && dayGap in 2..6 -> getString(R.string.group_week)
+            else -> getString(R.string.group_earlier)
+        }
+    }
+
+    private fun drawerSection(text: String): TextView = TextView(this).apply {
+        this.text = text
+        textSize = 11f
+        setTextColor(getColor(R.color.text_caption))
+        setPadding(dp(12), dp(12), dp(12), dp(4))
+    }
+
+    private fun drawerSessionRow(s: ChatSession, selected: Boolean): View {
+        val v = layoutInflater.inflate(R.layout.item_nav_session, sessionsContainer, false)
+        v.setBackgroundResource(
+            if (selected) R.drawable.bg_nav_item_selected else R.drawable.bg_nav_item,
+        )
+        v.findViewById<TextView>(R.id.tvTitle).text =
+            s.title.ifBlank { getString(R.string.session_default_title) }
+        val whenText = DateUtils.getRelativeTimeSpanString(
+            s.updatedAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS,
+        ).toString()
+        v.findViewById<TextView>(R.id.tvMeta).text =
+            getString(R.string.session_meta, s.turns.size, whenText)
+        v.setOnClickListener {
+            SessionStore.setCurrentId(this, s.id)
+            session = SessionStore.get(this, s.id) ?: SessionStore.current(this)
+            lastLoadedId = session.id
+            renderSession()
+            drawerRoot.closeDrawer(findViewById<View>(R.id.drawerPanel))
+            refreshDrawer()
+        }
+        v.findViewById<View>(R.id.btnDelete).setOnClickListener { confirmDeleteSession(s) }
+        return v
+    }
+
+    private fun confirmDeleteSession(s: ChatSession) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.delete_session_title)
+            .setMessage(
+                getString(
+                    R.string.delete_session_msg,
+                    s.title.ifBlank { getString(R.string.session_default_title) },
+                ),
+            )
+            .setPositiveButton(R.string.btn_delete) { _, _ ->
+                SessionStore.delete(this, s.id)
+                if (SessionStore.current(this).id != lastLoadedId && runner == null) {
+                    session = SessionStore.current(this)
+                    lastLoadedId = session.id
+                    renderSession()
+                }
+                refreshDrawer()
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
+    }
+
+    // ==================== AI 绘画 ====================
+
+    /** 顶栏绘画按钮：输入描述后按生图任务发送，由 Agent 调用 generate_image。 */
+    private fun showDrawDialog() {
+        val content = layoutInflater.inflate(R.layout.dialog_draw, null)
+        val et = content.findViewById<EditText>(R.id.etDrawPrompt)
+        AlertDialog.Builder(this)
+            .setView(content)
+            .setPositiveButton(R.string.btn_confirm) { _, _ ->
+                val desc = et.text.toString().trim()
+                if (desc.isEmpty()) {
+                    Toast.makeText(this, R.string.draw_empty, Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                etTask.setText(getString(R.string.draw_send_prefix) + desc)
+                etTask.setSelection(etTask.text.length)
+                sendTask()
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
     }
 
     companion object {
-        private const val REQ_PICK = 2001
         private const val REQ_NOTIF = 2002
     }
 }

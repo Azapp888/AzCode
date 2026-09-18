@@ -23,6 +23,18 @@
     <string name="btn_send">发送</string>
     <string name="btn_stop">停止</string>
     <string name="btn_attach">添加附件</string>
+    <string name="attach_camera">拍照</string>
+    <string name="attach_gallery">相册</string>
+    <string name="attach_file">文件</string>
+    <string name="draw_title">AI 绘画</string>
+    <string name="draw_hint">描述你想生成的图片，例如：一只在草地上奔跑的柯基，水彩风格</string>
+    <string name="draw_empty">请输入图片描述</string>
+    <string name="draw_send_prefix">生成一张图片：</string>
+    <string name="warn_need_camera">需要相机权限才能拍照</string>
+    <string name="group_today">今天</string>
+    <string name="group_yesterday">昨天</string>
+    <string name="group_week">7 天内</string>
+    <string name="group_earlier">更早</string>
     <string name="btn_back">返回</string>
     <string name="btn_delete">删除</string>
     <string name="btn_cancel">取消</string>
@@ -32,6 +44,14 @@
 
     <string name="title_settings">设置</string>
     <string name="section_model">模型</string>
+    <string name="section_account">账户</string>
+    <string name="section_app">应用</string>
+    <string name="settings_version">版本</string>
+    <string name="settings_version_value">%1$s（%2$d）</string>
+    <string name="settings_value_unset">未配置</string>
+    <string name="settings_value_not_connected">未连接</string>
+    <string name="settings_skills_value">已启用 %1$d / %2$d</string>
+    <string name="settings_memory_value">%1$d 条</string>
     <string name="title_provider">模型提供商</string>
     <string name="hint_provider">选择预设会自动填写 Base URL 与模型，可再手动修改</string>
     <string name="hint_api_key">API Key</string>

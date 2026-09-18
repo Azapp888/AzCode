@@ -25,6 +25,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvMemoryEntry: TextView
     private lateinit var tvModelEntry: TextView
     private lateinit var tvGithubEntry: TextView
+    private lateinit var tvVersion: TextView
     private lateinit var btnBridge: Button
 
     private val shizukuPermissionListener =
@@ -51,7 +52,17 @@ class SettingsActivity : AppCompatActivity() {
         tvStatus = findViewById(R.id.tvStatus)
         tvSkillsEntry = findViewById(R.id.tvSkillsEntry)
         tvMemoryEntry = findViewById(R.id.tvMemoryEntry)
+        tvVersion = findViewById(R.id.tvVersion)
         btnBridge = findViewById(R.id.btnBridge)
+
+        tvVersion.text = runCatching {
+            val info = packageManager.getPackageInfo(packageName, 0)
+            getString(
+                R.string.settings_version_value,
+                info.versionName ?: "-",
+                if (Build.VERSION.SDK_INT >= 28) info.longVersionCode.toInt() else info.versionCode,
+            )
+        }.getOrDefault("")
 
         etMaxSteps.setText(AgentConfig.maxSteps(this).toString())
         etSystemPrompt.setText(AgentConfig.systemPrompt(this))
@@ -62,16 +73,16 @@ class SettingsActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<View>(R.id.btnSave).setOnClickListener { saveConfig() }
-        tvModelEntry.setOnClickListener {
+        findViewById<View>(R.id.rowModel).setOnClickListener {
             startActivity(Intent(this, ProvidersActivity::class.java))
         }
-        tvGithubEntry.setOnClickListener {
+        findViewById<View>(R.id.rowGithub).setOnClickListener {
             startActivity(Intent(this, GitHubActivity::class.java))
         }
-        tvSkillsEntry.setOnClickListener {
+        findViewById<View>(R.id.rowSkills).setOnClickListener {
             startActivity(Intent(this, SkillsActivity::class.java))
         }
-        tvMemoryEntry.setOnClickListener {
+        findViewById<View>(R.id.rowMemory).setOnClickListener {
             startActivity(Intent(this, MemoryActivity::class.java))
         }
         findViewById<View>(R.id.btnAccessibility).setOnClickListener {
@@ -172,8 +183,6 @@ class SettingsActivity : AppCompatActivity() {
     private fun refreshStatus() {
         val bridge = if (AgentBridge.isRunning) getString(R.string.status_bridge_on, AgentBridge.PORT)
         else getString(R.string.status_bridge_off)
-        val access = if (AzAccessibilityService.isEnabled()) getString(R.string.status_accessibility_on)
-        else getString(R.string.status_accessibility_off)
         val shizuku = if (DeviceControl.shizukuUsable()) getString(R.string.status_shizuku_on)
         else getString(R.string.status_shizuku_off)
         val root = if (DeviceControl.rootAvailable()) getString(R.string.status_root_on)
@@ -185,38 +194,26 @@ class SettingsActivity : AppCompatActivity() {
         }
         val mode = "命令执行模式：${DeviceControl.getMode(this).label}（内置命令行始终可用）"
 
-        tvStatus.text = listOf(bridge, access, shizuku, root, termux, mode).joinToString("\n")
+        tvStatus.text = listOf(bridge, shizuku, root, termux, mode).joinToString("\n")
         btnBridge.setText(
             if (AgentBridge.isRunning) R.string.btn_stop_bridge else R.string.btn_start_bridge
         )
 
         val total = SkillStore.count(this)
         val enabled = SkillStore.enabled(this).size
-        tvSkillsEntry.text = getString(R.string.skills_entry, enabled, total)
+        tvSkillsEntry.text = getString(R.string.settings_skills_value, enabled, total)
 
-        tvMemoryEntry.text = getString(R.string.memory_entry, MemoryStore.count(this))
+        tvMemoryEntry.text = getString(R.string.settings_memory_value, MemoryStore.count(this))
 
         val active = AgentConfig.activeProvider(this)
-        val providerCount = AgentConfig.enabledProviders(this).size
-        tvModelEntry.text = if (active != null) {
-            getString(
-                R.string.model_entry_active,
-                active.name,
-                active.model.ifBlank { "-" },
-                providerCount,
-            )
-        } else {
-            getString(R.string.model_entry_empty)
-        }
+        tvModelEntry.text = active?.model?.takeIf { it.isNotBlank() }
+            ?: getString(R.string.settings_value_unset)
 
-        tvGithubEntry.text = getString(
-            R.string.github_entry,
-            if (GitHubConfig.isConfigured(this)) {
-                getString(R.string.github_entry_on, GitHubConfig.login(this).ifBlank { "?" })
-            } else {
-                getString(R.string.github_entry_off)
-            },
-        )
+        tvGithubEntry.text = if (GitHubConfig.isConfigured(this)) {
+            "@" + GitHubConfig.login(this).ifBlank { "?" }
+        } else {
+            getString(R.string.settings_value_not_connected)
+        }
     }
 
     private fun maybeRequestNotificationPermission() {
