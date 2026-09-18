@@ -5,6 +5,7 @@ import android.app.Dialog
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import androidx.drawerlayout.widget.DrawerLayout
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -56,10 +57,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnModelBox: TextView
     private lateinit var sessionsContainer: LinearLayout
     private lateinit var tvSessionsEmpty: TextView
-    private lateinit var scrim: View
-    private lateinit var historyPanel: View
-    private lateinit var svHistory: ScrollView
-    private var historyVisible = false
+    private lateinit var drawerRoot: DrawerLayout
     private lateinit var tvDepthLabel: TextView
     private lateinit var depthSlider: DepthSliderView
     private var modelPopup: PopupWindow? = null
@@ -142,13 +140,12 @@ class MainActivity : AppCompatActivity() {
         btnModelBox = findViewById(R.id.btnModelBox)
         sessionsContainer = findViewById(R.id.sessionsContainer)
         tvSessionsEmpty = findViewById(R.id.tvSessionsEmpty)
-        scrim = findViewById(R.id.scrim)
-        historyPanel = findViewById(R.id.historyPanel)
-        svHistory = findViewById(R.id.svHistory)
+        drawerRoot = findViewById(R.id.drawerRoot)
 
-        findViewById<View>(R.id.btnMenu).setOnClickListener { toggleHistory() }
-        findViewById<View>(R.id.btnHistoryClose).setOnClickListener { hideHistory() }
-        scrim.setOnClickListener { hideHistory() }
+        findViewById<View>(R.id.btnMenu).setOnClickListener {
+            drawerRoot.openDrawer(findViewById<View>(R.id.historyPanel))
+        }
+        findViewById<View>(R.id.btnHistoryClose).setOnClickListener { closeHistory() }
         findViewById<View>(R.id.btnNewChat).setOnClickListener { newSession() }
         findViewById<View>(R.id.btnDraw).setOnClickListener { showDrawDialog() }
         findViewById<View>(R.id.btnSettings).setOnClickListener {
@@ -193,8 +190,8 @@ class MainActivity : AppCompatActivity() {
     /** 返回手势（含侧滑）默认会直接退出应用，改为两秒内二次返回才退出，避免误触。 */
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (historyVisible) {
-            hideHistory()
+        if (drawerRoot.isDrawerOpen(findViewById<View>(R.id.historyPanel))) {
+            closeHistory()
             return
         }
         val panel = findViewById<View>(R.id.questionPanel)
@@ -441,7 +438,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         syncModelSelector()
-        buildPickerRows(popup)
+        buildPickerRows()
 
         val content = popup.contentView
         content.measure(
@@ -467,16 +464,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** 刷新弹层内的提供商分组与模型条目，列表过长时压缩为可滚动区域。 */
-    private fun buildPickerRows(popup: PopupWindow) {
+    private fun buildPickerRows() {
         val container = pickerContainer ?: return
         val scroll = pickerScroll ?: return
         container.removeAllViews()
-        scroll.layoutParams = scroll.layoutParams.apply { height = ViewGroup.LayoutParams.WRAP_CONTENT }
 
         val activeId = AgentConfig.activeId(this)
         val activeModel = AgentConfig.activeProvider(this)?.model
         if (providerOptions.isEmpty()) {
             container.addView(pickerHeader(getString(R.string.model_picker_empty)))
+            scroll.layoutParams = scroll.layoutParams.apply { height = ViewGroup.LayoutParams.WRAP_CONTENT }
             return
         }
         var lastProviderId: String? = null
@@ -495,18 +492,19 @@ class MainActivity : AppCompatActivity() {
                         AgentConfig.setActiveModel(this, account.id, model)
                     }
                     syncModelSelector()
-                    popup.dismiss()
+                    modelPopup?.dismiss()
                 },
             )
         }
 
-        scroll.post {
-            val maxHeight = dp(300)
-            if (scroll.height > maxHeight) {
-                scroll.layoutParams = scroll.layoutParams.apply { height = maxHeight }
-                popup.update()
-            }
-        }
+        // 在展示前先把列表高度压到上限，避免弹出后再调整导致面板跳动。
+        val maxList = dp(260)
+        scroll.measure(
+            View.MeasureSpec.makeMeasureSpec(dp(280), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        val listHeight = scroll.measuredHeight.coerceAtMost(maxList)
+        scroll.layoutParams = scroll.layoutParams.apply { height = listHeight }
     }
 
     private fun onDepthChanged(index: Int, fromUser: Boolean) {
@@ -653,12 +651,12 @@ class MainActivity : AppCompatActivity() {
 
     // ==================== 附件 ====================
 
-    /** 弹出「拍照 / 相册 / 文件」三选面板，锚定在附件按钮上方。 */
+    /** 在附件按钮上方弹出「拍照 / 相册 / 文件」三个小气泡。 */
     private fun showAttachmentMenu() {
         val content = layoutInflater.inflate(R.layout.popup_attachments, null)
         val popup = PopupWindow(
             content,
-            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply {
             isFocusable = true
@@ -681,18 +679,23 @@ class MainActivity : AppCompatActivity() {
         }
 
         content.measure(
-            View.MeasureSpec.makeMeasureSpec(resources.displayMetrics.widthPixels, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
         )
+        val popupWidth = content.measuredWidth
         val popupHeight = content.measuredHeight
         val loc = IntArray(2)
         btnAttach.getLocationOnScreen(loc)
         val gap = dp(6)
 
+        // 气泡右边缘对齐附件按钮右边缘。
+        val anchorRight = loc[0] + btnAttach.width
+        val xOff = anchorRight - popupWidth
+
         if (loc[1] > popupHeight + gap) {
-            popup.showAsDropDown(btnAttach, 0, -(popupHeight + btnAttach.height + gap), Gravity.START)
+            popup.showAsDropDown(btnAttach, xOff, -(popupHeight + btnAttach.height + gap), Gravity.START)
         } else {
-            popup.showAsDropDown(btnAttach, 0, gap, Gravity.START)
+            popup.showAsDropDown(btnAttach, xOff, gap, Gravity.START)
         }
     }
 
@@ -1116,42 +1119,15 @@ class MainActivity : AppCompatActivity() {
         svChat.post { svChat.fullScroll(View.FOCUS_DOWN) }
     }
 
-    // ==================== 历史记录（顶部下拉） ====================
+    // ==================== 历史记录（侧边抽屉） ====================
 
-    private fun toggleHistory() {
-        if (historyVisible) hideHistory() else showHistory()
-    }
-
-    private fun showHistory() {
-        refreshDrawer()
-        historyVisible = true
-        scrim.alpha = 0f
-        scrim.visibility = View.VISIBLE
-        historyPanel.visibility = View.VISIBLE
-        historyPanel.post {
-            historyPanel.translationY = -historyPanel.height.toFloat()
-            historyPanel.animate().translationY(0f).setDuration(200).start()
-            scrim.animate().alpha(1f).setDuration(200).start()
-        }
-    }
-
-    private fun hideHistory() {
-        if (!historyVisible) return
-        historyVisible = false
-        historyPanel.animate()
-            .translationY(-historyPanel.height.toFloat())
-            .setDuration(180)
-            .withEndAction {
-                historyPanel.visibility = View.GONE
-                scrim.visibility = View.GONE
-            }
-            .start()
-        scrim.animate().alpha(0f).setDuration(180).start()
+    private fun closeHistory() {
+        drawerRoot.closeDrawer(findViewById<View>(R.id.historyPanel))
     }
 
     private fun newSession() {
         SessionStore.create(this)
-        hideHistory()
+        closeHistory()
         session = SessionStore.current(this)
         lastLoadedId = session.id
         renderSession()
@@ -1174,16 +1150,6 @@ class MainActivity : AppCompatActivity() {
                 container.addView(drawerSection(group))
             }
             container.addView(drawerSessionRow(s, s.id == currentId))
-        }
-
-        val maxHeight = (resources.displayMetrics.heightPixels * 0.55f).toInt()
-        container.post {
-            val params = svHistory.layoutParams
-            val target = container.height.coerceAtMost(maxHeight)
-            if (params.height != target) {
-                params.height = target
-                svHistory.layoutParams = params
-            }
         }
     }
 
@@ -1219,7 +1185,7 @@ class MainActivity : AppCompatActivity() {
             session = SessionStore.get(this, s.id) ?: SessionStore.current(this)
             lastLoadedId = session.id
             renderSession()
-            hideHistory()
+            closeHistory()
             refreshDrawer()
         }
         v.findViewById<View>(R.id.btnDelete).setOnClickListener { confirmDeleteSession(s) }
