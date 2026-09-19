@@ -87,7 +87,16 @@ class AgentRunner(
         const val COMPACT_THRESHOLD = 40000
         /** 压缩时保留最近若干个 user 轮次不参与摘要。 */
         const val KEEP_USER_TURNS = 4
+        /** 压缩后需再累积这么多新字符才会再次压缩，避免同一任务里反复折叠。 */
+        const val COMPACT_MIN_GROWTH = 20000
+        /** 压缩摘要消息前缀，用于识别并合并历史摘要、避免摘要套摘要。 */
+        const val SUMMARY_PREFIX = "[上下文摘要]"
+        /** 送给摘要模型的文本上限，超出说明阈值估算异常，做一次兜底截断。 */
+        const val SUMMARY_INPUT_MAX = 60000
     }
+
+    /** 上次压缩时的上下文规模；两次压缩之间需累积 [COMPACT_MIN_GROWTH] 新内容。 */
+    private var lastCompactEstimate = 0
 
     fun cancel() {
         cancelled = true
@@ -248,8 +257,11 @@ class AgentRunner(
         }
         // 仅保留最近一段，避免文件无限增长；裁剪后若以 tool 开头则丢弃这些孤立结果。
         val max = 40
+        // 开头的压缩摘要必须始终保留，否则长任务继续执行时会把已折叠的历史裁掉。
+        val hasSummary = isSummary(kept.optJSONObject(0))
+        val budget = if (hasSummary) max - 1 else max
+        val start = if (kept.length() > budget) kept.length() - budget else 0
         val trimmed = JSONArray()
-        val start = if (kept.length() > max) kept.length() - max else 0
         var began = false
         for (i in start until kept.length()) {
             val m = kept.optJSONObject(i) ?: continue
@@ -257,7 +269,14 @@ class AgentRunner(
             began = true
             trimmed.put(m)
         }
-        session.agentMessages = trimmed.toString()
+        session.agentMessages = if (hasSummary && start > 0) {
+            val out = JSONArray()
+            out.put(kept.getJSONObject(0))
+            for (i in 0 until trimmed.length()) out.put(trimmed.getJSONObject(i))
+            out.toString()
+        } else {
+            trimmed.toString()
+        }
     }
 
     /** 用文本占位替换图片 base64，避免持久化文件过大。 */
@@ -659,12 +678,17 @@ class AgentRunner(
 
     /**
      * 当上下文过大时，把较早的对话（按 user 轮次切分，保证 tool 调用与结果不被拆散）
-     * 交给模型压缩成一段摘要，替换掉原始消息，从而在长任务中继续推进。
+     * 一次性折叠成一段摘要，替换掉原始消息，从而在长任务中继续推进。
+     *
+     * 两次压缩之间必须累积 [COMPACT_MIN_GROWTH] 新内容，且不会对「只剩一条摘要」的情况
+     * 重复压缩，因此同一个任务里最多只会出现间隔很远的少数几次压缩，而非每步都压缩。
      */
     private fun compactIfNeeded(messages: JSONArray, provider: ProviderAccount): JSONArray {
-        if (estimateChars(messages) < COMPACT_THRESHOLD) return messages
+        val estimate = estimateChars(messages)
+        if (estimate < COMPACT_THRESHOLD) return messages
         if (messages.length() <= 1) return messages
-        CrashLog.i(TAG, "上下文过长，开始压缩历史")
+        // 压缩后需再积累足够新内容才允许下一次压缩，避免同一步/相邻步反复折叠同一条摘要。
+        if (lastCompactEstimate > 0 && estimate - lastCompactEstimate < COMPACT_MIN_GROWTH) return messages
 
         val userIndices = mutableListOf<Int>()
         for (i in 1 until messages.length()) {
@@ -677,17 +701,31 @@ class AgentRunner(
         val older = JSONArray()
         for (i in 1 until boundary) older.put(messages.getJSONObject(i))
 
+        // 若待压缩内容只剩上一条摘要，说明没有新内容可折叠，跳过以免产生「摘要的摘要」。
+        if (older.length() <= 1 && isSummary(older.optJSONObject(0))) {
+            lastCompactEstimate = estimate
+            return messages
+        }
+
+        CrashLog.i(TAG, "上下文过长，一次性折叠 ${older.length()} 条历史为摘要")
         val summary = summarize(older, provider)
         val rebuilt = JSONArray()
         rebuilt.put(messages.getJSONObject(0))
         rebuilt.put(JSONObject().put("role", "user").put(
             "content",
-            "[上下文摘要] 以下是本次任务较早阶段的要点，请据此继续：\n${summary.ifBlank { "（较早对话已省略）" }}"
+            "$SUMMARY_PREFIX 以下是本次任务较早阶段的要点，请据此继续：\n${summary.ifBlank { "（较早对话已省略）" }}"
         ))
         for (i in boundary until messages.length()) rebuilt.put(messages.getJSONObject(i))
         listener(AgentEvent.Notice("上下文过长，已自动压缩历史"))
+        lastCompactEstimate = estimateChars(rebuilt)
         return rebuilt
     }
+
+    /** 判断某条消息是否是历史压缩摘要。 */
+    private fun isSummary(m: JSONObject?): Boolean =
+        m != null &&
+            m.optString("role") == "user" &&
+            m.optString("content").startsWith(SUMMARY_PREFIX)
 
     private fun summarize(older: JSONArray, provider: ProviderAccount): String {
         val sb = StringBuilder()
@@ -701,16 +739,16 @@ class AgentRunner(
                 }
                 else -> ""
             }
-            if (content.isNotBlank()) sb.append(role).append(": ").append(content.take(800)).append("\n")
+            if (content.isNotBlank()) sb.append(role).append(": ").append(content).append("\n")
             m.optJSONArray("tool_calls")?.let { arr ->
                 for (j in 0 until arr.length()) {
                     val fn = arr.optJSONObject(j)?.optJSONObject("function") ?: continue
                     sb.append("tool_call: ").append(fn.optString("name"))
-                        .append(" ").append(fn.optString("arguments").take(200)).append("\n")
+                        .append(" ").append(fn.optString("arguments")).append("\n")
                 }
             }
             if (role == "tool") {
-                sb.append("tool_result: ").append(content.take(300)).append("\n")
+                sb.append("tool_result: ").append(content).append("\n")
             }
         }
         val prompt = JSONArray().apply {
@@ -718,7 +756,7 @@ class AgentRunner(
                 "content",
                 "你是上下文压缩器。把给定的对话历史压缩成简洁的中文要点，保留用户目标、已完成的操作、关键结论、待办与失败原因，省略寒暄。只输出要点正文。"
             ))
-            put(JSONObject().put("role", "user").put("content", sb.toString().take(12000)))
+            put(JSONObject().put("role", "user").put("content", sb.toString().take(SUMMARY_INPUT_MAX)))
         }
         return runCatching {
             LLMService.chat(
