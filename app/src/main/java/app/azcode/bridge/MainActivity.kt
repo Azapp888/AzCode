@@ -17,6 +17,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -58,7 +59,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnModelBox: TextView
     private lateinit var sessionsContainer: LinearLayout
     private lateinit var tvSessionsEmpty: TextView
+    private lateinit var tvSessionsCount: TextView
+    private lateinit var svHistory: ScrollView
+    private lateinit var rowSettings: View
     private lateinit var drawerRoot: DrawerLayout
+    private var drawerAnimated = false
     private lateinit var tvDepthLabel: TextView
     private lateinit var depthSlider: DepthSliderView
     private var modelPopup: PopupWindow? = null
@@ -141,17 +146,26 @@ class MainActivity : AppCompatActivity() {
         btnModelBox = findViewById(R.id.btnModelBox)
         sessionsContainer = findViewById(R.id.sessionsContainer)
         tvSessionsEmpty = findViewById(R.id.tvSessionsEmpty)
+        tvSessionsCount = findViewById(R.id.tvSessionsCount)
+        svHistory = findViewById(R.id.svHistory)
+        rowSettings = findViewById(R.id.rowSettings)
         drawerRoot = findViewById(R.id.drawerRoot)
+        drawerRoot.setScrimColor(getColor(R.color.scrim))
 
         findViewById<View>(R.id.btnMenu).setOnClickListener {
             drawerRoot.openDrawer(findViewById<View>(R.id.historyPanel))
         }
         findViewById<View>(R.id.btnHistoryClose).setOnClickListener { closeHistory() }
         findViewById<View>(R.id.btnNewChat).setOnClickListener { newSession() }
-        findViewById<View>(R.id.btnDraw).setOnClickListener { showDrawDialog() }
-        findViewById<View>(R.id.btnSettings).setOnClickListener {
+        rowSettings.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
+        drawerRoot.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
+            override fun onDrawerOpened(drawerView: View) {
+                drawerAnimated = false
+                animateDrawerContent()
+            }
+        })
         btnSend.setOnClickListener { sendTask() }
         btnStop.setOnClickListener { stopTask() }
         btnAttach.setOnClickListener { showAttachmentMenu() }
@@ -408,6 +422,11 @@ class MainActivity : AppCompatActivity() {
     /** 防止历史列表重复排队扫描。 */
     @Volatile
     private var drawerScanning = false
+
+    /** 会话加载线程：内存未命中时后台读盘，避免切换会话阻塞主线程。 */
+    private val loadExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "azcode-load").apply { isDaemon = true }
+    }
 
     // ==================== 模型 / 思考深度 ====================
 
@@ -913,7 +932,6 @@ class MainActivity : AppCompatActivity() {
         btnStop.isEnabled = running
         btnAttach.isEnabled = !running
         etTask.isEnabled = !running
-        findViewById<View>(R.id.btnDraw).isEnabled = !running
     }
 
     // ==================== 事件处理 ====================
@@ -1234,6 +1252,7 @@ class MainActivity : AppCompatActivity() {
         container.removeAllViews()
         val currentId = SessionStore.currentId(this)
         tvSessionsEmpty.visibility = if (sessions.isEmpty()) View.VISIBLE else View.GONE
+        tvSessionsCount.text = if (sessions.isEmpty()) "" else getString(R.string.sessions_count, sessions.size)
 
         var lastGroup: String? = null
         sessions.forEach { s ->
@@ -1243,6 +1262,29 @@ class MainActivity : AppCompatActivity() {
                 container.addView(drawerSection(group))
             }
             container.addView(drawerSessionRow(s, s.id == currentId))
+        }
+    }
+
+    /** 抽屉打开时让内容自左向右轻推淡入，营造层次；只对可见行生效，避免大量会话时抖动。 */
+    private fun animateDrawerContent() {
+        if (drawerAnimated) return
+        drawerAnimated = true
+        svHistory.scrollTo(0, 0)
+        val count = sessionsContainer.childCount
+        if (count == 0) return
+        val offset = dp(18).toFloat()
+        for (i in 0 until count) {
+            val child = sessionsContainer.getChildAt(i)
+            if (!child.isShown) continue
+            child.alpha = 0f
+            child.translationX = -offset
+            child.animate()
+                .alpha(1f)
+                .translationX(0f)
+                .setStartDelay((i * 18L).coerceAtMost(216L))
+                .setDuration(180L)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
         }
     }
 
@@ -1262,8 +1304,9 @@ class MainActivity : AppCompatActivity() {
     private fun drawerSection(text: String): TextView = TextView(this).apply {
         this.text = text
         textSize = 11f
+        letterSpacing = 0.06f
         setTextColor(getColor(R.color.text_caption))
-        setPadding(dp(12), dp(12), dp(12), dp(4))
+        setPadding(dp(14), dp(14), dp(14), dp(4))
     }
 
     private fun drawerSessionRow(s: SessionSummary, selected: Boolean): View {
@@ -1280,15 +1323,40 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             SessionStore.setCurrentId(this, s.id)
-            session = SessionStore.get(this, s.id) ?: SessionStore.current(this)
-            lastLoadedId = session.id
-            renderSession()
+            // 先关闭抽屉让收回动画流畅，再加载会话，避免动画期间做重活导致掉帧。
             closeHistory()
-            // 切换会话只更新高亮，避免重建整个历史列表造成卡顿。
             highlightDrawer(s.id)
+            switchSession(s.id)
         }
         v.findViewById<View>(R.id.btnDelete).setOnClickListener { confirmDeleteSession(s) }
         return v
+    }
+
+    /** 切换当前会话：内存命中立即渲染；否则后台读盘后回主线程渲染。 */
+    private fun switchSession(id: String) {
+        val cached = SessionStore.cachedSession(id)
+        if (cached != null) {
+            lastLoadedId = cached.id
+            session = cached
+            renderSession()
+            return
+        }
+        loadExecutor.execute {
+            val loaded = runCatching { SessionStore.get(this, id) }.getOrNull()
+            runOnUiThread {
+                if (destroyed) return@runOnUiThread
+                // 加载期间用户可能又切了别的会话，避免覆盖。
+                if (SessionStore.currentId(this) != id) return@runOnUiThread
+                if (loaded == null) {
+                    Toast.makeText(this, R.string.session_load_failed, Toast.LENGTH_SHORT).show()
+                    refreshDrawer()
+                    return@runOnUiThread
+                }
+                lastLoadedId = loaded.id
+                session = loaded
+                renderSession()
+            }
+        }
     }
 
     private fun confirmDeleteSession(s: SessionSummary) {
@@ -1317,27 +1385,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ==================== AI 绘画 ====================
-
-    /** 顶栏绘画按钮：输入描述后按生图任务发送，由 Agent 调用 generate_image。 */
-    private fun showDrawDialog() {
-        if (!canShowUi()) return
-        val content = layoutInflater.inflate(R.layout.dialog_draw, null)
-        val et = content.findViewById<EditText>(R.id.etDrawPrompt)
-        AlertDialog.Builder(this)
-            .setView(content)
-            .setPositiveButton(R.string.btn_confirm) { _, _ ->
-                val desc = et.text.toString().trim()
-                if (desc.isEmpty()) {
-                    Toast.makeText(this, R.string.draw_empty, Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                etTask.setText(getString(R.string.draw_send_prefix) + desc)
-                etTask.setSelection(etTask.text.length)
-                sendTask()
-            }
-            .setNegativeButton(R.string.btn_cancel, null)
-            .show()
-    }
 
     companion object {
         private const val TAG = "MainActivity"

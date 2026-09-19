@@ -65,6 +65,14 @@ object SessionStore {
     @Volatile
     private var summaries: List<SessionSummary>? = null
 
+    /** 最近访问的会话对象缓存（LRU）：切换会话时避免重复读盘解析 JSON。 */
+    private const val CACHE_LIMIT = 6
+
+    private val sessionCache = object : LinkedHashMap<String, ChatSession>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ChatSession>): Boolean =
+            size > CACHE_LIMIT
+    }
+
     private fun dir(ctx: Context) = File(ctx.filesDir, "sessions").apply { mkdirs() }
     private fun file(ctx: Context, id: String) = File(dir(ctx), "$id.json")
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -110,7 +118,16 @@ object SessionStore {
             ?.sortedByDescending { it.updatedAt }
             ?: emptyList()
 
-    fun get(ctx: Context, id: String): ChatSession? = read(file(ctx, id))
+    fun get(ctx: Context, id: String): ChatSession? {
+        synchronized(sessionCache) { sessionCache[id] }?.let { return it }
+        val loaded = read(file(ctx, id)) ?: return null
+        synchronized(sessionCache) { sessionCache[id] = loaded }
+        return loaded
+    }
+
+    /** 仅当会话已在内存缓存中时返回，不触发读盘（供切换会话的快路径使用）。 */
+    fun cachedSession(id: String): ChatSession? =
+        synchronized(sessionCache) { sessionCache[id] }
 
     fun create(ctx: Context, title: String = "新任务"): ChatSession {
         val now = System.currentTimeMillis()
@@ -140,6 +157,7 @@ object SessionStore {
             prefs(ctx).edit().remove(KEY_CURRENT).apply()
         }
         summaries = summaries?.filterNot { it.id == id }
+        synchronized(sessionCache) { sessionCache.remove(id) }
     }
 
     /**
@@ -186,6 +204,7 @@ object SessionStore {
         summaries = (summaries?.filterNot { it.id == session.id } ?: emptyList())
             .plus(entry)
             .sortedByDescending { it.updatedAt }
+        synchronized(sessionCache) { sessionCache[session.id] = session }
     }
 
     private fun read(f: File): ChatSession? = runCatching {

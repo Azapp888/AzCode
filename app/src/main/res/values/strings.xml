@@ -239,6 +239,8 @@
     <string name="btn_new_session">新建任务</string>
     <string name="btn_close">关闭</string>
     <string name="sessions_empty">还没有任务。点右上角「+」新建一个任务。</string>
+    <string name="sessions_count">共 %1$d 个任务</string>
+    <string name="session_load_failed">任务加载失败，请重试</string>
     <string name="session_meta">%1$d 条消息 · %2$s</string>
     <string name="delete_session_title">删除任务</string>
     <string name="delete_session_msg">确定删除「%1$s」？该任务的聊天记录也会一并删除。</string>
