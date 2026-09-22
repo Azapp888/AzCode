@@ -16,6 +16,7 @@ import android.provider.OpenableColumns
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.Window
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.widget.Button
@@ -591,27 +592,47 @@ class MainActivity : AppCompatActivity() {
         updateModelBox()
     }
 
-    /** 拉满思考深度前提示可能的额外费用。 */
+    /** 拉满思考深度前，用与页面一致的玻璃卡片弹窗提示可能的额外费用。 */
     private fun promptMaxDepth() {
         maxDepthPrompting = true
         if (!canShowUi()) return
-        AlertDialog.Builder(this)
-            .setTitle(R.string.depth_max_title)
-            .setMessage(R.string.depth_max_message)
-            .setPositiveButton(R.string.btn_confirm) { _, _ ->
-                maxDepthPrompting = false
-                maxDepthConfirmed = true
-                applyDepth(ThinkingDepth.entries.size - 1)
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ ->
-                maxDepthPrompting = false
-                revertDepth()
-            }
-            .setOnCancelListener {
-                maxDepthPrompting = false
-                revertDepth()
-            }
-            .show()
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val content = layoutInflater.inflate(R.layout.dialog_depth_confirm, null)
+        dialog.setContentView(content)
+        dialog.setCanceledOnTouchOutside(true)
+        dialog.setOnCancelListener {
+            maxDepthPrompting = false
+            revertDepth()
+        }
+        content.findViewById<View>(R.id.btnDepthCancel).setOnClickListener {
+            maxDepthPrompting = false
+            revertDepth()
+            dialog.dismiss()
+        }
+        content.findViewById<View>(R.id.btnDepthConfirm).setOnClickListener {
+            maxDepthPrompting = false
+            maxDepthConfirmed = true
+            applyDepth(ThinkingDepth.entries.size - 1)
+            dialog.dismiss()
+        }
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            setDimAmount(0.45f)
+        }
+        dialog.show()
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.86f).toInt().coerceAtMost(dp(420)),
+            WindowManager.LayoutParams.WRAP_CONTENT,
+        )
+        // 轻微放大淡入，和整体液态玻璃风格一致。
+        content.alpha = 0f
+        content.scaleX = 0.92f
+        content.scaleY = 0.92f
+        content.animate().alpha(1f).scaleX(1f).scaleY(1f)
+            .setDuration(180L)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
     }
 
     private fun revertDepth() {

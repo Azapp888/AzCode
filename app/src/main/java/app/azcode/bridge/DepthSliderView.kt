@@ -67,9 +67,9 @@ class DepthSliderView @JvmOverloads constructor(
     private val colorTrack = ContextCompat.getColor(context, R.color.surface_muted)
     private val colorThumb = ContextCompat.getColor(context, R.color.surface)
 
-    // 轨道加粗到与滑块圆球直径相当，视觉上更厚重、便于拖动。
-    private val thumbRadius = dp(16f)
-    private val trackHeight = thumbRadius * 2f
+    // 圆球略大于轨道：更容易看清与拖动；轨道保持厚重。
+    private val thumbRadius = dp(18.5f)
+    private val trackHeight = dp(32f)
     private val ringWidth = dp(3f)
 
     private class Bubble(var x: Float, var y: Float, var r: Float, var speed: Float, var alpha: Int)
