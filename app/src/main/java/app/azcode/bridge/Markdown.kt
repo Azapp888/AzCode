@@ -20,8 +20,9 @@ import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
  * 以及 `$...$`（行内）与 `$$...$$`（块级）LaTeX 数学公式。
  * 公式由 jlatexmath-android 在本地排版，不依赖网络。
  *
- * 注意：Markwon 的 ext-latex 只识别 `$$...$$`，因此渲染前会把单 `$` 行内公式
- * 规范化为 `$$...$$`（见 [normalizeLatex]）。
+ * 注意：Markwon 的 ext-latex 只识别 `$$...$$`，因此渲染前会把 `$...$`、
+ * `\(...\)`、`\[...\]` 等分隔符统一规范化为 `$$...$$`，并修正 jlatexmath
+ * 不支持的写法（见 [normalizeLatex] / [sanitizeMath]）。
  * 图片链接由 [extractImages] 分离后另行下载展示。
  */
 object Markdown {
@@ -59,63 +60,102 @@ object Markdown {
     }
 
     /**
-     * 把单 `$` 行内公式改写成 ext-latex 能识别的 `$$...$$`。
-     * 会跳过代码块与行内代码，避免误伤代码里的 `$`。
+     * 把所有数学分隔符统一改写成 ext-latex 能识别的 `$$...$$`：
+     * - `\(...\)`（LaTeX 行内）、`\[...\]`（LaTeX 块级）→ `$$...$$`
+     * - 单 `$...$` 行内 → `$$...$$`（仅当内容像公式时）
+     * - 已是 `$$...$$` 的保持原样
+     *
+     * 同时修正公式体里常见的写法差异（见 [sanitizeMath]），例如模型会把
+     * `array` 的换行 `\\[2ex]` 误写成 `\[2ex]`，jlatexmath 会把 `\[` 当成
+     * 未闭合的块级公式而报错。会跳过代码块与行内代码，避免误伤代码里的 `$`。
      */
     fun normalizeLatex(md: String): String {
-        if (!md.contains('$')) return md
-        val out = StringBuilder(md.length + 16)
-        val lines = md.split('\n')
-        var inFence = false
-        lines.forEachIndexed { index, line ->
-            val trimmed = line.trimStart()
-            if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
-                inFence = !inFence
-                out.append(line)
-            } else if (inFence) {
-                out.append(line)
-            } else {
-                out.append(convertInlineDollars(line))
-            }
-            if (index != lines.lastIndex) out.append('\n')
-        }
-        return out.toString()
-    }
-
-    /** 单行内把 `$...$` 转为 `$$...$$`；已是 `$$...$$` 的保持原样。 */
-    private fun convertInlineDollars(line: String): String {
-        val out = StringBuilder(line.length + 8)
+        if (!md.contains('$') && !md.contains("\\(") && !md.contains("\\[")) return md
+        val out = StringBuilder(md.length + 64)
+        val n = md.length
         var i = 0
-        while (i < line.length) {
-            val c = line[i]
+        var inFence = false
+        while (i < n) {
+            // 行首判断代码围栏，围栏内不做任何公式改写。
+            if (i == 0 || md[i - 1] == '\n') {
+                val lineEnd = md.indexOf('\n', i).let { if (it < 0) n else it }
+                val trimmed = md.substring(i, lineEnd).trimStart()
+                if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
+                    inFence = !inFence
+                    out.append(md, i, lineEnd)
+                    i = lineEnd
+                    continue
+                }
+            }
+            if (inFence) {
+                out.append(md[i])
+                i++
+                continue
+            }
+            val c = md[i]
             if (c == '`') {
                 // 行内代码整体跳过。
-                val end = line.indexOf('`', i + 1)
+                val end = md.indexOf('`', i + 1)
                 if (end < 0) {
-                    out.append(line, i, line.length)
+                    out.append(md, i, n)
                     break
                 }
-                out.append(line, i, end + 1)
+                out.append(md, i, end + 1)
                 i = end + 1
                 continue
             }
-            if (c == '\\' && i + 1 < line.length && line[i + 1] == '$') {
-                // 转义的 \$ 原样保留。
-                out.append("\\$")
-                i += 2
+            if (c == '\\' && i + 1 < n) {
+                // array 换行 `\\[2ex]` 及其漏写反斜杠的 `\[2ex]`，统一为 `\\ `。
+                val rowBreak = matchRowBreakAt(md, i)
+                if (rowBreak != null) {
+                    out.append("\\\\ ")
+                    i = rowBreak.last + 1
+                    continue
+                }
+                val d = md[i + 1]
+                if (d == '$') {
+                    // 转义的 \$ 原样保留。
+                    out.append("\\$")
+                    i += 2
+                    continue
+                }
+                if (d == '(') {
+                    val close = md.indexOf("\\)", i + 2)
+                    if (close >= 0) {
+                        appendMath(out, md.substring(i + 2, close))
+                        i = close + 2
+                        continue
+                    }
+                }
+                if (d == '[') {
+                    val close = md.indexOf("\\]", i + 2)
+                    if (close >= 0) {
+                        appendMath(out, md.substring(i + 2, close))
+                        i = close + 2
+                        continue
+                    }
+                }
+                out.append(c)
+                i++
                 continue
             }
             if (c == '$') {
-                if (i + 1 < line.length && line[i + 1] == '$') {
+                if (i + 1 < n && md[i + 1] == '$') {
+                    val close = md.indexOf("$$", i + 2)
+                    if (close >= 0) {
+                        appendMath(out, md.substring(i + 2, close))
+                        i = close + 2
+                        continue
+                    }
                     out.append("$$")
                     i += 2
                     continue
                 }
-                val close = line.indexOf('$', i + 1)
+                val close = md.indexOf('$', i + 1)
                 if (close > i + 1) {
-                    val body = line.substring(i + 1, close)
+                    val body = md.substring(i + 1, close)
                     if (looksLikeMath(body)) {
-                        out.append("$$").append(body).append("$$")
+                        appendMath(out, body)
                         i = close + 1
                         continue
                     }
@@ -130,6 +170,45 @@ object Markdown {
         }
         return out.toString()
     }
+
+    /** 把一段公式体包成 `$$...$$`，并做兼容性修正。 */
+    private fun appendMath(out: StringBuilder, body: String) {
+        out.append("$$").append(sanitizeMath(body)).append("$$")
+    }
+
+    /**
+     * 修正公式体里 jlatexmath 无法直接处理、但从模型输出中很常见的写法：
+     * - `\[2ex]` / `\[1.5ex]`（漏写一个反斜杠的换行间距）→ `\\ `
+     * - 不支持的字号开关（`\normalsize` 等）直接去掉，避免整段公式解析失败
+     */
+    private fun sanitizeMath(body: String): String {
+        var s = body
+        if (s.contains("\\[")) {
+            s = ROW_BREAK_RE.replace(s) { "\\\\ " }
+        }
+        if (s.contains("\\normalsize") || s.contains("\\tiny") || s.contains("\\scriptsize") ||
+            s.contains("\\footnotesize") || s.contains("\\huge") || s.contains("\\Huge") ||
+            s.contains("\\normalfont")
+        ) {
+            UNSUPPORTED_SIZE_RE.replace(s, "").let { s = it }
+        }
+        return s
+    }
+
+    /**
+     * 匹配 `array` 换行间距：允许一到两个反斜杠前缀，间距写法如 `2ex`、`1.5em`。
+     * 起始位置必须正好是 [index]，避免误伤后面的其它公式。
+     */
+    private fun matchRowBreakAt(md: String, index: Int): IntRange? {
+        val m = ROW_BREAK_RE.find(md, index) ?: return null
+        return if (m.range.first == index) m.range else null
+    }
+
+    private val ROW_BREAK_RE =
+        Regex("""\\{1,2}\[\s*[\d.]+\s*(?:ex|em|pt|pc|cm|mm|in|bp|dd|cc|sp|mu)\s*]""")
+
+    private val UNSUPPORTED_SIZE_RE =
+        Regex("""\\(?:normalsize|tiny|scriptsize|footnotesize|huge|Huge|normalfont)\b""")
 
     /**
      * 判断 `$...$` 中间的内容是否像数学公式，避免把「价格 5$ 和 10$」这类货币文本误转。
