@@ -36,6 +36,17 @@ sealed interface AgentEvent {
     /** 文生图工具产出的图片地址列表，UI 直接渲染为图片气泡。 */
     data class Images(val urls: List<String>) : AgentEvent
 
+    /**
+     * GenOffice 生成的真格式文档：本地文件路径、显示名、格式与逐页预览图。
+     * UI 展示预览图并提供打开/分享原始文档的入口。
+     */
+    data class Documents(
+        val path: String,
+        val name: String,
+        val format: String,
+        val pages: List<String>,
+    ) : AgentEvent
+
     /** 中性系统提示，如达到步数上限。 */
     data class Notice(val text: String) : AgentEvent
 
@@ -387,6 +398,10 @@ class AgentRunner(
 
             "ask_question_for_user" -> askQuestion(args)
 
+            "genoffice_status" -> genofficeStatus()
+
+            "genoffice_document" -> genofficeDocument(args)
+
             "list_model_providers" -> listModelProviders()
 
             "fetch_models" -> fetchModels(args)
@@ -445,6 +460,49 @@ class AgentRunner(
     private fun ok() = """{"ok":true}"""
 
     private fun err(message: String) = JSONObject().put("ok", false).put("error", message).toString()
+
+    // ==================== GenOffice 文档生成 ====================
+
+    private fun genofficeStatus(): String = try {
+        val info = GenOfficeMcp.status(ctx)
+        JSONObject()
+            .put("ok", true)
+            .put("endpoint", info.optString("endpoint"))
+            .put("toolCount", info.optInt("toolCount"))
+            .put("tools", info.optJSONArray("tools") ?: JSONArray())
+            .toString()
+    } catch (e: Exception) {
+        err(e.message ?: "GenOffice 服务不可达")
+    }
+
+    private fun genofficeDocument(args: JSONObject): String {
+        val kind = args.optString("kind")
+        val content = args.optString("content")
+        when {
+            kind.isBlank() -> return err("缺少 kind（docx / xlsx / pptx）")
+            content.isBlank() -> return err("缺少 content")
+        }
+        return try {
+            val doc = GenOfficeMcp.createDocument(
+                ctx = ctx,
+                kind = kind,
+                content = content,
+                title = args.optString("title"),
+                preview = args.optBoolean("preview", true),
+            )
+            listener(AgentEvent.Documents(doc.path, doc.name, doc.format, doc.pages))
+            JSONObject()
+                .put("ok", true)
+                .put("name", doc.name)
+                .put("format", doc.format)
+                .put("path", doc.path)
+                .put("previewPages", doc.pages.size)
+                .put("summary", doc.summary)
+                .toString()
+        } catch (e: Exception) {
+            err(e.message ?: "GenOffice 生成失败")
+        }
+    }
 
     // ==================== 生图意图解析 ====================
 
@@ -1099,6 +1157,30 @@ class AgentRunner(
                     .put("query", str("搜索关键词"))
                     .put("limit", num("最多返回条数，默认 10")),
                 listOf("query"),
+            ))
+
+            // ---- GenOffice：把 Markdown/数据生成为真格式 Office 文档 ----
+            // 与 generate_image 一样恒定声明：工具集合顺序固定，避免前缀缓存失效；
+            // 未开启 GenOffice 时调用会返回友好错误提示。
+
+            put(fn(
+                "genoffice_status",
+                "查看 GenOffice 文档生成服务（MCP）的接入状态与可用工具。用户要生成 Word/Excel/PPT 文档前先调用；未配置时引导用户在「设置 → GenOffice」填写服务地址。",
+                JSONObject(), emptyList(),
+            ))
+
+            put(fn(
+                "genoffice_document",
+                "生成真格式 Office 文档（.docx/.xlsx/.pptx）并在聊天中展示逐页预览图；文件会保存到本机。kind=docx 时 content 传 Markdown；kind=xlsx 时 content 传 JSON 二维数组或 {\"sheets\":[{\"name\":\"Sheet1\",\"rows\":[[...]]}]}；kind=pptx 时 content 传 deck spec JSON。内容较多时可先与用户确认结构再生成。",
+                JSONObject()
+                    .put("kind", JSONObject()
+                        .put("type", "string")
+                        .put("enum", JSONArray(listOf("docx", "xlsx", "pptx")))
+                        .put("description", "文档类型：docx（Word）/ xlsx（Excel）/ pptx（PowerPoint）"))
+                    .put("content", str("文档内容：docx 为 Markdown，xlsx 为 JSON 数据，pptx 为 deck spec JSON"))
+                    .put("title", str("文件名（不含扩展名），可省略"))
+                    .put("preview", JSONObject().put("type", "boolean").put("description", "是否渲染逐页预览图，默认 true")),
+                listOf("kind", "content"),
             ))
         }
     }

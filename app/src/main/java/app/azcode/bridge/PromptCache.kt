@@ -89,6 +89,20 @@ object PromptCache {
                 "内置插件 ponytail 提供「拒绝过度设计」的工程约束，默认启用。"
         )
 
+        sb.append(
+            "\n\n【文档生成】用户需要 Word/Excel/PPT 文档时，调用 genoffice_document 生成真格式文件" +
+                "（kind=docx 时 content 传 Markdown，kind=xlsx 传 JSON 数据，kind=pptx 传 deck spec JSON）；" +
+                "生成的文件会保存到本机并在聊天中展示逐页预览图。"
+        )
+        if (GenOfficeConfig.isConfigured(ctx)) {
+            sb.append("先用 genoffice_status 确认 GenOffice 服务可达。")
+        } else {
+            sb.append(
+                "当前尚未接入 GenOffice：请提示用户在电脑或 Termux 上运行 `genoffice mcp --http`，" +
+                    "并到「设置 → GenOffice」开启并填写服务地址。"
+            )
+        }
+
         if (!imageHint.isNullOrBlank()) {
             sb.append("\n\n【本次生图安排】").append(imageHint)
         }

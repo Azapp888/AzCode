@@ -391,6 +391,12 @@ class MainActivity : AppCompatActivity() {
                 finishToolCard(turn.toolOk, turn.toolResult, persist = false)
             }
             "image" -> addImages(turn.images, persist = false)
+            "document" -> addDocument(
+                path = turn.attachments.firstOrNull().orEmpty(),
+                name = turn.text,
+                pages = turn.images,
+                persist = false,
+            )
         }
     }
 
@@ -983,6 +989,10 @@ class MainActivity : AppCompatActivity() {
                 removeTyping()
                 addImages(event.urls, persist = true)
             }
+            is AgentEvent.Documents -> {
+                removeTyping()
+                addDocument(event.path, event.name, event.pages, persist = true)
+            }
             is AgentEvent.Notice -> {
                 removeTyping()
                 addNotice(event.text)
@@ -1061,6 +1071,64 @@ class MainActivity : AppCompatActivity() {
         }
         scrollToBottom()
     }
+
+    /** 渲染 GenOffice 生成的文档卡片：文件名、预览图与打开/分享入口。 */
+    private fun addDocument(path: String, name: String, pages: List<String>, persist: Boolean) {
+        val v = layoutInflater.inflate(R.layout.item_msg_document, chatContainer, false)
+        v.findViewById<TextView>(R.id.tvDocName).text = name
+        v.findViewById<Button>(R.id.btnDocOpen).setOnClickListener { openDocument(path) }
+        v.findViewById<Button>(R.id.btnDocShare).setOnClickListener { shareDocument(path) }
+        chatContainer.addView(v)
+        if (pages.isNotEmpty()) addImages(pages, persist = false)
+        if (persist) {
+            appendTurn(ChatTurn(kind = "document", text = name, attachments = listOf(path), images = pages))
+        }
+        scrollToBottom()
+    }
+
+    /** 用系统「打开方式」打开生成的文档；无匹配应用时提示改用分享。 */
+    private fun openDocument(path: String) {
+        val file = File(path)
+        if (!file.exists()) {
+            Toast.makeText(this, getString(R.string.doc_missing), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(fileUri(file), mimeOfDocument(file.name))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching { startActivity(Intent.createChooser(intent, getString(R.string.doc_open))) }
+            .onFailure { Toast.makeText(this, getString(R.string.doc_no_viewer), Toast.LENGTH_SHORT).show() }
+    }
+
+    /** 通过分享把文档发送到其他应用。 */
+    private fun shareDocument(path: String) {
+        val file = File(path)
+        if (!file.exists()) {
+            Toast.makeText(this, getString(R.string.doc_missing), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = mimeOfDocument(file.name)
+            putExtra(Intent.EXTRA_STREAM, fileUri(file))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching { startActivity(Intent.createChooser(intent, getString(R.string.doc_share))) }
+            .onFailure { Toast.makeText(this, getString(R.string.doc_no_viewer), Toast.LENGTH_SHORT).show() }
+    }
+
+    private fun fileUri(file: File): Uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+
+    private fun mimeOfDocument(name: String): String =
+        when (name.substringAfterLast('.', "").lowercase()) {
+            "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            "pdf" -> "application/pdf"
+            "md" -> "text/markdown"
+            "html" -> "text/html"
+            else -> "*/*"
+        }
 
     /** 全屏查看图片，并提供保存到相册的入口。 */
     private fun showImageDialog(url: String) {
@@ -1201,6 +1269,8 @@ class MainActivity : AppCompatActivity() {
         "save_model_provider" -> getString(R.string.tool_name_save_provider)
         "remove_model_provider" -> getString(R.string.tool_name_remove_provider)
         "import_providers_md" -> getString(R.string.tool_name_import_md)
+        "genoffice_status" -> getString(R.string.tool_name_genoffice_status)
+        "genoffice_document" -> getString(R.string.tool_name_genoffice_document)
         "finish" -> getString(R.string.tool_name_finish)
         else -> name
     }

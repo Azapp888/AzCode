@@ -87,6 +87,22 @@
 
                     <ImageView style="@style/SettingsRowChevron" />
                 </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/rowGenoffice"
+                    style="@style/SettingsRow">
+
+                    <ImageView style="@style/SettingsRowIcon" android:src="@drawable/ic_tool" />
+
+                    <TextView style="@style/SettingsRowTitle" android:text="@string/title_genoffice" />
+
+                    <TextView
+                        android:id="@+id/tvGenofficeEntry"
+                        style="@style/SettingsRowValue"
+                        android:text="@string/settings_value_not_connected" />
+
+                    <ImageView style="@style/SettingsRowChevron" />
+                </LinearLayout>
             </LinearLayout>
 
             <TextView style="@style/SectionLabel" android:text="@string/section_app" />

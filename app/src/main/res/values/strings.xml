@@ -271,4 +271,30 @@
     <string name="memory_hint_tap_hide">点击隐藏</string>
     <string name="delete_memory_title">删除记忆</string>
     <string name="delete_memory_msg">确定删除「%1$s」？</string>
+
+    <string name="tool_name_genoffice_status">检查文档服务</string>
+    <string name="tool_name_genoffice_document">生成文档</string>
+    <string name="doc_card_title">已生成文档</string>
+    <string name="doc_card_hint">可点击预览图放大查看，或打开原始文件</string>
+    <string name="doc_open">打开</string>
+    <string name="doc_share">分享</string>
+    <string name="doc_no_viewer">未找到可打开该文档的应用，可点击「分享」发送到其他应用。</string>
+    <string name="doc_missing">文件不存在或已被清理。</string>
+
+    <string name="title_genoffice">GenOffice 文档</string>
+    <string name="genoffice_switch">开启文档生成</string>
+    <string name="genoffice_switch_hint">在电脑或 Termux 上运行 `genoffice mcp --http`，再填入其地址</string>
+    <string name="genoffice_status_off">未开启。开启后即可让 Agent 生成 Word/Excel/PPT 文档。</string>
+    <string name="genoffice_status_on">已开启：%1$s</string>
+    <string name="genoffice_url_label">服务地址</string>
+    <string name="genoffice_url_hint">如 http://192.168.1.5:8765</string>
+    <string name="genoffice_token_label">访问令牌（可选）</string>
+    <string name="genoffice_token_hint">与 --token 一致，留空表示服务端未设令牌</string>
+    <string name="btn_genoffice_save">保存</string>
+    <string name="btn_genoffice_test">测试连接</string>
+    <string name="genoffice_need_url">请先填写服务地址</string>
+    <string name="genoffice_saved">已保存</string>
+    <string name="genoffice_test_ok">连接成功，可用工具 %1$d 个</string>
+    <string name="genoffice_test_failed">连接失败：%1$s</string>
+    <string name="genoffice_help">在电脑上安装 GenOffice 后运行 `genoffice mcp --http 8765`（跨设备访问加 `--host 0.0.0.0`，并建议加 `--token 密钥`）。手机与电脑需在同一局域网；若在 Termux 中运行则填 127.0.0.1。开启后即可让 Agent 生成 .docx/.xlsx/.pptx 并在聊天中预览。</string>
 </resources>

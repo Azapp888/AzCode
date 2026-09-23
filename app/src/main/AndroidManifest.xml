@@ -61,6 +61,12 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".GenOfficeActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".SkillsActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden"

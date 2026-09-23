@@ -27,6 +27,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvLogsEntry: TextView
     private lateinit var tvModelEntry: TextView
     private lateinit var tvGithubEntry: TextView
+    private lateinit var tvGenofficeEntry: TextView
     private lateinit var tvVersion: TextView
     private lateinit var btnBridge: Button
 
@@ -48,6 +49,7 @@ class SettingsActivity : AppCompatActivity() {
 
         tvModelEntry = findViewById(R.id.tvModelEntry)
         tvGithubEntry = findViewById(R.id.tvGithubEntry)
+        tvGenofficeEntry = findViewById(R.id.tvGenofficeEntry)
         etMaxSteps = findViewById(R.id.etMaxSteps)
         etSystemPrompt = findViewById(R.id.etSystemPrompt)
         swImageWatermark = findViewById(R.id.swImageWatermark)
@@ -81,6 +83,9 @@ class SettingsActivity : AppCompatActivity() {
         }
         findViewById<View>(R.id.rowGithub).setOnClickListener {
             startActivity(Intent(this, GitHubActivity::class.java))
+        }
+        findViewById<View>(R.id.rowGenoffice).setOnClickListener {
+            startActivity(Intent(this, GenOfficeActivity::class.java))
         }
         findViewById<View>(R.id.rowSkills).setOnClickListener {
             startActivity(Intent(this, SkillsActivity::class.java))
@@ -215,6 +220,12 @@ class SettingsActivity : AppCompatActivity() {
 
         tvGithubEntry.text = if (GitHubConfig.isConfigured(this)) {
             "@" + GitHubConfig.login(this).ifBlank { "?" }
+        } else {
+            getString(R.string.settings_value_not_connected)
+        }
+
+        tvGenofficeEntry.text = if (GenOfficeConfig.isConfigured(this)) {
+            GenOfficeConfig.url(this).removePrefix("http://").removePrefix("https://")
         } else {
             getString(R.string.settings_value_not_connected)
         }

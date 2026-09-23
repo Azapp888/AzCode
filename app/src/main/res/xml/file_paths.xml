@@ -3,4 +3,7 @@
     <cache-path
         name="captures"
         path="captures/" />
+    <files-path
+        name="genoffice"
+        path="genoffice/" />
 </paths>
