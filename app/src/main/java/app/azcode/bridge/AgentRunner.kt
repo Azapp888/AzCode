@@ -337,6 +337,7 @@ class AgentRunner(
             "tap" -> {
                 val svc = AzAccessibilityService.instance
                     ?: return err("无障碍服务未开启，无法点击。请到「设置 → 设备能力 → 无障碍设置」开启后重试。")
+                AzAccessibilityService.pulseOperating()
                 when {
                     args.has("text") ->
                         if (svc.tapText(args.getString("text"))) ok() else err("未找到文本：${args.getString("text")}")
@@ -350,6 +351,7 @@ class AgentRunner(
             "swipe" -> {
                 val svc = AzAccessibilityService.instance
                     ?: return err("无障碍服务未开启，无法滑动。请到「设置 → 设备能力 → 无障碍设置」开启后重试。")
+                AzAccessibilityService.pulseOperating()
                 val okSwipe = svc.dispatchSwipe(
                     args.getDouble("x1").toFloat(),
                     args.getDouble("y1").toFloat(),
@@ -363,6 +365,7 @@ class AgentRunner(
             "global" -> {
                 val svc = AzAccessibilityService.instance
                     ?: return err("无障碍服务未开启，无法执行系统导航。请到「设置 → 设备能力 → 无障碍设置」开启后重试。")
+                AzAccessibilityService.pulseOperating()
                 if (svc.globalAction(args.optString("action"))) ok() else err("未知动作")
             }
 
@@ -561,6 +564,7 @@ class AgentRunner(
         if (text.isEmpty()) return err("缺少 text")
         val append = args.optBoolean("append", false)
 
+        AzAccessibilityService.pulseOperating()
         val accessibilityOn = AzAccessibilityService.isEnabled()
         if (accessibilityOn && AzAccessibilityService.setFocusedText(text, append)) {
             return JSONObject().put("ok", true).put("via", "accessibility").toString()

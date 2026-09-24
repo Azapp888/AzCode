@@ -942,6 +942,7 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread { if (!destroyed) handleEvent(AgentEvent.Failure(e.message ?: "任务异常结束")) }
             } finally {
                 // 保存与通知即使失败也不能让线程静默退出，否则 UI 会一直停在「运行中」。
+                AzAccessibilityService.stopOperating()
                 runCatching { SessionStore.save(this, runningSession) }
                     .onFailure { CrashLog.w(TAG, "任务结束保存会话失败: ${it.message}", it) }
                 runCatching {
@@ -964,6 +965,7 @@ class MainActivity : AppCompatActivity() {
         runner?.cancel()
         // 立即释放正在等待作答的问答区，让工作线程马上从等待中返回。
         pendingQuestionLatch?.countDown()
+        AzAccessibilityService.stopOperating()
         btnStop.isEnabled = false
         addNotice(getString(R.string.stopping))
     }

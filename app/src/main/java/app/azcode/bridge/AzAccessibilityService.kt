@@ -3,9 +3,14 @@ package app.azcode.bridge
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
+import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.Gravity
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import org.json.JSONArray
@@ -32,6 +37,8 @@ class AzAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {}
 
     override fun onDestroy() {
+        uiHandler.removeCallbacks(hideRunnable)
+        detachGlow()
         if (instance === this) instance = null
         super.onDestroy()
     }
@@ -142,11 +149,66 @@ class AzAccessibilityService : AccessibilityService() {
         return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
     }
 
+    // ==================== AI 操作光效 ====================
+
+    private val uiHandler = Handler(Looper.getMainLooper())
+
+    private val hideRunnable = Runnable { detachGlow() }
+
+    private var glowView: OperationGlowView? = null
+
+    /**
+     * 显示一次操作光效并重置自动隐藏计时。可在任意线程调用，内部会切到主线程处理窗口操作。
+     */
+    fun showOperating() {
+        uiHandler.post {
+            val view = ensureGlow() ?: return@post
+            view.start()
+            uiHandler.removeCallbacks(hideRunnable)
+            uiHandler.postDelayed(hideRunnable, OPERATING_TIMEOUT_MS)
+        }
+    }
+
+    /** 立即隐藏操作光效（任务结束/取消时调用）。 */
+    fun hideOperating() {
+        uiHandler.post {
+            uiHandler.removeCallbacks(hideRunnable)
+            detachGlow()
+        }
+    }
+
+    private fun ensureGlow(): OperationGlowView? {
+        glowView?.let { return it }
+        val wm = getSystemService(WindowManager::class.java) ?: return null
+        val view = OperationGlowView(this)
+        val lp = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT,
+        ).apply { gravity = Gravity.TOP or Gravity.START }
+        return runCatching { wm.addView(view, lp); view }.getOrNull()?.also { glowView = it }
+    }
+
+    private fun detachGlow() {
+        val view = glowView ?: return
+        glowView = null
+        view.stop()
+        runCatching { getSystemService(WindowManager::class.java)?.removeView(view) }
+    }
+
     companion object {
         @Volatile
         internal var instance: AzAccessibilityService? = null
 
         private const val MAX_NODES = 200
+
+        /** 一次操作后光效的保留时长：连续操作会不断续期，停止操作后自动淡出。 */
+        private const val OPERATING_TIMEOUT_MS = 2500L
 
         fun isEnabled(): Boolean = instance != null
 
@@ -159,5 +221,15 @@ class AzAccessibilityService : AccessibilityService() {
 
         fun setFocusedText(text: String, append: Boolean = false): Boolean =
             instance?.setFocusedText(text, append) ?: false
+
+        /** 触发一次 AI 操作光效；无障碍服务未开启时不显示。 */
+        fun pulseOperating() {
+            instance?.showOperating()
+        }
+
+        /** 立即隐藏 AI 操作光效。 */
+        fun stopOperating() {
+            instance?.hideOperating()
+        }
     }
 }
