@@ -15,6 +15,7 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.ExtractedText
 import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.InputConnection
+import app.azcode.bridge.R
 
 /**
  * 内置 ADB 输入法：不显示真实按键，只接收广播指令后把文本提交到当前输入框，

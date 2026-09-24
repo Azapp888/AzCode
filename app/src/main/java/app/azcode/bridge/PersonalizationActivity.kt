@@ -4,7 +4,6 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.text.format.DateFormat
 import android.view.View
 import android.widget.Button
 import android.widget.TextView
@@ -63,10 +62,15 @@ class PersonalizationActivity : AppCompatActivity() {
             append(getString(R.string.personalization_status_apps, appCount))
             if (consented) {
                 append('\n')
-                append(getString(R.string.personalization_status_at, formatTime(Personalization.consentedAt(this))))
-                val snapAt = Personalization.snapshotAt(this)
+                append(getString(R.string.personalization_status_at, formatTime(Personalization.consentedAt(this@PersonalizationActivity))))
+                val snapAt = Personalization.snapshotAt(this@PersonalizationActivity)
                 append('\n')
-                append(getString(R.string.personalization_status_snapshot, if (snapAt > 0) formatTime(snapAt) else getString(R.string.personalization_never)))
+                append(
+                    getString(
+                        R.string.personalization_status_snapshot,
+                        if (snapAt > 0) formatTime(snapAt) else getString(R.string.personalization_never),
+                    ),
+                )
             }
         }
         tvStatus.text = status
@@ -106,7 +110,10 @@ class PersonalizationActivity : AppCompatActivity() {
 
     private fun formatTime(ms: Long): String =
         if (ms <= 0) getString(R.string.personalization_never)
-        else DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(java.util.Date(ms))
+        else java.text.DateFormat.getDateTimeInstance(
+            java.text.DateFormat.SHORT,
+            java.text.DateFormat.SHORT,
+        ).format(java.util.Date(ms))
 
     companion object {
         /** 首启授权说明弹窗：一句话概述 + 查看详情 + 同意。 */
