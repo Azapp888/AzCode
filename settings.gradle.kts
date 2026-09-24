@@ -12,5 +12,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "azcode-bridge"
+rootProject.name = "AzCode"
 include(":app")

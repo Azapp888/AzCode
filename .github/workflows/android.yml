@@ -34,12 +34,12 @@ jobs:
       - name: 收集产物
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk "dist/azcode-bridge-${GITHUB_REF_NAME}-debug.apk"
-          cp app/build/outputs/apk/release/app-release-unsigned.apk "dist/azcode-bridge-${GITHUB_REF_NAME}-release-unsigned.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/azcode-magic-${GITHUB_REF_NAME}-debug.apk"
+          cp app/build/outputs/apk/release/app-release-unsigned.apk "dist/azcode-magic-${GITHUB_REF_NAME}-release-unsigned.apk"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: azcode-bridge-apk
+          name: azcode-magic-apk
           path: dist/*.apk
           retention-days: 14
 
@@ -50,7 +50,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: azcode-bridge-apk
+          name: azcode-magic-apk
           path: apk/
       - uses: softprops/action-gh-release@v2
         with:
