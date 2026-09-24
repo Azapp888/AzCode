@@ -6,19 +6,22 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
-import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.text.TextUtils
 import android.view.View
 import kotlin.math.PI
+import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * AI 状态光效：覆盖整个物理屏幕的呼吸式描边光晕。
+ * AI 状态光效：全屏呼吸描边 + 左下角悬浮气泡。
  *
- * 只要无障碍服务处于开启状态，该光效就常驻呼吸显示，作为「AzCode 正在守护设备」的视觉标识；
- * AI 真正执行无障碍操作时（[setOperating]）光晕增强并在左下角显示「AI 正在操作手机」，操作结束后
- * 恢复为常态呼吸但不会消失。
+ * 只有 AI 检测到需要操作用户手机时（[setOperating]）才显示全屏光效，气泡同步显示「AI 正在操作手机」；
+ * 操作间隙气泡改为展示 AI 的文字输出（调用方已剔除代码行），光效收起但气泡保留，直到任务结束清除。
  *
  * 该视图由无障碍服务以 `TYPE_ACCESSIBILITY_OVERLAY` 窗口添加，因此无需额外权限，也不拦截触摸
  * （窗口带 `FLAG_NOT_TOUCHABLE`）。
@@ -44,24 +47,32 @@ class OperationGlowView(context: Context) : View(context) {
         color = Color.parseColor("#7FA0FF")
     }
 
-    private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val bubbleTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        textSize = 12f * context.resources.displayMetrics.scaledDensity
-        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        textSize = 13f * context.resources.displayMetrics.scaledDensity
     }
 
-    private val labelBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#CC061C3F")
+    private val bubbleBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#E6061C3F")
     }
 
     private val bounds = RectF()
 
+    /** 气泡文本布局缓存：同一段文字/宽度下复用，避免 15fps 重绘时反复构建。 */
+    private var cachedLayout: StaticLayout? = null
+    private var cachedText: String? = null
+    private var cachedLayoutWidth = 0
+
     /** 0..1 的呼吸相位。 */
     private var progress = 0f
 
-    /** 是否正在进行无障碍操作；决定光晕强度与左下角提示文案。 */
+    /** 是否正在进行无障碍操作；决定是否绘制光效与气泡提示文案。 */
     @Volatile
     private var operating = false
+
+    /** AI 的文字输出（已剔除代码行）；可为空。 */
+    @Volatile
+    private var bubbleText: String? = null
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -69,7 +80,7 @@ class OperationGlowView(context: Context) : View(context) {
 
     /**
      * 呼吸动画刻意限制在约 15fps：光晕变化本身很慢，低帧率肉眼无差异，
-     * 但能显著降低这个常驻全屏软件层视图的功耗。
+     * 但能显著降低这个全屏软件层视图的功耗。
      */
     private val frameRunnable = object : Runnable {
         override fun run() {
@@ -90,7 +101,7 @@ class OperationGlowView(context: Context) : View(context) {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
     }
 
-    /** 开始常驻呼吸动画。 */
+    /** 开始呼吸动画。 */
     fun start() {
         if (running) return
         running = true
@@ -103,63 +114,89 @@ class OperationGlowView(context: Context) : View(context) {
         handler.removeCallbacks(frameRunnable)
     }
 
-    /** 切换「正在操作」状态：仅影响光晕强弱与左下角提示，光效本身始终保留。 */
+    /** 切换「正在操作」状态：控制光效绘制、呼吸动画与提示文案。 */
     fun setOperating(value: Boolean) {
         if (operating == value) return
         operating = value
+        // 只在需要绘制光效时跑呼吸动画；仅显示气泡时保持静止，避免无谓重绘。
+        if (value) start() else stop()
         invalidate()
     }
+
+    /** 设置左下角气泡展示的 AI 输出文字（已剔除代码行）。 */
+    fun setBubbleText(value: String?) {
+        val next = value?.trim().orEmpty().ifBlank { null }
+        if (bubbleText == next) return
+        bubbleText = next
+        invalidate()
+    }
+
+    /** 光效或气泡是否还有需要展示的内容；都没有时调用方会移除窗口。 */
+    fun hasContent(): Boolean = operating || !bubbleText.isNullOrBlank()
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        // 光效紧贴物理屏幕边缘，覆盖到状态栏与导航栏区域。
-        val inset = glowPaint.strokeWidth / 2f
-        bounds.set(inset, inset, width - inset, height - inset)
-        val radius = 28f * density
+        // 仅在 AI 操作手机时绘制全屏光效，操作间隙不显示光晕。
+        if (operating) {
+            // 光效紧贴物理屏幕边缘，覆盖到状态栏与导航栏区域。
+            val inset = glowPaint.strokeWidth / 2f
+            bounds.set(inset, inset, width - inset, height - inset)
+            val radius = 28f * density
 
-        // 常态呼吸偏柔和，操作时增强亮度以形成明显区分。
-        val base = if (operating) 110 else 60
-        val span = if (operating) 145 else 85
-        val alpha = (base + span * progress).toInt().coerceIn(0, 255)
-        glowPaint.alpha = alpha
-        corePaint.alpha = ((alpha * 0.75f).toInt() + 30).coerceIn(0, 255)
+            val alpha = (110 + 145 * progress).toInt().coerceIn(0, 255)
+            glowPaint.alpha = alpha
+            corePaint.alpha = ((alpha * 0.75f).toInt() + 30).coerceIn(0, 255)
 
-        canvas.drawRoundRect(bounds, radius, radius, glowPaint)
-        canvas.drawRoundRect(bounds, radius, radius, corePaint)
+            canvas.drawRoundRect(bounds, radius, radius, glowPaint)
+            canvas.drawRoundRect(bounds, radius, radius, corePaint)
+        }
 
-        drawLabel(canvas)
+        drawBubble(canvas)
     }
 
-    private fun drawLabel(canvas: Canvas) {
-        val text = context.getString(
-            if (operating) R.string.ai_operating_hint else R.string.ai_ready_hint,
-        )
-        val padH = 12f * density
-        val padV = 7f * density
+    private fun drawBubble(canvas: Canvas) {
+        val text = if (operating) {
+            context.getString(R.string.ai_operating_hint)
+        } else {
+            bubbleText ?: return
+        }
+
+        val padH = 14f * density
+        val padV = 10f * density
         val margin = 20f * density
-        // 底部留出导航栏空间，避免提示被手势条或三键导航遮挡。
+        // 底部留出导航栏空间，避免气泡被手势条或三键导航遮挡。
         val bottomMargin = 72f * density
 
-        val textWidth = labelPaint.measureText(text)
-        val fm = labelPaint.fontMetrics
-        val textHeight = fm.descent - fm.ascent
+        val maxWidth = min(width - 2f * margin, 360f * density).toInt().coerceAtLeast(120)
+        val textWidth = (maxWidth - 2f * padH).toInt().coerceAtLeast(1)
+        val layout = cachedLayout
+            ?.takeIf { cachedText == text && cachedLayoutWidth == textWidth }
+            ?: StaticLayout.Builder
+                .obtain(text, 0, text.length, bubbleTextPaint, textWidth)
+                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                .setMaxLines(MAX_BUBBLE_LINES)
+                .setEllipsize(TextUtils.TruncateAt.END)
+                .setIncludePad(false)
+                .build()
+                .also {
+                    cachedLayout = it
+                    cachedText = text
+                    cachedLayoutWidth = textWidth
+                }
 
+        val bubbleHeight = layout.height + padV * 2f
         val left = margin
-        val top = height - bottomMargin - (textHeight + padV * 2f)
-        val right = left + textWidth + padH * 2f
-        val bottom = top + textHeight + padV * 2f
+        val top = height - bottomMargin - bubbleHeight
+        val pill = RectF(left, top, left + textWidth + padH * 2f, top + bubbleHeight)
 
-        val pill = RectF(left, top, right, bottom)
-        val pillRadius = pill.height() / 2f
-        // 常态下提示更淡，避免长期停留在屏幕上造成干扰。
-        labelBgPaint.alpha = if (operating) 0xCC else 0x99
-        canvas.drawRoundRect(pill, pillRadius, pillRadius, labelBgPaint)
+        bubbleBgPaint.alpha = if (operating) 0xE6 else 0xCC
+        canvas.drawRoundRect(pill, 16f * density, 16f * density, bubbleBgPaint)
 
-        val baseline = pill.centerY() - (fm.ascent + fm.descent) / 2f
-        labelPaint.alpha = if (operating) 0xFF else 0xCC
-        canvas.drawText(text, left + padH, baseline, labelPaint)
-        labelPaint.alpha = 0xFF
+        canvas.save()
+        canvas.translate(left + padH, top + padV)
+        layout.draw(canvas)
+        canvas.restore()
     }
 
     private companion object {
@@ -168,5 +205,8 @@ class OperationGlowView(context: Context) : View(context) {
 
         /** 动画帧间隔，约 15fps。 */
         const val FRAME_MS = 66L
+
+        /** 气泡最多显示的行数，避免长时间提示遮挡过多屏幕。 */
+        const val MAX_BUBBLE_LINES = 4
     }
 }

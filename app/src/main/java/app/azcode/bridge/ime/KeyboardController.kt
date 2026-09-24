@@ -33,24 +33,58 @@ object KeyboardController {
     fun componentName(ctx: Context): ComponentName =
         ComponentName(ctx.packageName, "${ctx.packageName}${IME_CLASS_RELATIVE}")
 
+    /**
+     * 已启用的输入法 id 列表。
+     *
+     * Android 14（API 34）起，targetSdk > 33 的应用读取 `Settings.Secure.ENABLED_INPUT_METHODS`
+     * 会抛 `SecurityException`，因此优先使用 `InputMethodManager.getEnabledInputMethodList()` 这一公开接口；
+     * 仅在旧系统上才退回读取安全设置。
+     */
+    private fun enabledImeIds(ctx: Context): List<String>? = runCatching {
+        ctx.getSystemService(InputMethodManager::class.java)
+            ?.enabledInputMethodList
+            ?.map { it.id }
+    }.getOrNull()
+
     /** 是否已在系统「已启用输入法」列表中。 */
     fun isEnabled(ctx: Context): Boolean {
-        val enabled = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ENABLED_INPUT_METHODS) ?: return false
         val ids = imeIds(ctx)
-        return enabled.split(':').any { part -> ids.any { it.equals(part, ignoreCase = true) } }
+        enabledImeIds(ctx)?.let { enabled ->
+            return enabled.any { part -> ids.any { it.equals(part, ignoreCase = true) } }
+        }
+        return runCatching {
+            val enabled = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ENABLED_INPUT_METHODS)
+                ?: return false
+            enabled.split(':').any { part -> ids.any { it.equals(part, ignoreCase = true) } }
+        }.getOrDefault(false)
     }
 
     /** 是否为当前默认输入法。 */
     fun isCurrent(ctx: Context): Boolean {
-        val current = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD) ?: return false
+        val current = readDefaultImeId(ctx) ?: return false
         return imeIds(ctx).any { it.equals(current, ignoreCase = true) }
+    }
+
+    /**
+     * 读取当前默认输入法 id。
+     * 部分系统限制读取 `Settings.Secure.DEFAULT_INPUT_METHOD`，读取失败时退回反射查询
+     * `InputMethodManager`，仍失败则返回 null（调用方按「未知」处理即可）。
+     */
+    private fun readDefaultImeId(ctx: Context): String? {
+        runCatching {
+            Settings.Secure.getString(ctx.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
+        }.getOrNull()?.takeIf { it.isNotBlank() }?.let { return it }
+        return runCatching {
+            val imm = ctx.getSystemService(InputMethodManager::class.java) ?: return@runCatching null
+            val m = InputMethodManager::class.java.getMethod("getCurrentInputMethodInfo")
+            (m.invoke(imm) as? android.view.inputmethod.InputMethodInfo)?.id
+        }.getOrNull()
     }
 
     fun isReady(ctx: Context): Boolean = isEnabled(ctx) && isCurrent(ctx)
 
     /** 当前系统默认输入法 id，用于输入完成后的还原。 */
-    fun currentImeId(ctx: Context): String? =
-        Settings.Secure.getString(ctx.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
+    fun currentImeId(ctx: Context): String? = readDefaultImeId(ctx)
 
     /**
      * 借助内置输入法向当前聚焦的输入框写入文本，完成后尽量还原用户原来的输入法。

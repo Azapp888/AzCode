@@ -236,7 +236,6 @@
     <string name="ime_label">AzCode 输入法</string>
     <string name="ime_label_on">AzCode 输入法（由 Agent 控制输入）</string>
     <string name="ai_operating_hint">AI 正在操作手机</string>
-    <string name="ai_ready_hint">AzCode 已就绪</string>
     <string name="btn_confirm">确定</string>
     <string name="question_custom_option">其他（手动输入）</string>
     <string name="question_custom_hint">在此输入你的答案</string>

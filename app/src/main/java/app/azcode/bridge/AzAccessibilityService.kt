@@ -30,8 +30,6 @@ class AzAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        // 无障碍开启即常驻显示呼吸光效，作为 AzCode 守护设备的可视标识。
-        showPersistentGlow()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
@@ -163,36 +161,55 @@ class AzAccessibilityService : AccessibilityService() {
 
     private val uiHandler = Handler(Looper.getMainLooper())
 
-    private val hideRunnable = Runnable { glowView?.setOperating(false) }
+    /** 操作提示到期后收起光效（若此时没有待展示的 AI 输出则一并移除窗口）。 */
+    private val hideRunnable = Runnable {
+        glowView?.setOperating(false)
+        detachGlowIfEmpty()
+    }
 
     private var glowView: OperationGlowView? = null
 
-    /** 常驻显示呼吸光效（无障碍服务连接时调用一次）。 */
-    private fun showPersistentGlow() {
-        uiHandler.post {
-            ensureGlow()?.start()
-        }
-    }
-
     /**
-     * 标记一次无障碍操作：光效增强并显示「AI 正在操作手机」，操作结束后恢复常态呼吸而非消失。
+     * 标记一次无障碍操作（AI 检测到需要操作用户手机时调用）：
+     * 显示全屏呼吸光效，并在左下角悬浮气泡显示「AI 正在操作手机」；
+     * 操作暂停超过 [OPERATING_TIMEOUT_MS] 后光效淡出，但已产出的 AI 文字输出仍保留在气泡中。
      * 可在任意线程调用，内部会切到主线程处理窗口操作。
      */
     fun showOperating() {
         uiHandler.post {
             val view = ensureGlow() ?: return@post
-            view.start()
             view.setOperating(true)
             uiHandler.removeCallbacks(hideRunnable)
             uiHandler.postDelayed(hideRunnable, OPERATING_TIMEOUT_MS)
         }
     }
 
-    /** 结束「正在操作」状态，回到常态呼吸光效（不隐藏光效本身）。 */
+    /** 结束「正在操作」状态，收起光效但保留气泡中的 AI 文字输出。 */
     fun hideOperating() {
         uiHandler.post {
             uiHandler.removeCallbacks(hideRunnable)
             glowView?.setOperating(false)
+            detachGlowIfEmpty()
+        }
+    }
+
+    /**
+     * 更新左下角悬浮气泡中的 AI 输出文字（已剔除代码行）。传 null/空串表示清除该段输出。
+     * 无障碍服务未开启时不显示。
+     */
+    fun showBubbleText(text: String?) {
+        uiHandler.post {
+            val view = ensureGlow() ?: return@post
+            view.setBubbleText(text)
+            detachGlowIfEmpty()
+        }
+    }
+
+    /** 任务结束/取消时彻底清除光效与气泡。 */
+    fun clearOverlays() {
+        uiHandler.post {
+            uiHandler.removeCallbacks(hideRunnable)
+            detachGlow()
         }
     }
 
@@ -224,6 +241,11 @@ class AzAccessibilityService : AccessibilityService() {
         return runCatching { wm.addView(view, lp); view }.getOrNull()?.also { glowView = it }
     }
 
+    /** 光效与气泡都无内容时移除窗口，避免常驻一个全屏软件层视图。 */
+    private fun detachGlowIfEmpty() {
+        if (glowView?.hasContent() == false) detachGlow()
+    }
+
     private fun detachGlow() {
         val view = glowView ?: return
         glowView = null
@@ -238,8 +260,8 @@ class AzAccessibilityService : AccessibilityService() {
         private const val MAX_NODES = 200
 
         /**
-         * 一次操作结束后，「正在操作」状态的保留时长：连续操作会不断续期，
-         * 停止操作后恢复常态呼吸光效（光效本身不会消失）。
+         * 一次操作结束后，全屏光效的保留时长：连续操作会不断续期，
+         * 停止操作后光效收起；若气泡中还有 AI 文字输出则窗口继续保留。
          */
         private const val OPERATING_TIMEOUT_MS = 2500L
 
@@ -260,9 +282,19 @@ class AzAccessibilityService : AccessibilityService() {
             instance?.showOperating()
         }
 
-        /** 结束「正在操作」提示，回到常态呼吸光效（光效不会被隐藏）。 */
+        /** 更新左下角悬浮气泡中的 AI 输出文字（已剔除代码行）。 */
+        fun setBubble(text: String?) {
+            instance?.showBubbleText(text)
+        }
+
+        /** 结束「正在操作」提示，收起光效但保留气泡文字。 */
         fun stopOperating() {
             instance?.hideOperating()
+        }
+
+        /** 任务结束/取消时清除光效与气泡。 */
+        fun clearOverlays() {
+            instance?.clearOverlays()
         }
     }
 }
