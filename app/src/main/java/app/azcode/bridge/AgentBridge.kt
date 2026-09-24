@@ -149,6 +149,11 @@ object AgentBridge {
                     is AgentEvent.Images -> events.put(
                         JSONObject().put("type", "images").put("urls", JSONArray(e.urls))
                     )
+                    is AgentEvent.Documents -> events.put(
+                        JSONObject().put("type", "documents").put("path", e.path)
+                            .put("name", e.name).put("format", e.format)
+                            .put("pages", JSONArray(e.pages))
+                    )
                     is AgentEvent.Notice -> events.put(JSONObject().put("type", "notice").put("text", e.text))
                     is AgentEvent.Failure -> events.put(JSONObject().put("type", "failure").put("text", e.message))
                 }
