@@ -20,8 +20,8 @@ import kotlin.math.sin
 /**
  * AI 状态光效：全屏呼吸描边 + 左下角悬浮气泡。
  *
- * 只有 AI 检测到需要操作用户手机时（[setOperating]）才显示全屏光效，气泡同步显示「AI 正在操作手机」；
- * 操作间隙气泡改为展示 AI 的文字输出（调用方已剔除代码行），光效收起但气泡保留，直到任务结束清除。
+ * 只有 AI 检测到需要操作用户手机时（[setOperating]）才显示全屏光效；气泡同步显示「AI 正在操作手机」，
+ * 操作间隙改为展示 AI 的文字输出（调用方已剔除代码行）。气泡由调用方在最多 5s 后自动关闭。
  *
  * 该视图由无障碍服务以 `TYPE_ACCESSIBILITY_OVERLAY` 窗口添加，因此无需额外权限，也不拦截触摸
  * （窗口带 `FLAG_NOT_TOUCHABLE`）。
@@ -114,7 +114,7 @@ class OperationGlowView(context: Context) : View(context) {
         handler.removeCallbacks(frameRunnable)
     }
 
-    /** 切换「正在操作」状态：控制光效绘制、呼吸动画与提示文案。 */
+    /** 切换「正在操作」状态：控制全屏光效绘制与呼吸动画。气泡文字由调用方通过 [setBubbleText] 控制。 */
     fun setOperating(value: Boolean) {
         if (operating == value) return
         operating = value
@@ -123,7 +123,7 @@ class OperationGlowView(context: Context) : View(context) {
         invalidate()
     }
 
-    /** 设置左下角气泡展示的 AI 输出文字（已剔除代码行）。 */
+    /** 设置左下角气泡展示的文字（AI 文字输出或操作提示）。传 null 表示关闭气泡。 */
     fun setBubbleText(value: String?) {
         val next = value?.trim().orEmpty().ifBlank { null }
         if (bubbleText == next) return
@@ -156,11 +156,7 @@ class OperationGlowView(context: Context) : View(context) {
     }
 
     private fun drawBubble(canvas: Canvas) {
-        val text = if (operating) {
-            context.getString(R.string.ai_operating_hint)
-        } else {
-            bubbleText ?: return
-        }
+        val text = bubbleText ?: return
 
         val padH = 14f * density
         val padV = 10f * density
