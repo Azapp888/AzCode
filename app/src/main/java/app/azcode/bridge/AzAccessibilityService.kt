@@ -30,6 +30,8 @@ class AzAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        // 无障碍开启即常驻显示呼吸光效，作为 AzCode 守护设备的可视标识。
+        showPersistentGlow()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
@@ -41,6 +43,14 @@ class AzAccessibilityService : AccessibilityService() {
         detachGlow()
         if (instance === this) instance = null
         super.onDestroy()
+    }
+
+    override fun onUnbind(intent: android.content.Intent?): Boolean {
+        // 少数机型停用无障碍时只走 unbind 不走 destroy，这里一并清理，避免光效残留在屏幕上。
+        uiHandler.removeCallbacks(hideRunnable)
+        detachGlow()
+        if (instance === this) instance = null
+        return super.onUnbind(intent)
     }
 
     fun dumpScreenJson(): String {
@@ -153,27 +163,36 @@ class AzAccessibilityService : AccessibilityService() {
 
     private val uiHandler = Handler(Looper.getMainLooper())
 
-    private val hideRunnable = Runnable { detachGlow() }
+    private val hideRunnable = Runnable { glowView?.setOperating(false) }
 
     private var glowView: OperationGlowView? = null
 
+    /** 常驻显示呼吸光效（无障碍服务连接时调用一次）。 */
+    private fun showPersistentGlow() {
+        uiHandler.post {
+            ensureGlow()?.start()
+        }
+    }
+
     /**
-     * 显示一次操作光效并重置自动隐藏计时。可在任意线程调用，内部会切到主线程处理窗口操作。
+     * 标记一次无障碍操作：光效增强并显示「AI 正在操作手机」，操作结束后恢复常态呼吸而非消失。
+     * 可在任意线程调用，内部会切到主线程处理窗口操作。
      */
     fun showOperating() {
         uiHandler.post {
             val view = ensureGlow() ?: return@post
             view.start()
+            view.setOperating(true)
             uiHandler.removeCallbacks(hideRunnable)
             uiHandler.postDelayed(hideRunnable, OPERATING_TIMEOUT_MS)
         }
     }
 
-    /** 立即隐藏操作光效（任务结束/取消时调用）。 */
+    /** 结束「正在操作」状态，回到常态呼吸光效（不隐藏光效本身）。 */
     fun hideOperating() {
         uiHandler.post {
             uiHandler.removeCallbacks(hideRunnable)
-            detachGlow()
+            glowView?.setOperating(false)
         }
     }
 
@@ -190,7 +209,18 @@ class AzAccessibilityService : AccessibilityService() {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
-        ).apply { gravity = Gravity.TOP or Gravity.START }
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            // 覆盖整个物理屏幕：延伸到刘海/挖孔区域。
+            if (Build.VERSION.SDK_INT >= 28) {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            }
+            // Android 11+ 明确不消费任何系统栏 inset，保证窗口铺满整屏。
+            if (Build.VERSION.SDK_INT >= 30) {
+                fitInsetsTypes = 0
+            }
+        }
         return runCatching { wm.addView(view, lp); view }.getOrNull()?.also { glowView = it }
     }
 
@@ -207,7 +237,10 @@ class AzAccessibilityService : AccessibilityService() {
 
         private const val MAX_NODES = 200
 
-        /** 一次操作后光效的保留时长：连续操作会不断续期，停止操作后自动淡出。 */
+        /**
+         * 一次操作结束后，「正在操作」状态的保留时长：连续操作会不断续期，
+         * 停止操作后恢复常态呼吸光效（光效本身不会消失）。
+         */
         private const val OPERATING_TIMEOUT_MS = 2500L
 
         fun isEnabled(): Boolean = instance != null
@@ -222,12 +255,12 @@ class AzAccessibilityService : AccessibilityService() {
         fun setFocusedText(text: String, append: Boolean = false): Boolean =
             instance?.setFocusedText(text, append) ?: false
 
-        /** 触发一次 AI 操作光效；无障碍服务未开启时不显示。 */
+        /** 触发一次 AI 操作提示；无障碍服务未开启时不显示。 */
         fun pulseOperating() {
             instance?.showOperating()
         }
 
-        /** 立即隐藏 AI 操作光效。 */
+        /** 结束「正在操作」提示，回到常态呼吸光效（光效不会被隐藏）。 */
         fun stopOperating() {
             instance?.hideOperating()
         }
