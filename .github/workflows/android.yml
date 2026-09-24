@@ -28,14 +28,28 @@ jobs:
       - name: 构建 Debug APK
         run: gradle -p . assembleDebug --stacktrace
 
-      - name: 构建 Release APK（未签名）
+      - name: 构建 Release APK
         run: gradle -p . assembleRelease --stacktrace
 
       - name: 收集产物
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk "dist/azcode-magic-${GITHUB_REF_NAME}-debug.apk"
-          cp app/build/outputs/apk/release/app-release-unsigned.apk "dist/azcode-magic-${GITHUB_REF_NAME}-release-unsigned.apk"
+          # 已配置仓库内统一签名，release 产物为 app-release.apk；保留对未签名命名做兜底。
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk "dist/azcode-magic-${GITHUB_REF_NAME}-release.apk"
+          else
+            cp app/build/outputs/apk/release/app-release-unsigned.apk "dist/azcode-magic-${GITHUB_REF_NAME}-release-unsigned.apk"
+          fi
+
+      - name: 校验产物签名
+        run: |
+          APKSIGNER=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name apksigner 2>/dev/null | sort | tail -1)
+          if [ -z "$APKSIGNER" ]; then echo "未找到 apksigner，跳过校验"; exit 0; fi
+          for f in dist/*.apk; do
+            echo "== $f"
+            "$APKSIGNER" verify --print-certs "$f" 2>/dev/null | grep -E 'SHA-256 digest|Signer #1 certificate SHA-256' || echo "（未签名）"
+          done
 
       - uses: actions/upload-artifact@v4
         with:

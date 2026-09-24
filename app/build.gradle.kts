@@ -1,6 +1,15 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+// 统一签名：读取仓库内 keystore/keystore.properties，让 debug 与 release 共用同一把密钥，
+// 保证每次 CI 构建产出的 APK 签名一致、可互相覆盖安装。缺失配置时回退到默认行为。
+val keystoreProps = Properties().apply {
+    val f = rootProject.file("keystore/keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
 }
 
 android {
@@ -11,14 +20,30 @@ android {
         applicationId = "app.azcode.bridge"
         minSdk = 26
         targetSdk = 34
-        versionCode = 48
-        versionName = "1.8.3"
+        versionCode = 49
+        versionName = "1.8.4"
+    }
+
+    signingConfigs {
+        if (keystoreProps.getProperty("storeFile") != null) {
+            create("azcode") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("azcode")
+        }
+        debug {
+            // 与 release 使用同一签名，避免每次构建都生成随机 debug 密钥导致无法覆盖安装。
+            signingConfigs.findByName("azcode")?.let { signingConfig = it }
         }
     }
 

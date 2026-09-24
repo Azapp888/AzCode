@@ -229,7 +229,9 @@ Termux 是独立应用，前缀（`$PREFIX`）数百 MB，无法塞进本 APK，
 gradle assembleDebug
 ```
 
-或直接推送，`.github/workflows/android.yml` 会在 GitHub Actions 上构建 Debug / Release(未签名) APK 并上传产物；打 `android-v*` tag 时发布 Release。
+或直接推送，`.github/workflows/android.yml` 会在 GitHub Actions 上构建 Debug / Release APK 并上传产物；打 `android-v*` tag 时发布 Release。
+
+Debug 与 Release 均使用仓库内 `keystore/azcode-release.keystore` 统一签名，保证不同版本签名一致、可互相覆盖安装。该密钥为公开密钥（仅自用分发），详见 `keystore/README.md`。
 
 ## 目录
 
