@@ -185,6 +185,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         refreshDrawer()
         syncModelSelector()
+        maybeShowPersonalizationPrompt()
         // 用 SharedPreferences 中的当前 id 判断即可，无需读取解析会话文件。
         val currentId = SessionStore.currentId(this)
         if (currentId != null && currentId != lastLoadedId && runner == null) {
@@ -193,6 +194,20 @@ class MainActivity : AppCompatActivity() {
             renderSession()
         } else {
             updateHeaderTitle()
+        }
+    }
+
+    /**
+     * 首启且用户已开启无障碍服务后，展示一次个性化数据授权说明。
+     * 说明只弹一次；用户可随时在「设置 → 个性化与隐私」重新查看。
+     */
+    private fun maybeShowPersonalizationPrompt() {
+        if (Personalization.promptShown(this)) return
+        if (!AzAccessibilityService.isEnabled()) return
+        if (!canShowUi()) return
+        Personalization.markPromptShown(this)
+        PersonalizationActivity.showConsentDialog(this) {
+            scanExecutor.execute { runCatching { Personalization.refreshSnapshot(applicationContext) } }
         }
     }
 
@@ -238,18 +253,24 @@ class MainActivity : AppCompatActivity() {
      * 返回 null 表示未作答或界面已销毁。
      */
     private fun askUserBlocking(question: AgentQuestion): String? {
-        TaskNotifier.notifyQuestion(this, question.question)
+        TaskNotifier.notifyQuestion(this, question)
         val latch = CountDownLatch(1)
         val answer = AtomicReference<String?>(null)
         pendingQuestionLatch = latch
+        // 通知栏作答通道：用户在常驻通知里点选或输入后，与下方问答区共用同一份答案，先到者生效。
+        QuestionBus.register { result ->
+            if (answer.compareAndSet(null, result)) {
+                runOnUiThread { runCatching { findViewById<View>(R.id.questionPanel)?.visibility = View.GONE } }
+                latch.countDown()
+            }
+        }
         runOnUiThread {
             if (!canShowUi()) {
                 latch.countDown()
                 return@runOnUiThread
             }
             showQuestionPanel(question) { result ->
-                answer.set(result)
-                latch.countDown()
+                if (answer.compareAndSet(null, result)) latch.countDown()
             }
         }
         // 分段等待并检查取消/销毁，避免用户点停止或退出后仍永久阻塞工作线程。
@@ -257,9 +278,11 @@ class MainActivity : AppCompatActivity() {
             if (destroyed || runner?.isCancelled == true) break
             if (runCatching { latch.await(150, TimeUnit.MILLISECONDS) }.getOrDefault(false)) break
         }
+        QuestionBus.clear()
+        TaskNotifier.cancelQuestion(this)
         pendingQuestionLatch = null
         // 等待期间若被取消，收起未作答的问答区，避免残留面板。
-        if (latch.count > 0L) runOnUiThread { runCatching { findViewById<View>(R.id.questionPanel).visibility = View.GONE } }
+        if (latch.count > 0L) runOnUiThread { runCatching { findViewById<View>(R.id.questionPanel)?.visibility = View.GONE } }
         return if (latch.count == 0L) answer.get() else null
     }
 
@@ -946,6 +969,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun maybeRequestNotificationPermission() {
+        TaskNotifier.ensureChannel(this)
         if (android.os.Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {

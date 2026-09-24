@@ -11,11 +11,14 @@ import java.util.UUID
  *  - TOKEN  敏感信息（API Token、密码等），分条保存，界面默认打码
  *  - HABIT  用户习惯与偏好
  *  - METHOD 技能与使用方法（用户教过的工具调用方式、命令等）
+ *  - LOCAL  本机个性化数据（已安装应用与权限声明）。仅保存在设备本地，
+ *            **不会**注入模型上下文，因此不会上传到云端。
  */
 enum class MemoryCategory(val key: String, val label: String) {
     TOKEN("token", "敏感信息"),
     HABIT("habit", "使用习惯"),
-    METHOD("method", "技能与使用方法");
+    METHOD("method", "技能与使用方法"),
+    LOCAL("local", "本机个性化（仅本地）");
 
     companion object {
         fun from(key: String): MemoryCategory =
@@ -62,7 +65,8 @@ object MemoryStore {
     fun byCategory(ctx: Context, category: MemoryCategory): List<MemoryEntry> =
         all(ctx).filter { it.category == category }
 
-    fun enabled(ctx: Context): List<MemoryEntry> = all(ctx).filter { it.enabled }
+    fun enabled(ctx: Context): List<MemoryEntry> =
+        all(ctx).filter { it.enabled && it.category != MemoryCategory.LOCAL }
 
     fun count(ctx: Context): Int = all(ctx).size
 
@@ -109,6 +113,27 @@ object MemoryStore {
     }
 
     fun clear(ctx: Context) = write(ctx, emptyList())
+
+    /** 本机个性化数据的唯一一条记忆；不存在则创建，存在则整体覆盖。 */
+    fun upsertLocal(ctx: Context, title: String, content: String) {
+        val existing = all(ctx).firstOrNull { it.category == MemoryCategory.LOCAL }
+        val entry = existing?.copy(title = title, content = content) ?: MemoryEntry(
+            id = UUID.randomUUID().toString(),
+            category = MemoryCategory.LOCAL,
+            title = title,
+            content = content,
+            sensitive = false,
+            enabled = true,
+            createdAt = System.currentTimeMillis(),
+        )
+        if (existing != null) update(ctx, entry) else write(ctx, all(ctx) + entry)
+    }
+
+    fun localEntry(ctx: Context): MemoryEntry? = all(ctx).firstOrNull { it.category == MemoryCategory.LOCAL }
+
+    fun clearLocal(ctx: Context) {
+        write(ctx, all(ctx).filterNot { it.category == MemoryCategory.LOCAL })
+    }
 
     /**
      * 敏感内容打码：保留首尾少量字符，中间以圆点代替。

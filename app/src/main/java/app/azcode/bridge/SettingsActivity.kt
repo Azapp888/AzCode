@@ -28,6 +28,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvModelEntry: TextView
     private lateinit var tvGithubEntry: TextView
     private lateinit var tvGenofficeEntry: TextView
+    private lateinit var tvImeEntry: TextView
+    private lateinit var tvPersonalizationEntry: TextView
     private lateinit var tvVersion: TextView
     private lateinit var btnBridge: Button
 
@@ -57,6 +59,8 @@ class SettingsActivity : AppCompatActivity() {
         tvSkillsEntry = findViewById(R.id.tvSkillsEntry)
         tvMemoryEntry = findViewById(R.id.tvMemoryEntry)
         tvLogsEntry = findViewById(R.id.tvLogsEntry)
+        tvImeEntry = findViewById(R.id.tvImeEntry)
+        tvPersonalizationEntry = findViewById(R.id.tvPersonalizationEntry)
         tvVersion = findViewById(R.id.tvVersion)
         btnBridge = findViewById(R.id.btnBridge)
 
@@ -94,6 +98,10 @@ class SettingsActivity : AppCompatActivity() {
             startActivity(Intent(this, MemoryActivity::class.java))
         }
         findViewById<View>(R.id.rowLogs).setOnClickListener { showLogs() }
+        findViewById<View>(R.id.rowIme).setOnClickListener { enableIme() }
+        findViewById<View>(R.id.rowPersonalization).setOnClickListener {
+            startActivity(Intent(this, PersonalizationActivity::class.java))
+        }
         findViewById<View>(R.id.btnAccessibility).setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
@@ -231,6 +239,22 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         tvLogsEntry.text = getString(R.string.logs_value, CrashLog.files(this).size)
+
+        tvImeEntry.text = app.azcode.bridge.ime.KeyboardController.statusText(this)
+        tvPersonalizationEntry.text = getString(
+            if (Personalization.hasConsented(this)) R.string.settings_value_on else R.string.settings_value_off,
+        )
+    }
+
+    /** 启用并切换内置 AzCode 输入法；无法自动完成时打开系统输入法设置。 */
+    private fun enableIme() {
+        val ready = app.azcode.bridge.ime.KeyboardController.enableAndSwitch(this)
+        Toast.makeText(
+            this,
+            if (ready) "已启用并切换为 AzCode 输入法" else "请在系统「输入法设置」中启用 AzCode 输入法",
+            Toast.LENGTH_LONG,
+        ).show()
+        refreshStatus()
     }
 
     /** 展示运行日志：可复制全部或清空，便于把闪退信息反馈出来。 */
@@ -262,6 +286,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun maybeRequestNotificationPermission() {
+        TaskNotifier.ensureChannel(this)
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {

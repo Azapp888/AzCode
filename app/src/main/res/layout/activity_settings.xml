@@ -159,6 +159,36 @@
                     <ImageView style="@style/SettingsRowChevron" />
                 </LinearLayout>
 
+                <LinearLayout
+                    android:id="@+id/rowIme"
+                    style="@style/SettingsRow">
+
+                    <ImageView style="@style/SettingsRowIcon" android:src="@drawable/ic_tool" />
+
+                    <TextView style="@style/SettingsRowTitle" android:text="@string/title_ime" />
+
+                    <TextView
+                        android:id="@+id/tvImeEntry"
+                        style="@style/SettingsRowValue" />
+
+                    <ImageView style="@style/SettingsRowChevron" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/rowPersonalization"
+                    style="@style/SettingsRow">
+
+                    <ImageView style="@style/SettingsRowIcon" android:src="@drawable/ic_person" />
+
+                    <TextView style="@style/SettingsRowTitle" android:text="@string/title_personalization" />
+
+                    <TextView
+                        android:id="@+id/tvPersonalizationEntry"
+                        style="@style/SettingsRowValue" />
+
+                    <ImageView style="@style/SettingsRowChevron" />
+                </LinearLayout>
+
                 <LinearLayout style="@style/SettingsRow" android:clickable="false" android:focusable="false">
 
                     <ImageView style="@style/SettingsRowIcon" android:src="@drawable/ic_step" />

@@ -396,6 +396,8 @@ class AgentRunner(
 
             "finish" -> JSONObject().put("ok", true).put("summary", args.optString("summary")).toString()
 
+            "input_text" -> inputText(args)
+
             "ask_question_for_user" -> askQuestion(args)
 
             "genoffice_status" -> genofficeStatus()
@@ -548,6 +550,32 @@ class AgentRunner(
     }
 
     // ==================== 向用户提问 / 模型配置工具 ====================
+
+    /**
+     * 向当前聚焦的输入框写入文本。
+     * 优先用无障碍 ACTION_SET_TEXT 直接写入（Unicode 安全，不打断用户自己的输入法）；
+     * 无障碍不可用时回退到内置 AzCode 输入法（需要 Shizuku/Root 或用户已手动启用）。
+     */
+    private fun inputText(args: JSONObject): String {
+        val text = args.optString("text")
+        if (text.isEmpty()) return err("缺少 text")
+        val append = args.optBoolean("append", false)
+
+        val accessibilityOn = AzAccessibilityService.isEnabled()
+        if (accessibilityOn && AzAccessibilityService.setFocusedText(text, append)) {
+            return JSONObject().put("ok", true).put("via", "accessibility").toString()
+        }
+
+        val failure = app.azcode.bridge.ime.KeyboardController.typeText(ctx, text)
+        if (failure == null) {
+            return JSONObject().put("ok", true).put("via", "ime").toString()
+        }
+        return if (!accessibilityOn) {
+            err("自动输入失败：无障碍服务未开启，且内置输入法不可用（$failure）")
+        } else {
+            err(failure)
+        }
+    }
 
     private fun askQuestion(args: JSONObject): String {
         val handler = askUser ?: return err("当前环境无法向用户提问")
@@ -881,6 +909,11 @@ class AgentRunner(
                     .put("type", "string")
                     .put("enum", JSONArray(listOf("back", "home", "recents", "notifications")))
                     .put("description", "导航动作")), listOf("action")))
+            put(fn("input_text", "向当前聚焦的输入框写入文本（支持中文等 Unicode，Android 自带 input text 不支持）。优先用无障碍直接写入，必要时自动切换到内置 AzCode 输入法。使用前请先点击目标输入框使其获得焦点。", JSONObject()
+                .put("text", str("要输入的文本"))
+                .put("append", JSONObject()
+                    .put("type", "boolean")
+                    .put("description", "是否追加到已有内容之后，默认 false（整体替换）")), listOf("text")))
             put(fn("shell", "执行 shell 命令。已安装并授权 Termux 时自动走 Termux 的完整 Linux 环境（bash/python/node/git 等），否则用内置命令行以应用自身权限执行（无需 Root/Shizuku）；需要系统级权限时可提示用户切到 Shizuku/Root 模式。", JSONObject()
                 .put("cmd", str("要执行的命令")), listOf("cmd")))
 

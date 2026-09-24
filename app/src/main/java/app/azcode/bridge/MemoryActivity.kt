@@ -4,6 +4,7 @@ import android.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.text.InputType
+import android.text.TextUtils
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
@@ -18,12 +19,14 @@ import android.widget.Toast
 /**
  * 记忆管理：分条保存用户提供的敏感信息、使用习惯与技能方法。
  * 敏感条目在界面上默认打码，点击内容可临时显示；启用后注入 Agent 系统提示词。
+ * 每条内容默认只显示三行，点击可展开查看全部，避免列表被长内容淹没。
  */
 class MemoryActivity : AppCompatActivity() {
 
     private lateinit var container: LinearLayout
     private lateinit var tvEmpty: TextView
     private val revealed = mutableSetOf<String>()
+    private val expanded = mutableSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,19 +74,28 @@ class MemoryActivity : AppCompatActivity() {
 
         val tvContent = v.findViewById<TextView>(R.id.tvContent)
         val isRevealed = !entry.sensitive || revealed.contains(entry.id)
+        val isExpanded = expanded.contains(entry.id)
         val contentText = if (entry.sensitive && !isRevealed) MemoryStore.mask(entry.content) else entry.content
         Markdown.render(tvContent, contentText)
-        if (entry.sensitive) {
-            tvContent.setOnClickListener {
-                if (revealed.contains(entry.id)) revealed.remove(entry.id) else revealed.add(entry.id)
-                refresh()
+        // 默认只展示三行，点击展开查看全部，避免长记忆撑满列表。
+        tvContent.maxLines = if (isExpanded) Int.MAX_VALUE else 3
+        tvContent.ellipsize = if (isExpanded) null else TextUtils.TruncateAt.END
+        tvContent.setOnClickListener {
+            if (isExpanded) {
+                expanded.remove(entry.id)
+            } else {
+                expanded.add(entry.id)
+                if (entry.sensitive) revealed.add(entry.id)
             }
+            refresh()
         }
 
-        v.findViewById<TextView>(R.id.tvHint).text = if (entry.sensitive)
-            getString(if (isRevealed) R.string.memory_hint_tap_hide else R.string.memory_hint_tap_reveal)
-        else
-            getString(R.string.memory_hint_normal)
+        val hintRes = when {
+            entry.sensitive && !isRevealed -> R.string.memory_hint_tap_reveal
+            isExpanded -> R.string.memory_hint_collapse
+            else -> R.string.memory_hint_expand
+        }
+        v.findViewById<TextView>(R.id.tvHint).text = getString(hintRes)
 
         val sw = v.findViewById<Switch>(R.id.swEnabled)
         sw.setOnCheckedChangeListener(null)

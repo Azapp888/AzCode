@@ -8,6 +8,9 @@
     <string name="notif_channel_bridge">设备桥接</string>
     <string name="notif_title">AzCode 桥接运行中</string>
     <string name="notif_channel_task">任务提醒</string>
+    <string name="notif_channel_task_desc">任务完成、停止或出错时弹出横幅并响铃提醒</string>
+    <string name="notif_channel_question">需要你的选择</string>
+    <string name="notif_channel_question_desc">Agent 提问时弹出横幅并响铃，可直接在通知里作答</string>
     <string name="notif_task_done">任务已完成</string>
     <string name="notif_task_stopped">任务已停止</string>
 
@@ -50,6 +53,8 @@
     <string name="settings_version_value">%1$s（%2$d）</string>
     <string name="settings_value_unset">未配置</string>
     <string name="settings_value_not_connected">未连接</string>
+    <string name="settings_value_on">已开启</string>
+    <string name="settings_value_off">未开启</string>
     <string name="settings_skills_value">已启用 %1$d / %2$d</string>
     <string name="settings_memory_value">%1$d 条</string>
     <string name="title_provider">模型提供商</string>
@@ -223,6 +228,13 @@
     <string name="image_save_failed">保存失败，请重试</string>
 
     <string name="notif_question">需要你的选择</string>
+    <string name="notif_question_input_hint">输入你的答案</string>
+    <string name="notif_question_send">发送</string>
+    <string name="notif_question_open">打开应用作答</string>
+    <string name="notif_question_extra_hint">也可以直接输入其他答案</string>
+    <string name="notif_question_late">该问题已结束，请回到应用查看</string>
+    <string name="ime_label">AzCode 输入法</string>
+    <string name="ime_label_on">AzCode 输入法（由 Agent 控制输入）</string>
     <string name="btn_confirm">确定</string>
     <string name="question_custom_option">其他（手动输入）</string>
     <string name="question_custom_hint">在此输入你的答案</string>
@@ -249,6 +261,8 @@
     <string name="memory_entry">记忆（共 %1$d 条）</string>
     <string name="title_memory">记忆</string>
     <string name="title_logs">运行日志</string>
+    <string name="title_ime">输入法</string>
+    <string name="title_personalization">个性化与隐私</string>
     <string name="logs_value">共 %1$d 个文件</string>
     <string name="logs_empty">暂无日志。应用出现闪退或异常后，这里会记录详细信息。</string>
     <string name="btn_copy_logs">复制全部</string>
@@ -269,6 +283,8 @@
     <string name="memory_hint_normal">启用后注入 Agent 上下文</string>
     <string name="memory_hint_tap_reveal">敏感信息已打码，点击显示</string>
     <string name="memory_hint_tap_hide">点击隐藏</string>
+    <string name="memory_hint_expand">点击查看全部</string>
+    <string name="memory_hint_collapse">点击收起</string>
     <string name="delete_memory_title">删除记忆</string>
     <string name="delete_memory_msg">确定删除「%1$s」？</string>
 
@@ -297,4 +313,34 @@
     <string name="genoffice_test_ok">连接成功，可用工具 %1$d 个</string>
     <string name="genoffice_test_failed">连接失败：%1$s</string>
     <string name="genoffice_help">在电脑上安装 GenOffice 后运行 `genoffice mcp --http 8765`（跨设备访问加 `--host 0.0.0.0`，并建议加 `--token 密钥`）。手机与电脑需在同一局域网；若在 Termux 中运行则填 127.0.0.1。开启后即可让 Agent 生成 .docx/.xlsx/.pptx 并在聊天中预览。</string>
+
+    <!-- 个性化与隐私 -->
+    <string name="personalization_intro">为了让 Agent 能替你操作手机，AzCode 需要了解本机已安装的应用及其大致能力。下面说明我们读取哪些数据、用途是什么、数据存在哪里，以及你拥有的选择权。</string>
+    <string name="personalization_section_access">读取哪些数据</string>
+    <string name="personalization_access_value">· 已安装应用的包名与应用名称：用于识别「用户在说哪个 App」，把任务落到正确的应用上。\n· 各应用声明的 Android 权限：用于大致判断该应用能做什么（如相机、定位、通知），以便规划操作步骤。\n· 设备型号与系统版本：用于适配不同的系统行为与界面差异。</string>
+    <string name="personalization_section_storage">数据存放与用途</string>
+    <string name="personalization_storage">以上数据在设备本地生成，保存在本应用的私有目录中，仅用于在你本机规划与执行操作。它们不会注入与云端大模型的对话上下文，因此不会上传到任何服务器；卸载应用即一并删除。涉及具体操作时，只有在你的指令下才会把必要的界面信息发送给大模型。</string>
+    <string name="personalization_section_legal">授权与你的权利</string>
+    <string name="personalization_legal">点击「同意」即表示你已阅读并理解上述说明，并授权 AzCode 在本机读取上述数据用于个性化服务。你可以随时在「个性化与隐私」页面重新生成本地数据，或撤销授权并清除已保存的个性化数据。撤销后相关个性化能力将停止，但不影响其他功能的正常使用。本说明构成你与 AzCode 之间关于个性化数据处理的约定，如有争议以本页面内容为准。</string>
+    <string name="personalization_section_snapshot">本地数据预览</string>
+    <string name="personalization_status_on">授权状态：已同意</string>
+    <string name="personalization_status_off">授权状态：尚未同意</string>
+    <string name="personalization_status_apps">本机已安装应用：约 %1$d 个</string>
+    <string name="personalization_status_at">同意时间：%1$s</string>
+    <string name="personalization_status_snapshot">数据生成时间：%1$s</string>
+    <string name="personalization_never">尚未生成</string>
+    <string name="personalization_snapshot_empty">尚未生成本地数据。点击「同意并生成」后，会采集本机应用信息并保存在本地。</string>
+    <string name="personalization_btn_consent">同意并生成个性化数据</string>
+    <string name="personalization_btn_refresh">重新生成本地数据</string>
+    <string name="personalization_btn_revoke">撤销授权并清除本地数据</string>
+    <string name="personalization_revoke_confirm">将撤销授权并删除已保存的本机个性化数据，此操作不可恢复。确定继续？</string>
+    <string name="personalization_revoked">已撤销并清除本地数据</string>
+    <string name="personalization_generating">正在生成本地数据…</string>
+    <string name="personalization_generated">已生成本地数据，共 %1$d 个应用</string>
+    <string name="personalization_memory_title">本机应用与权限（仅本地）</string>
+    <string name="personalization_dialog_title">个性化数据授权说明</string>
+    <string name="personalization_dialog_msg">为了把任务落到正确的 App，AzCode 需要在本机读取：\n· 已安装应用的包名与应用名称；\n· 各应用声明的 Android 权限；\n· 设备型号与系统版本。\n\n这些数据仅保存在你的设备本地，不会上传到云端。你可以在详情页查看完整说明，并随时撤销授权、清除本地数据。</string>
+    <string name="personalization_dialog_agree">同意并查看详情</string>
+    <string name="personalization_dialog_detail">查看完整说明</string>
+    <string name="personalization_dialog_later">稍后再说</string>
 </resources>

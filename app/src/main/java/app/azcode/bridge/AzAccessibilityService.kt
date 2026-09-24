@@ -5,6 +5,7 @@ import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.graphics.Rect
 import android.os.Build
+import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import org.json.JSONArray
@@ -126,6 +127,21 @@ class AzAccessibilityService : AccessibilityService() {
         return performGlobalAction(action)
     }
 
+    /**
+     * 向当前聚焦的输入框写入文本（Unicode 安全，无需切换输入法）。
+     * [append] 为 true 时追加到已有内容之后，否则整体替换。
+     */
+    fun setFocusedText(text: String, append: Boolean): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val node = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
+        if (!node.isEditable || !node.isEnabled) return false
+        val merged = if (append) node.text?.toString().orEmpty() + text else text
+        val args = Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, merged)
+        }
+        return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+    }
+
     companion object {
         @Volatile
         internal var instance: AzAccessibilityService? = null
@@ -140,5 +156,8 @@ class AzAccessibilityService : AccessibilityService() {
 
         fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, durationMs: Long): Boolean =
             instance?.dispatchSwipe(x1, y1, x2, y2, durationMs) ?: false
+
+        fun setFocusedText(text: String, append: Boolean = false): Boolean =
+            instance?.setFocusedText(text, append) ?: false
     }
 }
