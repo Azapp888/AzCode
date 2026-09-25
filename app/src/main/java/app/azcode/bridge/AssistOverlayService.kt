@@ -88,7 +88,10 @@ class AssistOverlayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startAsForeground()
+        if (!startAsForeground()) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         handler.post {
             if (glowView == null) attachOverlay()
             restartListening()
@@ -548,13 +551,35 @@ class AssistOverlayService : Service() {
         super.onDestroy()
     }
 
-    private fun startAsForeground() {
+    /**
+     * 进入前台服务。
+     *
+     * Android 14（targetSdk 34）起，前台服务采集麦克风必须声明 microphone 类型，
+     * 否则 [android.media.AudioRecord]/[android.speech.SpeechRecognizer] 拿不到音频，
+     * 表现为「唤起后一直没识别结果」。这里同时带上 specialUse 以保留原有语义。
+     */
+    private fun startAsForeground(): Boolean {
         val notification = buildNotification()
-        if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(NOTIF_ID, notification)
-        }
+        return runCatching {
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(
+                    NOTIF_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                )
+            } else if (Build.VERSION.SDK_INT >= 29) {
+                startForeground(
+                    NOTIF_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+                )
+            } else {
+                startForeground(NOTIF_ID, notification)
+            }
+        }.onFailure {
+            toast(getString(R.string.warn_need_mic))
+        }.isSuccess
     }
 
     private fun createChannel() {

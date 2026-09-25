@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
@@ -125,11 +126,12 @@
                 android:value="device_control_bridge" />
         </service>
 
-        <!-- 悬浮语音助理：以 OVERLAY 窗口在当前页面之上绘制透明背景的呼吸光晕 -->
+        <!-- 悬浮语音助理：以 OVERLAY 窗口在当前页面之上绘制透明背景的呼吸光晕。
+             需要 microphone 类型，否则 Android 14 起前台服务无法采集麦克风。 -->
         <service
             android:name=".AssistOverlayService"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="microphone|specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="voice_assistant_overlay" />
