@@ -78,6 +78,7 @@ class MainActivity : AppCompatActivity() {
     private var speechEngine: SpeechEngine? = null
     private var micListening = false
     private var micBase = ""
+    private var lastAssistIntent: Intent? = null
     private lateinit var voicePanel: View
     private lateinit var tvVoicePreview: TextView
     private lateinit var voiceWave: VoiceWaveView
@@ -170,7 +171,11 @@ class MainActivity : AppCompatActivity() {
         etTask = findViewById(R.id.etTask)
         btnSend = findViewById(R.id.btnSend)
         btnStop = findViewById(R.id.btnStop)
-btnAttach = findViewById(R.id.btnAttach)
+        btnAttach = findViewById(R.id.btnAttach)
+        voicePanel = findViewById(R.id.voicePanel)
+        tvVoicePreview = findViewById(R.id.tvVoicePreview)
+        voiceWave = findViewById(R.id.voiceWave)
+        llVoiceSuggest = findViewById(R.id.llVoiceSuggest)
         tvHeaderTitle = findViewById(R.id.tvHeaderTitle)
         svAttachments = findViewById(R.id.svAttachments)
         attachmentsRow = findViewById(R.id.attachmentsRow)
@@ -228,6 +233,29 @@ btnAttach = findViewById(R.id.btnAttach)
         renderSession()
         refreshAttachments()
         refreshDrawer()
+        // 通过系统助理（长按电源键/耳机、助理手势）唤起时，直接进入语音输入。
+        maybeAutoVoiceFromAssist()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // singleTask 下重复唤起不会重建 Activity，这里同样自动进入语音输入。
+        maybeAutoVoiceFromAssist()
+    }
+
+    /**
+     * 系统助理唤起（ACTION_ASSIST / ACTION_VOICE_COMMAND）时自动开始语音识别。
+     *
+     * 用 Intent 实例做去重：同一次唤起只触发一次，重复唤起（onNewIntent 带来新 Intent）仍会触发。
+     */
+    private fun maybeAutoVoiceFromAssist() {
+        val current = intent ?: return
+        val action = current.action ?: return
+        if (action != Intent.ACTION_ASSIST && action != ACTION_VOICE_COMMAND) return
+        if (lastAssistIntent === current) return
+        lastAssistIntent = current
+        etTask.post { if (!destroyed && !micListening) ensureMicPermissionAndStart() }
     }
 
     override fun onResume() {
@@ -1677,5 +1705,6 @@ btnAttach = findViewById(R.id.btnAttach)
     companion object {
         private const val TAG = "MainActivity"
         private const val REQ_NOTIF = 2002
+        private const val ACTION_VOICE_COMMAND = "android.intent.action.VOICE_COMMAND"
     }
 }
