@@ -15,11 +15,12 @@ object SpeechConfig {
 
     /**
      * 讯飞开放平台「语音听写」应用凭据。
-     * 由项目所有者提供，内置到应用中；留空时讯飞引擎在设置页不可选，避免运行时才失败。
+     * 真实值由 CI 通过 GitHub Actions Secrets 注入到 [SpeechSecrets]，仓库内保持空值；
+     * 留空时讯飞引擎在设置页不可选，避免运行时才失败。
      */
-    const val XUNFEI_APP_ID = ""
-    const val XUNFEI_API_KEY = ""
-    const val XUNFEI_API_SECRET = ""
+    val XUNFEI_APP_ID: String get() = SpeechSecrets.XUNFEI_APP_ID
+    val XUNFEI_API_KEY: String get() = SpeechSecrets.XUNFEI_API_KEY
+    val XUNFEI_API_SECRET: String get() = SpeechSecrets.XUNFEI_API_SECRET
 
     private const val PREFS = "azcode_speech"
     private const val KEY_ENGINE = "engine"

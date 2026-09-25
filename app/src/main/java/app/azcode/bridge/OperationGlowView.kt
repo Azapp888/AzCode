@@ -168,10 +168,11 @@ class OperationGlowView(context: Context) : View(context) {
 
         // 仅在 AI 操作手机时绘制全屏光效，操作间隙不显示光晕。
         if (operating) {
-            // 光效紧贴物理屏幕边缘，覆盖到状态栏与导航栏区域。
-            val inset = glowPaint.strokeWidth / 2f
+            // 描边中心落在窗口边缘（inset=0）：一半落在屏幕外被裁掉，光效从物理边框处起亮，
+            // 不再留出 inset 造成的空白。小圆角贴住屏幕自身的圆角，避免四角出现缺口。
+            val inset = 0f
             bounds.set(inset, inset, width - inset, height - inset)
-            val radius = 40f * density
+            val radius = 16f * density
 
             val alpha = (110 + 145 * progress).toInt().coerceIn(0, 255)
             glowPaint.alpha = alpha

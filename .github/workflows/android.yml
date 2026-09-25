@@ -25,6 +25,22 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: 注入讯飞语音密钥
+        env:
+          XF_APP_ID: ${{ secrets.XUNFEI_APP_ID }}
+          XF_API_KEY: ${{ secrets.XUNFEI_API_KEY }}
+          XF_API_SECRET: ${{ secrets.XUNFEI_API_SECRET }}
+        run: |
+          cat > app/src/main/java/app/azcode/bridge/SpeechSecrets.kt <<EOF
+          package app.azcode.bridge
+
+          internal object SpeechSecrets {
+              const val XUNFEI_APP_ID = "$XF_APP_ID"
+              const val XUNFEI_API_KEY = "$XF_API_KEY"
+              const val XUNFEI_API_SECRET = "$XF_API_SECRET"
+          }
+          EOF
+
       - name: 构建 Debug APK
         run: gradle -p . assembleDebug --stacktrace
 
