@@ -1,14 +1,14 @@
 package app.azcode.bridge
 
 /**
- * 讯飞开放平台凭据占位文件。
+ * 讯飞开放平台凭据。
  *
- * 仓库内保持空值，避免密钥明文进入公开仓库；CI 构建时由 GitHub Actions Secrets
- * （XUNFEI_APP_ID / XUNFEI_API_KEY / XUNFEI_API_SECRET）覆盖写入真实值后打包。
- * 本地直接构建时讯飞引擎不可用，系统内置引擎不受影响。
+ * 这里内置的是项目所有者提供的「语音听写」应用凭据，随 APK 分发给所有用户，开箱即用。
+ * CI 若配置了同名 Secrets（XUNFEI_APP_ID / XUNFEI_API_KEY / XUNFEI_API_SECRET），会在构建时覆盖此处，
+ * 便于日后轮换密钥而无需改动仓库。
  */
 internal object SpeechSecrets {
-    const val XUNFEI_APP_ID = ""
-    const val XUNFEI_API_KEY = ""
-    const val XUNFEI_API_SECRET = ""
+    const val XUNFEI_APP_ID = "643e35e8"
+    const val XUNFEI_API_KEY = "5737b63a6b9e80a789f93d3ecdde36d7"
+    const val XUNFEI_API_SECRET = "YWEwYTc5ODYxN2FiYTZhYmQwYzllMjhm"
 }

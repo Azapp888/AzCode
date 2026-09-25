@@ -53,11 +53,10 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var chatContainer: LinearLayout
     private lateinit var svChat: ScrollView
-    private lateinit var etTask: EditText
+    private lateinit var etTask: PressToTalkEditText
     private lateinit var btnSend: ImageButton
     private lateinit var btnStop: ImageButton
     private lateinit var btnAttach: ImageButton
-    private lateinit var btnMic: ImageButton
     private lateinit var tvHeaderTitle: TextView
     private lateinit var svAttachments: HorizontalScrollView
     private lateinit var attachmentsRow: LinearLayout
@@ -161,12 +160,7 @@ class MainActivity : AppCompatActivity() {
         etTask = findViewById(R.id.etTask)
         btnSend = findViewById(R.id.btnSend)
         btnStop = findViewById(R.id.btnStop)
-        btnAttach = findViewById(R.id.btnAttach)
-        btnMic = findViewById(R.id.btnMic)
-        voicePanel = findViewById(R.id.voicePanel)
-        tvVoicePreview = findViewById(R.id.tvVoicePreview)
-        voiceWave = findViewById(R.id.voiceWave)
-        llVoiceSuggest = findViewById(R.id.llVoiceSuggest)
+btnAttach = findViewById(R.id.btnAttach)
         tvHeaderTitle = findViewById(R.id.tvHeaderTitle)
         svAttachments = findViewById(R.id.svAttachments)
         attachmentsRow = findViewById(R.id.attachmentsRow)
@@ -196,9 +190,8 @@ class MainActivity : AppCompatActivity() {
         btnSend.setOnClickListener { sendTask() }
         btnStop.setOnClickListener { stopTask() }
         btnAttach.setOnClickListener { showAttachmentMenu() }
-        btnMic.setOnClickListener { toggleMic() }
-        // 长按输入框直接进入语音输入（与参考一致的语音优先交互）。
-        etTask.setOnLongClickListener {
+        // 长按输入框直接进入语音输入（不再显示独立麦克风按钮）。
+        etTask.onLongPressVoice = {
             if (!micListening) ensureMicPermissionAndStart()
             true
         }
@@ -1021,15 +1014,10 @@ class MainActivity : AppCompatActivity() {
         btnStop.visibility = if (running) View.VISIBLE else View.GONE
         btnStop.isEnabled = running
         btnAttach.isEnabled = !running
-        btnMic.isEnabled = !running
         etTask.isEnabled = !running
     }
 
     // ==================== 语音输入 ====================
-
-    private fun toggleMic() {
-        if (micListening) stopListening() else ensureMicPermissionAndStart()
-    }
 
     private fun ensureMicPermissionAndStart() {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
@@ -1131,9 +1119,6 @@ class MainActivity : AppCompatActivity() {
         override fun onStateChanged(listening: Boolean) = runOnUiThread {
             if (destroyed) return@runOnUiThread
             micListening = listening
-            // 录音中麦克风图标染成主题蓝，结束后恢复次级色。
-            val tint = getColor(if (listening) R.color.primary else R.color.text_secondary)
-            btnMic.setColorFilter(tint)
             if (!listening) {
                 micBase = ""
                 hideVoicePanel()

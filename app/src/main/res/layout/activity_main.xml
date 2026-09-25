@@ -158,7 +158,7 @@
                     android:paddingTop="4dp"
                     android:paddingBottom="6dp">
 
-                    <EditText
+                    <app.azcode.bridge.PressToTalkEditText
                         android:id="@+id/etTask"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -205,14 +205,6 @@
                             android:layout_width="0dp"
                             android:layout_height="1dp"
                             android:layout_weight="1" />
-
-                        <ImageButton
-                            android:id="@+id/btnMic"
-                            android:layout_width="38dp"
-                            android:layout_height="38dp"
-                            android:background="?android:attr/selectableItemBackgroundBorderless"
-                            android:contentDescription="@string/btn_mic"
-                            android:src="@drawable/ic_mic" />
 
                         <ImageButton
                             android:id="@+id/btnAttach"

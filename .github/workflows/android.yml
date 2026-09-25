@@ -31,6 +31,10 @@ jobs:
           XF_API_KEY: ${{ secrets.XUNFEI_API_KEY }}
           XF_API_SECRET: ${{ secrets.XUNFEI_API_SECRET }}
         run: |
+          if [ -z "$XF_APP_ID" ]; then
+            echo "未配置讯飞 Secrets，沿用仓库内已内置的凭据"
+            exit 0
+          fi
           cat > app/src/main/java/app/azcode/bridge/SpeechSecrets.kt <<EOF
           package app.azcode.bridge
 
