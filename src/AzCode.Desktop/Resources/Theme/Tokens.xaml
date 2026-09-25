@@ -3,15 +3,15 @@
 
     <!-- 尺寸 / 圆角 / 字号令牌：与 Android 设计清单第 1.7 ~ 1.9 节一致 -->
 
-    <CornerRadius x:Key="Radius.Button" UniformRadii="10" />
-    <CornerRadius x:Key="Radius.Field" UniformRadii="10" />
-    <CornerRadius x:Key="Radius.Input" UniformRadii="12" />
-    <CornerRadius x:Key="Radius.Tool" UniformRadii="12" />
-    <CornerRadius x:Key="Radius.Card" UniformRadii="16" />
-    <CornerRadius x:Key="Radius.Chip" UniformRadii="16" />
-    <CornerRadius x:Key="Radius.NavItem" UniformRadii="22" />
-    <CornerRadius x:Key="Radius.Composer" UniformRadii="24" />
-    <CornerRadius x:Key="Radius.Panel" UniformRadii="26" />
+    <CornerRadius x:Key="Radius.Button" TopLeft="10" TopRight="10" BottomRight="10" BottomLeft="10" />
+    <CornerRadius x:Key="Radius.Field" TopLeft="10" TopRight="10" BottomRight="10" BottomLeft="10" />
+    <CornerRadius x:Key="Radius.Input" TopLeft="12" TopRight="12" BottomRight="12" BottomLeft="12" />
+    <CornerRadius x:Key="Radius.Tool" TopLeft="12" TopRight="12" BottomRight="12" BottomLeft="12" />
+    <CornerRadius x:Key="Radius.Card" TopLeft="16" TopRight="16" BottomRight="16" BottomLeft="16" />
+    <CornerRadius x:Key="Radius.Chip" TopLeft="16" TopRight="16" BottomRight="16" BottomLeft="16" />
+    <CornerRadius x:Key="Radius.NavItem" TopLeft="22" TopRight="22" BottomRight="22" BottomLeft="22" />
+    <CornerRadius x:Key="Radius.Composer" TopLeft="24" TopRight="24" BottomRight="24" BottomLeft="24" />
+    <CornerRadius x:Key="Radius.Panel" TopLeft="26" TopRight="26" BottomRight="26" BottomLeft="26" />
 
     <!-- RoundedBorder 的四角半径：Left=左上 Top=右上 Right=右下 Bottom=左下 -->
     <Thickness x:Key="Radii.BubbleAssistant" Left="16" Top="16" Right="16" Bottom="4" />
