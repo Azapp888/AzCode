@@ -40,6 +40,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvGenofficeEntry: TextView
     private lateinit var tvImeEntry: TextView
     private lateinit var tvPersonalizationEntry: TextView
+    private lateinit var tvSpeechEntry: TextView
     private lateinit var tvVersion: TextView
     private lateinit var btnBridge: Button
 
@@ -78,6 +79,7 @@ class SettingsActivity : AppCompatActivity() {
             tvLogsEntry = findViewById(R.id.tvLogsEntry)
             tvImeEntry = findViewById(R.id.tvImeEntry)
             tvPersonalizationEntry = findViewById(R.id.tvPersonalizationEntry)
+            tvSpeechEntry = findViewById(R.id.tvSpeechEntry)
             tvVersion = findViewById(R.id.tvVersion)
             btnBridge = findViewById(R.id.btnBridge)
 
@@ -103,6 +105,7 @@ class SettingsActivity : AppCompatActivity() {
                 openAssistantSettings()
             }
             findViewById<View>(R.id.rowAssistant).setOnClickListener { openAssistantSettings() }
+            findViewById<View>(R.id.rowSpeech).setOnClickListener { showSpeechDialog() }
 
             findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
             findViewById<View>(R.id.btnSave).setOnClickListener { saveConfig() }
@@ -326,6 +329,7 @@ class SettingsActivity : AppCompatActivity() {
             tvPersonalizationEntry.text = getString(
                 if (Personalization.hasConsented(this)) R.string.settings_value_on else R.string.settings_value_off,
             )
+            tvSpeechEntry.text = SpeechEngines.engineLabel(this)
         }.onFailure { reportCrash("刷新设置页状态", it) }
     }
 
@@ -381,6 +385,31 @@ class SettingsActivity : AppCompatActivity() {
                 CrashLog.clear(this)
                 refreshStatus()
                 Toast.makeText(this, R.string.logs_cleared, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
+    }
+
+    /** 选择语音识别引擎：系统内置（离线优先）或讯飞星火（在线）。 */
+    private fun showSpeechDialog() {
+        val labels = arrayOf(
+            getString(R.string.speech_engine_system),
+            getString(R.string.speech_engine_xunfei),
+        )
+        val checked = if (SpeechConfig.engine(this) == SpeechConfig.ENGINE_XUNFEI) 1 else 0
+        AlertDialog.Builder(this)
+            .setTitle(R.string.title_speech)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                if (which == 1 && !SpeechEngines.canSelectXunfei()) {
+                    Toast.makeText(this, R.string.speech_xunfei_unconfigured, Toast.LENGTH_LONG).show()
+                    return@setSingleChoiceItems
+                }
+                SpeechConfig.setEngine(
+                    this,
+                    if (which == 1) SpeechConfig.ENGINE_XUNFEI else SpeechConfig.ENGINE_SYSTEM,
+                )
+                runCatching { refreshStatus() }.onFailure { reportCrash("刷新语音设置", it) }
+                dialog.dismiss()
             }
             .setNegativeButton(R.string.btn_cancel, null)
             .show()

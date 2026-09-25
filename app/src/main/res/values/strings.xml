@@ -34,6 +34,13 @@
     <string name="draw_empty">请输入图片描述</string>
     <string name="draw_send_prefix">生成一张图片：</string>
     <string name="warn_need_camera">需要相机权限才能拍照</string>
+    <string name="warn_need_mic">需要麦克风权限才能语音输入</string>
+    <string name="warn_mic_unavailable">当前设备不支持语音识别，请在设置中改用其他引擎</string>
+    <string name="btn_mic">语音输入</string>
+    <string name="title_speech">语音输入</string>
+    <string name="speech_engine_system">系统内置（离线优先）</string>
+    <string name="speech_engine_xunfei">讯飞星火（在线）</string>
+    <string name="speech_xunfei_unconfigured">讯飞语音尚未内置密钥，请先配置后使用</string>
     <string name="group_today">今天</string>
     <string name="group_yesterday">昨天</string>
     <string name="group_week">7 天内</string>

@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.drawerlayout.widget.DrawerLayout
 import android.content.Intent
+import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -54,6 +55,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSend: ImageButton
     private lateinit var btnStop: ImageButton
     private lateinit var btnAttach: ImageButton
+    private lateinit var btnMic: ImageButton
     private lateinit var tvHeaderTitle: TextView
     private lateinit var svAttachments: HorizontalScrollView
     private lateinit var attachmentsRow: LinearLayout
@@ -72,6 +74,10 @@ class MainActivity : AppCompatActivity() {
     private var pickerScroll: ScrollView? = null
     private var cameraOutputUri: Uri? = null
 
+    private var speechEngine: SpeechEngine? = null
+    private var micListening = false
+    private var micBase = ""
+
     private val takePicture =
         registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
             if (ok) cameraOutputUri?.let { handlePickedUris(listOf(it)) }
@@ -85,6 +91,15 @@ class MainActivity : AppCompatActivity() {
     private val pickFiles =
         registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             if (!uris.isNullOrEmpty()) handlePickedUris(uris)
+        }
+
+    private val requestMic =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                startListening()
+            } else {
+                Toast.makeText(this, R.string.warn_need_mic, Toast.LENGTH_SHORT).show()
+            }
         }
 
     private val requestCamera =
@@ -141,6 +156,7 @@ class MainActivity : AppCompatActivity() {
         btnSend = findViewById(R.id.btnSend)
         btnStop = findViewById(R.id.btnStop)
         btnAttach = findViewById(R.id.btnAttach)
+        btnMic = findViewById(R.id.btnMic)
         tvHeaderTitle = findViewById(R.id.tvHeaderTitle)
         svAttachments = findViewById(R.id.svAttachments)
         attachmentsRow = findViewById(R.id.attachmentsRow)
@@ -170,6 +186,7 @@ class MainActivity : AppCompatActivity() {
         btnSend.setOnClickListener { sendTask() }
         btnStop.setOnClickListener { stopTask() }
         btnAttach.setOnClickListener { showAttachmentMenu() }
+        btnMic.setOnClickListener { toggleMic() }
 
         runCatching { SkillStore.seedBuiltins(applicationContext) }
         runCatching { rikka.shizuku.Shizuku.addRequestPermissionResultListener(shizukuPermissionListener) }
@@ -215,6 +232,8 @@ class MainActivity : AppCompatActivity() {
         destroyed = true
         pendingQuestionLatch?.countDown()
         runner?.cancel()
+        runCatching { speechEngine?.release() }
+        speechEngine = null
         // 让排队中的会话写入先落盘，再释放线程（不阻塞主线程）。
         runCatching { saveExecutor.shutdown() }
         runCatching { rikka.shizuku.Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener) }
@@ -984,7 +1003,66 @@ class MainActivity : AppCompatActivity() {
         btnStop.visibility = if (running) View.VISIBLE else View.GONE
         btnStop.isEnabled = running
         btnAttach.isEnabled = !running
+        btnMic.isEnabled = !running
         etTask.isEnabled = !running
+    }
+
+    // ==================== 语音输入 ====================
+
+    private fun toggleMic() {
+        if (micListening) stopListening() else ensureMicPermissionAndStart()
+    }
+
+    private fun ensureMicPermissionAndStart() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            startListening()
+        } else {
+            requestMic.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    private fun startListening() {
+        val engine = speechEngine ?: SpeechEngines.create(this).also { speechEngine = it }
+        if (!engine.isAvailable(this)) {
+            Toast.makeText(this, R.string.warn_mic_unavailable, Toast.LENGTH_LONG).show()
+            return
+        }
+        // 记录进入识别前输入框已有内容，识别结果追加在其后。
+        micBase = etTask.text.toString()
+        engine.start(this, speechListener)
+    }
+
+    private fun stopListening() {
+        runCatching { speechEngine?.stop() }
+    }
+
+    private val speechListener = object : SpeechEngine.Listener {
+        override fun onPartial(text: String) = runOnUiThread { updateMicText(text) }
+
+        override fun onResult(text: String) = runOnUiThread { updateMicText(text) }
+
+        override fun onError(message: String) {
+            if (message.isBlank()) return
+            runOnUiThread {
+                if (!destroyed) Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        override fun onStateChanged(listening: Boolean) = runOnUiThread {
+            if (destroyed) return@runOnUiThread
+            micListening = listening
+            // 录音中麦克风图标染成主题蓝，结束后恢复次级色。
+            val tint = getColor(if (listening) R.color.primary else R.color.text_secondary)
+            btnMic.setColorFilter(tint)
+            if (!listening) micBase = ""
+        }
+    }
+
+    private fun updateMicText(text: String) {
+        if (text.isBlank()) return
+        val joined = if (micBase.isBlank()) text else micBase + text
+        etTask.setText(joined)
+        etTask.setSelection(etTask.text.length)
     }
 
     // ==================== 事件处理 ====================

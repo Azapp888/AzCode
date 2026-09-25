@@ -226,6 +226,21 @@
                         android:layout_marginStart="10dp" />
                 </LinearLayout>
 
+                <LinearLayout
+                    android:id="@+id/rowSpeech"
+                    style="@style/SettingsRow">
+
+                    <ImageView style="@style/SettingsRowIcon" android:src="@drawable/ic_mic" />
+
+                    <TextView style="@style/SettingsRowTitle" android:text="@string/title_speech" />
+
+                    <TextView
+                        android:id="@+id/tvSpeechEntry"
+                        style="@style/SettingsRowValue" />
+
+                    <ImageView style="@style/SettingsRowChevron" />
+                </LinearLayout>
+
                 <LinearLayout style="@style/SettingsRow" android:clickable="false" android:focusable="false">
 
                     <ImageView style="@style/SettingsRowIcon" android:src="@drawable/ic_step" />
