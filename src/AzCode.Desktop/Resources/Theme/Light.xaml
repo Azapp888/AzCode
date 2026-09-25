@@ -1,0 +1,52 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 亮色令牌，与 Android values/colors.xml 同名等价 -->
+
+    <SolidColorBrush x:Key="Brand.Primary" Color="#3964FE" />
+    <SolidColorBrush x:Key="Brand.Pressed" Color="#5686FE" />
+    <SolidColorBrush x:Key="Brand.Soft" Color="#E5F0FF" />
+    <SolidColorBrush x:Key="Brand.OnPrimary" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Brand.OnPrimaryMuted" Color="#DCE4FF" />
+
+    <SolidColorBrush x:Key="Surface.Background" Color="#F5F6F7" />
+    <SolidColorBrush x:Key="Surface.Card" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Surface.Muted" Color="#F5F6F7" />
+    <SolidColorBrush x:Key="Surface.Input" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Surface.Drawer" Color="#FAFBFC" />
+    <SolidColorBrush x:Key="Surface.Attach" Color="#F2F3F5" />
+
+    <SolidColorBrush x:Key="Text.Primary" Color="#0F1115" />
+    <SolidColorBrush x:Key="Text.Secondary" Color="#61666B" />
+    <SolidColorBrush x:Key="Text.Caption" Color="#ADB2B8" />
+
+    <SolidColorBrush x:Key="Stroke.Subtle" Color="#0A000000" />
+    <SolidColorBrush x:Key="Stroke.Divider" Color="#1A000000" />
+
+    <SolidColorBrush x:Key="Bubble.Assistant" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Bubble.User" Color="#3964FE" />
+
+    <SolidColorBrush x:Key="Tool.Background" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Tool.Border" Color="#1A000000" />
+    <SolidColorBrush x:Key="Tool.Text" Color="#61666B" />
+
+    <SolidColorBrush x:Key="Status.On" Color="#22C55E" />
+    <SolidColorBrush x:Key="Status.Off" Color="#C4C7CE" />
+    <SolidColorBrush x:Key="Status.Error" Color="#EC1313" />
+    <SolidColorBrush x:Key="Status.ErrorBg" Color="#FEF2F2" />
+    <SolidColorBrush x:Key="Status.ErrorBorder" Color="#FECACA" />
+
+    <SolidColorBrush x:Key="Glass.Surface" Color="#E6FFFFFF" />
+    <SolidColorBrush x:Key="Glass.SurfaceStrong" Color="#F5FFFFFF" />
+    <SolidColorBrush x:Key="Glass.Stroke" Color="#14000000" />
+    <SolidColorBrush x:Key="Glass.Scrim" Color="#59000000" />
+
+    <SolidColorBrush x:Key="Nav.Selected" Color="#E8EEFF" />
+    <SolidColorBrush x:Key="Interact.Hover" Color="#0F000000" />
+    <SolidColorBrush x:Key="Interact.Pressed" Color="#14263148" />
+    <SolidColorBrush x:Key="Interact.PressedOnPrimary" Color="#33FFFFFF" />
+
+    <Color x:Key="Brand.PrimaryColor">#3964FE</Color>
+    <Color x:Key="Surface.BackgroundColor">#F5F6F7</Color>
+
+</ResourceDictionary>

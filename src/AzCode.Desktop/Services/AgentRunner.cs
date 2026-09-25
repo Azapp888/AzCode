@@ -14,6 +14,9 @@ public sealed class AgentRunner
 
     public event Action<string>? Log;
 
+    /// <summary>结构化界面事件：驱动气泡、工具卡与「正在输入」状态。</summary>
+    public event Action<AgentUiEvent>? UiEvent;
+
     public AgentRunner(AppConfig cfg)
     {
         _cfg = cfg;
@@ -35,9 +38,15 @@ public sealed class AgentRunner
                 ct.ThrowIfCancellationRequested();
                 var limit = _cfg.MaxSteps <= 0 ? "∞" : _cfg.MaxSteps.ToString();
                 Log?.Invoke($"[step {step}/{limit}] 请求模型…");
+                UiEvent?.Invoke(new AgentUiEvent(AgentUiKind.Typing, ""));
 
                 var msg = await _llm.ChatAsync(_cfg, messages, tools, ct);
                 messages.Add(msg);
+
+                if (!string.IsNullOrWhiteSpace(msg.Content))
+                {
+                    UiEvent?.Invoke(new AgentUiEvent(AgentUiKind.Assistant, msg.Content!));
+                }
 
                 if (msg.ToolCalls is null || msg.ToolCalls.Count == 0)
                 {
@@ -48,8 +57,10 @@ public sealed class AgentRunner
                 foreach (var call in msg.ToolCalls)
                 {
                     ct.ThrowIfCancellationRequested();
+                    UiEvent?.Invoke(new AgentUiEvent(AgentUiKind.ToolStart, call.Function.Arguments, call.Function.Name));
                     var result = await ExecuteAsync(call, _skills, ct);
                     Log?.Invoke($"  {call.Function.Name} -> {Truncate(result, 500)}");
+                    UiEvent?.Invoke(new AgentUiEvent(AgentUiKind.ToolEnd, result, call.Function.Name));
                     messages.Add(new ChatMessage
                     {
                         Role = "tool",
@@ -60,6 +71,7 @@ public sealed class AgentRunner
             }
 
             Log?.Invoke($"达到最大步数 {_cfg.MaxSteps}，停止。");
+            UiEvent?.Invoke(new AgentUiEvent(AgentUiKind.System, $"达到最大步数 {_cfg.MaxSteps}，已停止。"));
         }
         finally
         {
@@ -67,6 +79,8 @@ public sealed class AgentRunner
             ConversationStore.Save(messages.Skip(1).ToList());
         }
     }
+
+    private void Ui(AgentUiEvent e) => UiEvent?.Invoke(e);
 
     private async Task<string> ExecuteAsync(ToolCall call, SkillStore skills, CancellationToken ct)
     {

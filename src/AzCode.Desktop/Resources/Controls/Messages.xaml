@@ -1,0 +1,192 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ctrl="clr-namespace:AzCode.Desktop.Controls">
+
+    <!-- 消息气泡模板：复刻 Android item_msg_* 的 8 种形态 -->
+
+    <DataTemplate x:Key="Chat.Welcome">
+        <StackPanel MaxWidth="520" Margin="0,32,0,8" HorizontalAlignment="Center">
+            <Border Width="56"
+                    Height="56"
+                    Background="{DynamicResource Brand.Soft}"
+                    CornerRadius="18"
+                    HorizontalAlignment="Center">
+                <Image Source="/Assets/app.png" Width="34" Height="34" Stretch="Uniform" />
+            </Border>
+            <TextBlock Style="{StaticResource Text.H1}"
+                       Text="有什么可以帮你的？"
+                       TextAlignment="Center"
+                       Margin="0,16,0,0" />
+            <TextBlock Style="{StaticResource Text.Secondary}"
+                       FontSize="14"
+                       Text="用自然语言描述要在电脑上完成的任务，AzCode 会一步步操作。"
+                       TextAlignment="Center"
+                       Margin="0,8,0,0" />
+            <Border Style="{StaticResource Card.Field}" Margin="0,18,0,0">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Text.RowTitle}" Text="示例" Foreground="{DynamicResource Brand.Primary}" />
+                    <TextBlock Style="{StaticResource Text.Value}" Margin="0,6,0,0" Text="· 打开记事本，输入今天的待办清单" />
+                    <TextBlock Style="{StaticResource Text.Value}" Margin="0,4,0,0" Text="· 读取 GitHub 仓库 README 并总结要点" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </DataTemplate>
+
+    <DataTemplate x:Key="Chat.User">
+        <Grid HorizontalAlignment="Right" Margin="0,5,0,5">
+            <ctrl:RoundedBorder MaxWidth="300"
+                                Background="{DynamicResource Bubble.User}"
+                                CornerRadii="{DynamicResource Radii.BubbleUser}"
+                                Padding="{DynamicResource Pad.Bubble}">
+                <StackPanel>
+                    <TextBlock x:Name="Note"
+                               Style="{StaticResource Text.Tiny}"
+                               Foreground="{DynamicResource Brand.OnPrimaryMuted}"
+                               FontSize="12"
+                               Margin="0,0,0,4"
+                               Text="{Binding Note}" />
+                    <TextBlock Style="{StaticResource Text.Base}"
+                               FontSize="15"
+                               Foreground="{DynamicResource Brand.OnPrimary}"
+                               Text="{Binding Text}" />
+                </StackPanel>
+            </ctrl:RoundedBorder>
+        </Grid>
+        <DataTemplate.Triggers>
+            <DataTrigger Binding="{Binding Note}" Value="">
+                <Setter TargetName="Note" Property="Visibility" Value="Collapsed" />
+            </DataTrigger>
+        </DataTemplate.Triggers>
+    </DataTemplate>
+
+    <DataTemplate x:Key="Chat.Assistant">
+        <Grid HorizontalAlignment="Left" Margin="0,5,0,5">
+            <ctrl:RoundedBorder MaxWidth="620"
+                                Background="{DynamicResource Bubble.Assistant}"
+                                BorderBrush="{DynamicResource Stroke.Subtle}"
+                                BorderThickness="1"
+                                CornerRadii="{DynamicResource Radii.BubbleAssistant}"
+                                Padding="{DynamicResource Pad.Bubble}">
+                <TextBlock Style="{StaticResource Text.Base}"
+                           FontSize="15"
+                           Text="{Binding Text}" />
+            </ctrl:RoundedBorder>
+        </Grid>
+    </DataTemplate>
+
+    <DataTemplate x:Key="Chat.System">
+        <Border MaxWidth="480"
+                Margin="0,6,0,6"
+                HorizontalAlignment="Center"
+                Background="{DynamicResource Bubble.Assistant}"
+                BorderBrush="{DynamicResource Stroke.Subtle}"
+                BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.Button}"
+                Padding="12,7,12,7">
+            <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding Text}" />
+        </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="Chat.Error">
+        <Border MaxWidth="480"
+                Margin="0,6,0,6"
+                HorizontalAlignment="Center"
+                Background="{DynamicResource Status.ErrorBg}"
+                BorderBrush="{DynamicResource Status.ErrorBorder}"
+                BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.Button}"
+                Padding="12,8,12,8">
+            <StackPanel Orientation="Horizontal">
+                <Viewbox Width="14" Height="14" Margin="0,0,8,0" VerticalAlignment="Center">
+                    <Path Style="{StaticResource Icon.Error}" Data="{StaticResource Icon.Info}" />
+                </Viewbox>
+                <TextBlock Style="{StaticResource Text.Base}"
+                           FontSize="13"
+                           MaxWidth="420"
+                           Foreground="{DynamicResource Status.Error}"
+                           Text="{Binding Text}" />
+            </StackPanel>
+        </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="Chat.Typing">
+        <Border Margin="0,5,0,5"
+                HorizontalAlignment="Left"
+                Background="{DynamicResource Bubble.Assistant}"
+                BorderBrush="{DynamicResource Stroke.Subtle}"
+                BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.Button}"
+                Padding="12,8,12,8">
+            <TextBlock x:Name="TypingText"
+                       Style="{StaticResource Text.Caption}"
+                       Text="正在输入…" />
+        </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="Chat.Tool">
+        <Border Style="{StaticResource Card.Tool}" Margin="0,5,0,5" MaxWidth="620" HorizontalAlignment="Stretch">
+            <StackPanel>
+                <ToggleButton Style="{StaticResource Btn.ToolHeader}" IsChecked="{Binding Expanded, Mode=TwoWay}">
+                    <Grid Margin="12,9,12,9">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Viewbox Width="15" Height="15" VerticalAlignment="Center">
+                            <Path Style="{StaticResource Icon.Muted}" Data="{StaticResource Icon.Tool}" />
+                        </Viewbox>
+                        <TextBlock Grid.Column="1"
+                                   Style="{StaticResource Text.RowTitle}"
+                                   FontSize="13"
+                                   Margin="8,0,8,0"
+                                   Foreground="{DynamicResource Tool.Text}"
+                                   Text="{Binding ToolName}" />
+                        <TextBlock Grid.Column="2"
+                                   Style="{StaticResource Text.Micro}"
+                                   FontSize="11"
+                                   VerticalAlignment="Center"
+                                   Text="{Binding Status}" />
+                        <Viewbox Grid.Column="3" Width="14" Height="14" Margin="8,0,0,0" VerticalAlignment="Center">
+                            <Path x:Name="Chevron"
+                                  Style="{StaticResource Icon.Muted}"
+                                  Data="{StaticResource Icon.ChevronRight}" />
+                        </Viewbox>
+                    </Grid>
+                </ToggleButton>
+                <StackPanel x:Name="Body" Visibility="Collapsed" Margin="12,0,12,11">
+                    <Border Background="{DynamicResource Surface.Muted}" CornerRadius="8" Padding="10,8,10,8">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Text.Caption}" Text="参数" />
+                            <TextBlock Style="{StaticResource Text.Mono}" Margin="0,4,0,0" Text="{Binding Text}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{DynamicResource Surface.Muted}"
+                            CornerRadius="8"
+                            Padding="10,8,10,8"
+                            Margin="0,8,0,0">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Text.Caption}" Text="结果" />
+                            <TextBlock Style="{StaticResource Text.Mono}" Margin="0,4,0,0" Text="{Binding Result}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+        <DataTemplate.Triggers>
+            <DataTrigger Binding="{Binding Expanded}" Value="True">
+                <Setter TargetName="Body" Property="Visibility" Value="Visible" />
+                <Setter TargetName="Chevron" Property="RenderTransform">
+                    <Setter.Value>
+                        <RotateTransform Angle="90" />
+                    </Setter.Value>
+                </Setter>
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Status}" Value="失败">
+                <Setter TargetName="Chevron" Property="Fill" Value="{DynamicResource Status.Error}" />
+            </DataTrigger>
+        </DataTemplate.Triggers>
+    </DataTemplate>
+
+</ResourceDictionary>

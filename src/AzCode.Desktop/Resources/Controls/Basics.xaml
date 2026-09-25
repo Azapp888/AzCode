@@ -1,0 +1,193 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 基础控件样式：对应 Android bg_button_* / bg_field / bg_glass_* / nav_item / switch -->
+
+    <Style x:Key="Text.Base" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="LineHeight" Value="21" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+    </Style>
+
+    <Style x:Key="Text.H1" TargetType="TextBlock" BasedOn="{StaticResource Text.Base}">
+        <Setter Property="FontSize" Value="22" />
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+
+    <Style x:Key="Text.PageTitle" TargetType="TextBlock" BasedOn="{StaticResource Text.Base}">
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+
+    <Style x:Key="Text.BarTitle" TargetType="TextBlock" BasedOn="{StaticResource Text.Base}">
+        <Setter Property="FontSize" Value="17" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+
+    <Style x:Key="Text.RowTitle" TargetType="TextBlock" BasedOn="{StaticResource Text.Base}">
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+
+    <Style x:Key="Text.Value" TargetType="TextBlock" BasedOn="{StaticResource Text.Base}">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+
+    <Style x:Key="Text.Secondary" TargetType="TextBlock" BasedOn="{StaticResource Text.Base}">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+    </Style>
+
+    <Style x:Key="Text.Caption" TargetType="TextBlock" BasedOn="{StaticResource Text.Base}">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.Caption}" />
+    </Style>
+
+    <Style x:Key="Text.Tiny" TargetType="TextBlock" BasedOn="{StaticResource Text.Base}">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.Caption}" />
+    </Style>
+
+    <Style x:Key="Text.Micro" TargetType="TextBlock" BasedOn="{StaticResource Text.Base}">
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.Caption}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+
+    <Style x:Key="Text.Mono" TargetType="TextBlock" BasedOn="{StaticResource Text.Base}">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Mono}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{DynamicResource Tool.Text}" />
+        <Setter Property="LineHeight" Value="16" />
+    </Style>
+
+    <Style x:Key="Text.SectionLabel" TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+        <Setter Property="Margin" Value="4,0,0,8" />
+    </Style>
+
+    <!-- 图标 -->
+
+    <Style x:Key="Icon" TargetType="Path">
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="Fill" Value="{DynamicResource Text.Primary}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <Style x:Key="Icon.OnPrimary" TargetType="Path" BasedOn="{StaticResource Icon}">
+        <Setter Property="Fill" Value="{DynamicResource Brand.OnPrimary}" />
+    </Style>
+
+    <Style x:Key="Icon.Muted" TargetType="Path" BasedOn="{StaticResource Icon}">
+        <Setter Property="Fill" Value="{DynamicResource Text.Secondary}" />
+    </Style>
+
+    <!-- 导航项图标：跟随 RadioButton 前景色（选中态变主色） -->
+    <Style x:Key="Icon.Nav" TargetType="Path" BasedOn="{StaticResource Icon}">
+        <Setter Property="Fill" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+    </Style>
+
+    <Style x:Key="Icon.Error" TargetType="Path" BasedOn="{StaticResource Icon}">
+        <Setter Property="Fill" Value="{DynamicResource Status.Error}" />
+    </Style>
+
+    <!-- 容器 -->
+
+    <Style x:Key="Card.Group" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Surface.Card}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
+        <Setter Property="Padding" Value="4,2" />
+    </Style>
+
+    <Style x:Key="Card.Field" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Surface.Card}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Stroke.Divider}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Field}" />
+        <Setter Property="Padding" Value="{DynamicResource Pad.Field}" />
+    </Style>
+
+    <Style x:Key="Card.Tool" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Tool.Background}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Tool.Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Tool}" />
+    </Style>
+
+    <Style x:Key="Card.GlassPanel" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Glass.Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Glass.Stroke}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Panel}" />
+    </Style>
+
+    <!-- 输入框（bg_input） -->
+
+    <Style x:Key="Input.Base" TargetType="TextBox">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource Brand.Primary}" />
+        <Setter Property="Background" Value="{DynamicResource Surface.Input}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Stroke.Subtle}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="12,9,12,9" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border x:Name="Box"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{DynamicResource Radius.Input}">
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brand.Primary}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="Input.Multiline" TargetType="TextBox" BasedOn="{StaticResource Input.Base}">
+        <Setter Property="AcceptsReturn" Value="True" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="VerticalContentAlignment" Value="Top" />
+        <Setter Property="MinHeight" Value="88" />
+    </Style>
+
+    <!-- 玻璃化输入区（无边框，嵌在玻璃面板里） -->
+
+    <Style x:Key="Input.Bare" TargetType="TextBox">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource Brand.Primary}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="AcceptsReturn" Value="True" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border Background="{TemplateBinding Background}">
+                        <ScrollViewer x:Name="PART_ContentHost" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+</ResourceDictionary>

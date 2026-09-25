@@ -1,0 +1,206 @@
+<UserControl x:Class="AzCode.Desktop.Pages.SettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="56" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <TextBlock Style="{StaticResource Text.BarTitle}"
+                       Text="设置"
+                       Margin="16,0,16,0"
+                       VerticalAlignment="Center" />
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="16,0,16,16">
+            <StackPanel MaxWidth="760" HorizontalAlignment="Left">
+
+                <!-- 模型与密钥 -->
+                <TextBlock Style="{StaticResource Text.SectionLabel}" Text="模型与密钥" />
+                <Border Style="{StaticResource Card.Group}">
+                    <StackPanel>
+                        <Grid Margin="14,10,14,4">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Style="{StaticResource Text.RowTitle}" Text="DeepSeek API Key" />
+                            <TextBlock Grid.Row="1"
+                                       Style="{StaticResource Text.Tiny}"
+                                       Margin="0,2,0,8"
+                                       Text="也可用环境变量 AZCODE_DEEPSEEK_API_KEY 提供（优先生效）。" />
+                        </Grid>
+                        <Border Margin="14,0,14,12"
+                                Background="{DynamicResource Surface.Input}"
+                                BorderBrush="{DynamicResource Stroke.Subtle}"
+                                BorderThickness="1"
+                                CornerRadius="{DynamicResource Radius.Input}">
+                            <PasswordBox x:Name="TxtKey"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Padding="12,9,12,9"
+                                         FontSize="14"
+                                         Foreground="{DynamicResource Text.Primary}" />
+                        </Border>
+
+                        <StackPanel Margin="14,0,14,12">
+                            <TextBlock Style="{StaticResource Text.RowTitle}" Text="Base URL" Margin="0,0,0,6" />
+                            <TextBox x:Name="TxtBase" Style="{StaticResource Input.Base}" />
+                        </StackPanel>
+
+                        <Grid Margin="14,0,14,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Style="{StaticResource Text.RowTitle}" Text="模型名" Margin="0,0,0,6" />
+                                <TextBox x:Name="TxtModel" Style="{StaticResource Input.Base}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Style="{StaticResource Text.RowTitle}" Text="温度" Margin="0,0,0,6" />
+                                <TextBox x:Name="TxtTemp" Style="{StaticResource Input.Base}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <StackPanel Margin="14,0,14,12">
+                            <TextBlock Style="{StaticResource Text.RowTitle}" Text="最大步数（0 表示无限）" Margin="0,0,0,6" />
+                            <TextBox x:Name="TxtMaxSteps" Style="{StaticResource Input.Base}" Width="120" HorizontalAlignment="Left" />
+                        </StackPanel>
+
+                        <StackPanel Margin="14,0,14,14">
+                            <TextBlock Style="{StaticResource Text.RowTitle}" Text="系统提示词" Margin="0,0,0,6" />
+                            <TextBlock Style="{StaticResource Text.Tiny}"
+                                       Margin="0,0,0,8"
+                                       Text="留空使用内置默认提示词；可在此自定义 Agent 的角色与行为。" />
+                            <TextBox x:Name="TxtPrompt" Style="{StaticResource Input.Multiline}" MinHeight="96" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- 外观 -->
+                <TextBlock Style="{StaticResource Text.SectionLabel}" Text="外观" Margin="4,20,0,8" />
+                <Border Style="{StaticResource Card.Group}">
+                    <Grid Margin="14,12,14,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Text.RowTitle}" Text="界面主题" />
+                            <TextBlock Style="{StaticResource Text.Tiny}" Margin="0,3,0,0" Text="与 Android 端同一套明暗色板。" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <ToggleButton x:Name="ChipLight" Style="{StaticResource Chip}" Content="亮色" Click="ThemeLight_Click" />
+                            <ToggleButton x:Name="ChipDark" Style="{StaticResource Chip}" Content="暗色" Margin="8,0,0,0" Click="ThemeDark_Click" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- 接入与扩展 -->
+                <TextBlock Style="{StaticResource Text.SectionLabel}" Text="接入与扩展" Margin="4,20,0,8" />
+                <Border Style="{StaticResource Card.Group}">
+                    <StackPanel>
+                        <Button Style="{StaticResource Btn.Row}" Click="OpenSkills_Click">
+                            <Grid Margin="14,10,14,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Viewbox Width="20" Height="20" VerticalAlignment="Center">
+                                    <Path Style="{StaticResource Icon}" Data="{StaticResource Icon.Skill}" Fill="{DynamicResource Brand.Primary}" />
+                                </Viewbox>
+                                <StackPanel Grid.Column="1" Margin="12,0,12,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource Text.RowTitle}" Text="技能管理" />
+                                    <TextBlock x:Name="TxtSkillsValue" Style="{StaticResource Text.Value}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <Path Grid.Column="3"
+                                      Width="16"
+                                      Height="16"
+                                      VerticalAlignment="Center"
+                                      Stretch="Uniform"
+                                      Data="{StaticResource Icon.ChevronRight}"
+                                      Fill="{DynamicResource Text.Caption}" />
+                            </Grid>
+                        </Button>
+
+                        <Border Height="1" Margin="14,0,14,0" Background="{DynamicResource Stroke.Divider}" />
+
+                        <Button Style="{StaticResource Btn.Row}" Click="OpenGithub_Click">
+                            <Grid Margin="14,10,14,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Viewbox Width="20" Height="20" VerticalAlignment="Center">
+                                    <Path Style="{StaticResource Icon}" Data="{StaticResource Icon.Code}" Fill="{DynamicResource Brand.Primary}" />
+                                </Viewbox>
+                                <StackPanel Grid.Column="1" Margin="12,0,12,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource Text.RowTitle}" Text="GitHub 接入" />
+                                    <TextBlock x:Name="TxtGithubValue" Style="{StaticResource Text.Value}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <Path Grid.Column="3"
+                                      Width="16"
+                                      Height="16"
+                                      VerticalAlignment="Center"
+                                      Stretch="Uniform"
+                                      Data="{StaticResource Icon.ChevronRight}"
+                                      Fill="{DynamicResource Text.Caption}" />
+                            </Grid>
+                        </Button>
+
+                        <Border Height="1" Margin="14,0,14,0" Background="{DynamicResource Stroke.Divider}" />
+
+                        <Grid Margin="14,10,14,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Viewbox Width="20" Height="20" VerticalAlignment="Center">
+                                <Path Style="{StaticResource Icon}" Data="{StaticResource Icon.Memory}" Fill="{DynamicResource Status.Off}" />
+                            </Viewbox>
+                            <StackPanel Grid.Column="1" Margin="12,0,4,0" VerticalAlignment="Center">
+                                <TextBlock Style="{StaticResource Text.RowTitle}" Text="记忆（即将上线）" />
+                                <TextBlock Style="{StaticResource Text.Value}"
+                                           Margin="0,2,0,0"
+                                           Text="分条保存 token、习惯与方法，并注入 Agent 上下文" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- 保存 -->
+                <Button x:Name="BtnSave"
+                        Style="{StaticResource Btn.Primary}"
+                        Margin="0,20,0,0"
+                        HorizontalAlignment="Left"
+                        Width="160"
+                        Content="保存配置"
+                        Click="BtnSave_Click" />
+                <TextBlock x:Name="TxtStatus"
+                           Style="{StaticResource Text.Caption}"
+                           Margin="4,10,0,0" />
+
+                <!-- 关于 -->
+                <TextBlock Style="{StaticResource Text.SectionLabel}" Text="关于" Margin="4,24,0,8" />
+                <Border Style="{StaticResource Card.Group}">
+                    <StackPanel Margin="14,12,14,12">
+                        <TextBlock Style="{StaticResource Text.RowTitle}" Text="版本" />
+                        <TextBlock x:Name="TxtVersion" Style="{StaticResource Text.Value}" Margin="0,3,0,10" />
+                        <TextBlock Style="{StaticResource Text.Secondary}"
+                                   Text="AzCode magic 是运行在本机的 Windows 自动化助手：通过 UI Automation 读取窗口与控件树并执行操作，可用命令行完成任务，无需额外权限提升。遇到问题请先到「设置 → 接入与扩展」检查状态。" />
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

@@ -1,0 +1,117 @@
+<UserControl x:Class="AzCode.Desktop.Pages.GithubPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="56" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <TextBlock Style="{StaticResource Text.BarTitle}"
+                       Text="GitHub 接入"
+                       Margin="16,0,16,0"
+                       VerticalAlignment="Center" />
+        </Grid>
+        <Border Grid.Row="0" Height="1" VerticalAlignment="Bottom" Background="{DynamicResource Stroke.Divider}" />
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="16,12,16,16">
+            <StackPanel MaxWidth="760" HorizontalAlignment="Left">
+
+                <Border Style="{StaticResource Card.Field}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Ellipse x:Name="DotStatus"
+                                 Width="10"
+                                 Height="10"
+                                 VerticalAlignment="Center"
+                                 Fill="{DynamicResource Status.Off}" />
+                        <TextBlock x:Name="TxtHeader"
+                                   Grid.Column="1"
+                                   Style="{StaticResource Text.Secondary}"
+                                   Margin="10,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Text="未接入 GitHub。" />
+                    </Grid>
+                </Border>
+
+                <StackPanel Margin="0,18,0,0">
+                    <TextBlock Style="{StaticResource Text.RowTitle}" Text="Personal Access Token" />
+                    <TextBlock Style="{StaticResource Text.Tiny}"
+                               Margin="0,3,0,6"
+                               Text="ghp_… 或 github_pat_…（需 repo 权限）" />
+                    <Border Background="{DynamicResource Surface.Input}"
+                            BorderBrush="{DynamicResource Stroke.Subtle}"
+                            BorderThickness="1"
+                            CornerRadius="{DynamicResource Radius.Input}">
+                        <PasswordBox x:Name="TxtToken"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Padding="12,9,12,9"
+                                     FontSize="14"
+                                     Foreground="{DynamicResource Text.Primary}" />
+                    </Border>
+                </StackPanel>
+
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Style="{StaticResource Text.RowTitle}" Text="默认仓库" Margin="0,0,0,6" />
+                        <TextBox x:Name="TxtRepo" Style="{StaticResource Input.Base}" />
+                        <TextBlock Style="{StaticResource Text.Tiny}" Margin="0,4,0,0" Text="owner/repo，可留空" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Style="{StaticResource Text.RowTitle}" Text="默认分支" Margin="0,0,0,6" />
+                        <TextBox x:Name="TxtBranch" Style="{StaticResource Input.Base}" />
+                        <TextBlock Style="{StaticResource Text.Tiny}" Margin="0,4,0,0" Text="如 main，留空则用仓库默认分支" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
+                    <Button x:Name="BtnSave"
+                            Style="{StaticResource Btn.Primary}"
+                            Content="保存并验证"
+                            Width="132"
+                            Click="Save_Click" />
+                    <Button x:Name="BtnVerify"
+                            Style="{StaticResource Btn.Outline}"
+                            Margin="10,0,0,0"
+                            Content="验证连接"
+                            Width="112"
+                            Click="Verify_Click" />
+                    <Button x:Name="BtnLogout"
+                            Style="{StaticResource Btn.Outline}"
+                            Margin="10,0,0,0"
+                            Content="断开连接"
+                            Width="100"
+                            Click="Logout_Click"
+                            Foreground="{DynamicResource Status.Error}" />
+                </StackPanel>
+
+                <TextBlock x:Name="TxtMsg"
+                           Style="{StaticResource Text.Caption}"
+                           Margin="4,12,0,0" />
+
+                <Border Style="{StaticResource Card.Field}" Margin="0,20,0,0">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Text.RowTitle}" Text="如何获取 Token" />
+                        <TextBlock Style="{StaticResource Text.Tiny}"
+                                   Margin="0,6,0,0"
+                                   TextWrapping="Wrap"
+                                   LineHeight="18"
+                                   Text="在 GitHub「Settings → Developer settings → Personal access tokens」创建一个 Token：&#10;· Fine-grained：仅勾选目标仓库的 Contents、Issues、Pull requests 读写；&#10;· Classic：勾选 repo scope。&#10;Token 仅保存在本机配置文件中，不会上传到任何第三方服务器。Agent 可执行的操作：读取/提交文件、查看提交记录、创建 Issue 与评论、创建 Pull Request。" />
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

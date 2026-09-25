@@ -1,6 +1,20 @@
 <Application x:Class="AzCode.Desktop.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             StartupUri="MainWindow.xaml">
-    <Application.Resources />
+             xmlns:ctrl="clr-namespace:AzCode.Desktop.Controls">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- 第 0 位是主题令牌，由 ThemeService 整体替换以实现明暗切换 -->
+                <ResourceDictionary Source="/Resources/Theme/Light.xaml" />
+                <ResourceDictionary Source="/Resources/Theme/Tokens.xaml" />
+                <ResourceDictionary Source="/Resources/Theme/Icons.xaml" />
+                <ResourceDictionary Source="/Resources/Controls/Basics.xaml" />
+                <ResourceDictionary Source="/Resources/Controls/Buttons.xaml" />
+                <ResourceDictionary Source="/Resources/Controls/Messages.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <ctrl:ChatTemplateSelector x:Key="ChatSelector" />
+        </ResourceDictionary>
+    </Application.Resources>
 </Application>
