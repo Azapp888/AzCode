@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 悬浮助理关闭按钮（独立的小窗口，可点击；其余区域由全屏透明窗口穿透） -->
+<ImageButton xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/btnOverlayClose"
+    android:layout_width="40dp"
+    android:layout_height="40dp"
+    android:background="@drawable/bg_assist_close"
+    android:contentDescription="@string/assist_close"
+    android:padding="9dp"
+    android:src="@drawable/ic_close"
+    android:tint="#FFFFFF" />

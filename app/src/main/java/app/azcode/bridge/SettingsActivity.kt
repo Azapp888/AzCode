@@ -5,6 +5,7 @@ import android.content.Intent
 import android.app.role.RoleManager
 import androidx.appcompat.app.AppCompatActivity
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -25,12 +26,16 @@ class SettingsActivity : AppCompatActivity() {
     /** 以代码方式刷新数字助理开关时置位，避免触发用户点击逻辑导致递归跳转。 */
     private var suppressAssistantToggle = false
 
+    /** 同上，用于悬浮光晕权限开关。 */
+    private var suppressOverlayToggle = false
+
     private val REQ_ASSISTANT = 300
 
     private lateinit var etMaxSteps: EditText
     private lateinit var etSystemPrompt: EditText
     private lateinit var swImageWatermark: Switch
     private lateinit var swAssistant: Switch
+    private lateinit var swOverlay: Switch
     private lateinit var tvStatus: TextView
     private lateinit var tvSkillsEntry: TextView
     private lateinit var tvMemoryEntry: TextView
@@ -73,6 +78,7 @@ class SettingsActivity : AppCompatActivity() {
             etSystemPrompt = findViewById(R.id.etSystemPrompt)
             swImageWatermark = findViewById(R.id.swImageWatermark)
             swAssistant = findViewById(R.id.swAssistant)
+            swOverlay = findViewById(R.id.swOverlay)
             tvStatus = findViewById(R.id.tvStatus)
             tvSkillsEntry = findViewById(R.id.tvSkillsEntry)
             tvMemoryEntry = findViewById(R.id.tvMemoryEntry)
@@ -105,6 +111,12 @@ class SettingsActivity : AppCompatActivity() {
                 openAssistantSettings()
             }
             findViewById<View>(R.id.rowAssistant).setOnClickListener { openAssistantSettings() }
+            findViewById<View>(R.id.rowOverlay).setOnClickListener { openOverlaySettings() }
+            swOverlay.isChecked = AssistOverlayService.canOverlay(this)
+            swOverlay.setOnCheckedChangeListener { _, _ ->
+                if (suppressOverlayToggle) return@setOnCheckedChangeListener
+                openOverlaySettings()
+            }
             findViewById<View>(R.id.rowSpeech).setOnClickListener { showSpeechDialog() }
 
             findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
@@ -149,6 +161,7 @@ class SettingsActivity : AppCompatActivity() {
         super.onResume()
         runCatching { refreshStatus() }.onFailure { reportCrash("刷新设置页状态", it) }
         refreshAssistantSwitch()
+        refreshOverlaySwitch()
     }
 
     override fun onDestroy() {
@@ -233,6 +246,26 @@ class SettingsActivity : AppCompatActivity() {
             if (runCatching { startActivity(intent) }.isSuccess) return
         }
         Toast.makeText(this, R.string.toast_assistant_open_failed, Toast.LENGTH_LONG).show()
+    }
+
+    /** 打开系统「显示在其他应用上层」授权页；返回后由 refreshOverlaySwitch 同步真实状态。 */
+    private fun openOverlaySettings() {
+        val appIntent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:$packageName"),
+        )
+        if (runCatching { startActivity(appIntent) }.isSuccess) return
+        if (runCatching { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)) }.isSuccess) return
+        Toast.makeText(this, R.string.assist_need_overlay, Toast.LENGTH_LONG).show()
+    }
+
+    /** 从系统授权页返回后按真实结果刷新悬浮光晕开关。 */
+    private fun refreshOverlaySwitch() {
+        if (!::swOverlay.isInitialized) return
+        runCatching {
+            suppressOverlayToggle = true
+            swOverlay.isChecked = AssistOverlayService.canOverlay(this)
+        }.also { suppressOverlayToggle = false }
     }
 
     /** 从系统页面返回后按真实结果刷新开关，避免开关状态与实际不一致。 */

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  悬浮助理光晕（叠加在其它应用之上，背景透明）。
+  只有 AssistOrbView 绘制的光晕、居中文字与波动条可见，其余区域完全透明，
+  因此当前前台页面照常显示，看起来像"在当前页面周围亮起呼吸蓝光"。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/transparent">
+
+    <app.azcode.bridge.AssistOrbView
+        android:id="@+id/overlayOrb"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingStart="32dp"
+        android:paddingEnd="32dp">
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/tvOverlayText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:lineSpacingExtra="6dp"
+            android:maxLines="5"
+            android:shadowColor="#CC000814"
+            android:shadowDx="0"
+            android:shadowDy="2"
+            android:shadowRadius="8"
+            android:text="@string/assist_listening"
+            android:textColor="#F2F6FF"
+            android:textSize="22sp" />
+
+        <app.azcode.bridge.VoiceWaveView
+            android:id="@+id/overlayWave"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="22dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:shadowColor="#CC000814"
+            android:shadowDx="0"
+            android:shadowDy="2"
+            android:shadowRadius="6"
+            android:text="@string/assist_hint"
+            android:textColor="#D9E4F5"
+            android:textSize="13sp" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1.7" />
+    </LinearLayout>
+</FrameLayout>

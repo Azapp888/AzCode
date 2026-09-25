@@ -60,6 +60,15 @@
         <item name="android:windowLightNavigationBar">false</item>
     </style>
 
+    <!-- 助理入口中转页：完全透明、无动画，不显示任何界面 -->
+    <style name="Theme.AzCode.Assist.Transparent" parent="Theme.AzCode">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+
     <!-- 设置页：分组小标题 + 白色卡片内的图标行（参照豆包设置页） -->
     <style name="SectionLabel">
         <item name="android:layout_width">match_parent</item>

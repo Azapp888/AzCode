@@ -82,10 +82,10 @@ class AssistOrbView @JvmOverloads constructor(
         val breath = 1f + 0.06f * sin(phase * TWO_PI * 2f)
         val coreRadius = (base * (1.6f + 1.2f * level) * breath).coerceAtLeast(dp(24f))
 
-        // 1) 中心核心光晕
+        // 1) 中心核心光晕（柔和，避免遮挡下面页面内容）
         corePaint.shader = RadialGradient(
             cx, cy, coreRadius,
-            intArrayOf(0xCC3D6BFF.toInt(), 0x551E3FA8.toInt(), 0x00000000),
+            intArrayOf(0x663D6BFF, 0x261E3FA8, 0x00000000),
             floatArrayOf(0f, 0.55f, 1f),
             Shader.TileMode.CLAMP
         )
@@ -95,7 +95,7 @@ class AssistOrbView @JvmOverloads constructor(
         ringPaint.strokeWidth = dp(2f)
         for (i in 0 until 3) {
             val t = (phase + i / 3f) % 1f
-            val alpha = ((1f - t) * 110f).toInt().coerceIn(0, 255)
+            val alpha = ((1f - t) * 78f).toInt().coerceIn(0, 255)
             ringPaint.color = Color.argb(alpha, 0x6E, 0x9B, 0xFF)
             canvas.drawCircle(cx, cy, base * (0.7f + t * 1.7f), ringPaint)
         }

@@ -45,6 +45,12 @@
     <string name="assist_hint">说完停顿一下即可自动发送</string>
     <string name="assist_no_speech">没有听到内容</string>
     <string name="assist_close">关闭</string>
+    <string name="assist_overlay_channel">语音助理光晕</string>
+    <string name="assist_overlay_notif_title">AzCode 语音助理</string>
+    <string name="assist_overlay_notif_text">正在聆听…</string>
+    <string name="assist_need_overlay">需要「显示在其他应用上层」权限才能在当前页面显示光晕</string>
+    <string name="title_overlay">悬浮光晕权限</string>
+    <string name="hint_overlay_desc">开启后，助理唤起时在当前页面周围显示透明背景的呼吸蓝光</string>
     <string name="title_speech">语音输入</string>
     <string name="speech_engine_system">系统内置（离线优先）</string>
     <string name="speech_engine_xunfei">讯飞星火（在线）</string>

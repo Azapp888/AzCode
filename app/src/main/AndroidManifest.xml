@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
@@ -41,16 +42,15 @@
             </intent-filter>
         </activity>
 
-        <!-- 系统数字助理界面：注册 ASSIST / VOICE_COMMAND，被选为默认助理后
-             长按电源键/耳机、助理手势会直接进入全屏语音特效页，而非回到聊天界面 -->
+        <!-- 系统数字助理入口（透明中转）：被选为默认助理后，长按电源键/耳机、
+             助理手势会触发这里，进而叠加当前页面之上的透明呼吸光晕 -->
         <activity
             android:name=".AssistActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:excludeFromRecents="true"
-            android:noHistory="true"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:theme="@style/Theme.AzCode.Assist">
+            android:theme="@style/Theme.AzCode.Assist.Transparent">
             <intent-filter>
                 <action android:name="android.intent.action.ASSIST" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -121,6 +121,16 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="device_control_bridge" />
+        </service>
+
+        <!-- 悬浮语音助理：以 OVERLAY 窗口在当前页面之上绘制透明背景的呼吸光晕 -->
+        <service
+            android:name=".AssistOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="voice_assistant_overlay" />
         </service>
 
         <!-- 内置 ADB 输入法：让 Agent 向任意应用输入框写入 Unicode 文本 -->
