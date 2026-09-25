@@ -10,7 +10,9 @@ import android.content.Intent
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.BitmapFactory
 import android.graphics.drawable.ColorDrawable
+import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -201,9 +203,13 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
         drawerRoot.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
-            override fun onDrawerOpened(drawerView: View) {
+            // 在抽屉开始滑入时就让内容淡入，动画与面板同步，而不是打开完才播。
+            override fun onDrawerSlide(drawerView: View, slideOffset: Float) {
+                if (slideOffset > 0.02f) animateDrawerContent()
+            }
+
+            override fun onDrawerClosed(drawerView: View) {
                 drawerAnimated = false
-                animateDrawerContent()
             }
         })
         btnSend.setOnClickListener { sendTask() }
@@ -322,6 +328,7 @@ class MainActivity : AppCompatActivity() {
         speechEngine = null
         // 让排队中的会话写入先落盘，再释放线程（不阻塞主线程）。
         runCatching { saveExecutor.shutdown() }
+        runCatching { thumbExecutor.shutdown() }
         runCatching { rikka.shizuku.Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener) }
         super.onDestroy()
     }
@@ -561,6 +568,11 @@ class MainActivity : AppCompatActivity() {
     /** 会话加载线程：内存未命中时后台读盘，避免切换会话阻塞主线程。 */
     private val loadExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
         Thread(r, "azcode-load").apply { isDaemon = true }
+    }
+
+    /** 附件缩略图解码线程：仅用于附件栏小图，避免解码占用主线程。 */
+    private val thumbExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "azcode-thumb").apply { isDaemon = true }
     }
 
     // ==================== 模型 / 思考深度 ====================
@@ -893,7 +905,9 @@ class MainActivity : AppCompatActivity() {
         }
         content.findViewById<View>(R.id.optFile).setOnClickListener {
             popup.dismiss()
-            pickFiles.launch(AttachmentReader.PICK_MIME_TYPES)
+            // 用 */* 让系统文件选择器展示全部文件：部分厂商选择器只按首个 MIME 过滤，
+            // 传具体类型会导致 Excel / 音频等被隐藏；具体类型由 kindOf 校验并给出提示。
+            pickFiles.launch(arrayOf("*/*"))
         }
 
         content.measure(
@@ -960,8 +974,15 @@ class MainActivity : AppCompatActivity() {
         attachmentsRow.removeAllViews()
         svAttachments.visibility = if (pending.isEmpty()) View.GONE else View.VISIBLE
         pending.forEach { p ->
-            val chip = layoutInflater.inflate(R.layout.item_attachment_chip, attachmentsRow, false) as TextView
-            chip.text = p.name
+            val chip = layoutInflater.inflate(R.layout.item_attachment_chip, attachmentsRow, false)
+            val icon = chip.findViewById<ImageView>(R.id.ivAttachIcon)
+            chip.findViewById<TextView>(R.id.tvAttachName).text = p.name
+            if (p.kind == AttachmentReader.Kind.IMAGE) {
+                loadThumbnail(p, icon)
+            } else {
+                icon.setImageResource(R.drawable.ic_file_generic)
+                icon.imageTintList = ColorStateList.valueOf(fileTint(p.name, p.kind))
+            }
             chip.setOnClickListener {
                 pending.remove(p)
                 refreshAttachments()
@@ -973,6 +994,40 @@ class MainActivity : AppCompatActivity() {
             lp.marginEnd = dp(6)
             chip.layoutParams = lp
             attachmentsRow.addView(chip)
+        }
+    }
+
+    /** 图片附件显示真实缩略图，让用户确认选中的是不是想发的那张。 */
+    private fun loadThumbnail(p: AttachmentReader.Pending, icon: ImageView) {
+        icon.tag = p.uri
+        icon.setImageResource(R.drawable.ic_image)
+        thumbExecutor.execute {
+            val bmp = runCatching {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                contentResolver.openInputStream(p.uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+                val target = dp(72).coerceAtLeast(1)
+                var sample = 1
+                while (bounds.outWidth / sample > target || bounds.outHeight / sample > target) sample *= 2
+                val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+                contentResolver.openInputStream(p.uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+            }.getOrNull()
+            runOnUiThread {
+                if (destroyed || icon.tag != p.uri) return@runOnUiThread
+                if (bmp != null) icon.setImageBitmap(bmp)
+            }
+        }
+    }
+
+    /** 非图片附件按类型着色，用同一个文件图标区分 PDF / 表格 / 文档 / 音频等。 */
+    private fun fileTint(name: String, kind: AttachmentReader.Kind): Int {
+        val ext = name.substringAfterLast('.', "").lowercase()
+        return when {
+            kind == AttachmentReader.Kind.AUDIO -> 0xFF8A5CF6.toInt()
+            ext == "pdf" -> 0xFFE5484D.toInt()
+            ext in setOf("xlsx", "xls", "csv") -> 0xFF1E9E5A.toInt()
+            ext in setOf("docx", "doc") -> 0xFF2B6CF6.toInt()
+            ext in setOf("pptx", "ppt") -> 0xFFE8890C.toInt()
+            else -> 0xFF6B7280.toInt()
         }
     }
 

@@ -290,7 +290,7 @@ class AgentRunner(
         }
     }
 
-    /** 用文本占位替换图片 base64，避免持久化文件过大。 */
+    /** 用文本占位替换图片/音频 base64，避免持久化文件过大。 */
     private fun sanitize(m: JSONObject): JSONObject {
         if (m.optString("role") != "user") return m
         val content = m.opt("content") ?: return m
@@ -298,10 +298,10 @@ class AgentRunner(
         val out = JSONArray()
         for (i in 0 until content.length()) {
             val part = content.optJSONObject(i) ?: continue
-            if (part.optString("type") == "image_url") {
-                out.put(JSONObject().put("type", "text").put("text", "[图片]"))
-            } else {
-                out.put(part)
+            when (part.optString("type")) {
+                "image_url" -> out.put(JSONObject().put("type", "text").put("text", "[图片]"))
+                "input_audio" -> out.put(JSONObject().put("type", "text").put("text", "[音频]"))
+                else -> out.put(part)
             }
         }
         return JSONObject().put("role", "user").put("content", out)

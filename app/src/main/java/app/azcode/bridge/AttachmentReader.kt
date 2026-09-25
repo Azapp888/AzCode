@@ -14,6 +14,7 @@ import java.util.zip.ZipInputStream
  *
  * 依据 DeepSeek API 能力分类：
  *  - 图片（JPEG/PNG/GIF/WebP）→ base64 内联，走视觉输入
+ *  - 音频（mp3/wav/m4a/aac/ogg/flac/amr/opus）→ base64 内联，供支持音频输入的模型解析
  *  - PDF → 本地用 PdfRenderer 渲染页面为 JPEG，再作为图片发送
  *  - Office（docx/xlsx/pptx）→ 本地解包提取文本后并入文本内容
  *  - 文本/代码（txt/md/csv/json/…）→ 直接读取为文本
@@ -27,6 +28,8 @@ object AttachmentReader {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "audio/mpeg", "audio/mp4", "audio/wav", "audio/x-wav", "audio/aac",
+        "audio/ogg", "audio/flac", "audio/x-m4a", "audio/3gpp", "audio/amr",
         "text/plain", "text/markdown", "text/csv", "text/tsv",
         "text/html", "text/xml", "text/javascript", "text/x-java", "text/x-kotlin",
         "application/json", "application/xml", "application/javascript",
@@ -34,6 +37,7 @@ object AttachmentReader {
 
     private val IMAGE_EXT = setOf("jpg", "jpeg", "png", "gif", "webp")
     private val DOC_EXT = setOf("pdf", "docx", "xlsx", "pptx")
+    private val AUDIO_EXT = setOf("mp3", "wav", "m4a", "aac", "ogg", "oga", "flac", "amr", "opus", "3gp", "3gpp")
     private val TEXT_EXT = setOf(
         "txt", "md", "markdown", "csv", "tsv", "json", "xml", "html", "htm",
         "yaml", "yml", "log", "ini", "conf", "properties", "toml", "env",
@@ -46,17 +50,19 @@ object AttachmentReader {
 
     private const val MAX_TEXT_CHARS = 200_000
     private const val MAX_IMAGE_BYTES = 4 * 1024 * 1024
+    private const val MAX_AUDIO_BYTES = 12 * 1024 * 1024
     private const val MAX_PDF_PAGES = 8
     private const val IMAGE_TARGET_PX = 1400
     private const val MAX_IMAGE_EDGE = 8192
 
-    enum class Kind { IMAGE, DOCUMENT, TEXT }
+    enum class Kind { IMAGE, AUDIO, DOCUMENT, TEXT }
 
     data class Pending(val uri: Uri, val name: String, val mime: String, val kind: Kind)
 
     sealed interface Prepared {
         val name: String
         data class Image(override val name: String, val mime: String, val base64: String) : Prepared
+        data class Audio(override val name: String, val mime: String, val format: String, val base64: String) : Prepared
         data class Text(override val name: String, val text: String) : Prepared
     }
 
@@ -65,6 +71,7 @@ object AttachmentReader {
     fun kindOf(name: String, mime: String): Kind {
         val ext = name.substringAfterLast('.', "").lowercase()
         if (mime.startsWith("image/") || ext in IMAGE_EXT) return Kind.IMAGE
+        if (mime.startsWith("audio/") || ext in AUDIO_EXT) return Kind.AUDIO
         if (mime == "application/pdf" || ext == "pdf") return Kind.DOCUMENT
         if (ext in setOf("docx", "xlsx", "pptx")) return Kind.DOCUMENT
         if (mime.startsWith("text/") || ext in TEXT_EXT ||
@@ -82,6 +89,7 @@ object AttachmentReader {
         val ext = pending.name.substringAfterLast('.', "").lowercase()
         return when (pending.kind) {
             Kind.IMAGE -> prepareImage(ctx, pending)
+            Kind.AUDIO -> prepareAudio(ctx, pending)
             Kind.TEXT -> Prepared.Text(pending.name, readText(ctx, pending.uri))
             Kind.DOCUMENT -> when (ext) {
                 "pdf" -> throw UnsupportedException("PDF 请通过 prepareAll 渲染")
@@ -156,6 +164,54 @@ object AttachmentReader {
         bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)
         bmp.recycle()
         return out.toByteArray()
+    }
+
+    // ==================== 音频 ====================
+
+    private fun prepareAudio(ctx: Context, pending: Pending): Prepared.Audio {
+        val bytes = ctx.contentResolver.openInputStream(pending.uri)?.use { it.readBytes() }
+            ?: throw UnsupportedException("无法读取文件：${pending.name}")
+        if (bytes.isEmpty()) throw UnsupportedException("音频内容为空：${pending.name}")
+        if (bytes.size > MAX_AUDIO_BYTES) {
+            throw UnsupportedException("音频过大（>12MB），请压缩后重试：${pending.name}")
+        }
+        val mime = pending.mime.ifBlank { audioMimeOf(pending.name) }
+        return Prepared.Audio(
+            name = pending.name,
+            mime = mime,
+            format = audioFormatOf(pending.name, mime),
+            base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
+        )
+    }
+
+    /** OpenAI `input_audio.format` 仅接受 mp3 / wav，这里优先映射到这两个值。 */
+    private fun audioFormatOf(name: String, mime: String): String {
+        val ext = name.substringAfterLast('.', "").lowercase()
+        return when {
+            mime.contains("mpeg") || ext == "mp3" -> "mp3"
+            mime.contains("wav") || ext == "wav" -> "wav"
+            mime.contains("mp4") || mime.contains("m4a") || ext == "m4a" -> "mp4"
+            mime.contains("aac") || ext == "aac" -> "aac"
+            mime.contains("ogg") || ext == "ogg" || ext == "oga" -> "ogg"
+            mime.contains("flac") || ext == "flac" -> "flac"
+            mime.contains("amr") || ext == "amr" -> "amr"
+            mime.contains("opus") || ext == "opus" -> "opus"
+            ext.isNotBlank() -> ext
+            else -> "mp3"
+        }
+    }
+
+    private fun audioMimeOf(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
+        "mp3" -> "audio/mpeg"
+        "wav" -> "audio/wav"
+        "m4a" -> "audio/mp4"
+        "aac" -> "audio/aac"
+        "ogg", "oga" -> "audio/ogg"
+        "flac" -> "audio/flac"
+        "amr" -> "audio/amr"
+        "opus" -> "audio/opus"
+        "3gp", "3gpp" -> "audio/3gpp"
+        else -> "audio/*"
     }
 
     // ==================== PDF ====================

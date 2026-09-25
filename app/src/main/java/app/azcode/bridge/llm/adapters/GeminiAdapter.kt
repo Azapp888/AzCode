@@ -172,11 +172,32 @@ class GeminiAdapter : BaseAdapter() {
                                 .put("data", url.substring(idx + 7))))
                         }
                     }
+                    "input_audio" -> {
+                        val audio = part.optJSONObject("input_audio") ?: continue
+                        val data = audio.optString("data")
+                        if (data.isNotBlank()) {
+                            parts.put(JSONObject().put("inlineData", JSONObject()
+                                .put("mimeType", geminiAudioMime(audio.optString("format")))
+                                .put("data", data)))
+                        }
+                    }
                 }
             }
             else -> content?.let { parts.put(JSONObject().put("text", it.toString())) }
         }
         return parts
+    }
+
+    private fun geminiAudioMime(format: String): String = when (format.lowercase()) {
+        "mp3", "mpeg" -> "audio/mpeg"
+        "wav" -> "audio/wav"
+        "mp4", "m4a" -> "audio/mp4"
+        "aac" -> "audio/aac"
+        "ogg" -> "audio/ogg"
+        "flac" -> "audio/flac"
+        "amr" -> "audio/amr"
+        "opus" -> "audio/opus"
+        else -> "audio/mpeg"
     }
 
     private fun geminiTools(tools: JSONArray): JSONArray {
