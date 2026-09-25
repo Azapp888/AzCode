@@ -163,6 +163,7 @@ class AzAccessibilityService : AccessibilityService() {
 
     /** 气泡最多显示 [BUBBLE_TIMEOUT_MS]，到期自动关闭（呼吸光效仍持续到任务结束）。 */
     private val bubbleHideRunnable = Runnable {
+        pendingBubbleText = null
         glowView?.setBubbleText(null)
         detachGlowIfEmpty()
     }
@@ -170,8 +171,14 @@ class AzAccessibilityService : AccessibilityService() {
     private var glowView: OperationGlowView? = null
 
     /**
+     * 期望展示的气泡文字。真正的显隐还要看应用是否在前台（[renderBubble]）：
+     * 主界面在前台时聊天区已能看到 AI 输出，气泡保持隐藏；退出应用到其他界面后才显示。
+     */
+    private var pendingBubbleText: String? = null
+
+    /**
      * 标记一次无障碍操作（AI 检测到需要操作用户手机时调用）：
-     * 显示全屏呼吸光效，并在左下角悬浮气泡显示「AI 正在操作手机」。
+     * 显示全屏呼吸光效，并在左下角悬浮气泡显示「AI 正在操作手机」（应用自身界面在前台时气泡隐藏）。
      *
      * 呼吸光效只要在本次任务中触发过一次，就持续显示到任务结束（[clearOverlays]），
      * 期间不会自动收起；气泡则最多显示 [BUBBLE_TIMEOUT_MS] 后自动关闭。
@@ -196,32 +203,51 @@ class AzAccessibilityService : AccessibilityService() {
 
     /**
      * 更新左下角悬浮气泡中的 AI 输出文字（已剔除代码行）。传 null/空串表示立即关闭气泡。
-     * 无障碍服务未开启时不显示。每次更新都会重置 5s 自动关闭计时。
+     * 无障碍服务未开启时不显示。应用自身界面在前台时气泡保持隐藏，退出应用后才显示；
+     * 每次实际显示都会重置 [BUBBLE_TIMEOUT_MS] 自动关闭计时。
      */
     fun showBubbleText(text: String?) {
-        uiHandler.post {
-            if (ensureGlow() == null) return@post
-            showBubble(text)
-        }
+        uiHandler.post { showBubble(text) }
     }
 
-    /** 设置气泡文字并重置自动关闭计时；空串等价于立即关闭。 */
+    /**
+     * 记录期望展示的气泡文字，并按当前前台状态决定是否真正显示。
+     * 传 null/空串表示立即关闭气泡。
+     */
     private fun showBubble(text: String?) {
-        val view = ensureGlow() ?: return
+        pendingBubbleText = text?.trim().orEmpty().ifBlank { null }
+        renderBubble()
+    }
+
+    /**
+     * 依据「应用是否在前台」渲染左下角悬浮气泡：
+     * 应用自身界面在前台时不显示（聊天区已能看到 AI 输出），退出应用后才显示，
+     * 并重置 [BUBBLE_TIMEOUT_MS] 自动关闭计时。
+     */
+    private fun renderBubble() {
         uiHandler.removeCallbacks(bubbleHideRunnable)
-        if (text.isNullOrBlank()) {
-            view.setBubbleText(null)
+        val text = pendingBubbleText
+        if (text == null || AzCodeApp.isInForeground) {
+            glowView?.setBubbleText(null)
             detachGlowIfEmpty()
             return
         }
+        val view = ensureGlow() ?: return
         view.setBubbleText(text)
         uiHandler.postDelayed(bubbleHideRunnable, BUBBLE_TIMEOUT_MS)
+    }
+
+    /** 应用前后台切换时调用：前台隐去气泡，回到后台时补显示最近一条待展示文字。 */
+    fun onAppForegroundChanged() {
+        uiHandler.post { renderBubble() }
     }
 
     /** 任务结束/取消时彻底清除光效与气泡。 */
     fun clearOverlays() {
         uiHandler.post {
             uiHandler.removeCallbacks(bubbleHideRunnable)
+            // 一并清空待展示文字，避免任务结束后应用切到后台又把旧气泡补显示出来。
+            pendingBubbleText = null
             detachGlow()
         }
     }
@@ -308,6 +334,11 @@ class AzAccessibilityService : AccessibilityService() {
         /** 任务结束/取消时清除光效与气泡。 */
         fun clearOverlays() {
             instance?.clearOverlays()
+        }
+
+        /** 应用前后台切换时调用（见 [AzCodeApp]），用于控制左下角气泡显隐。 */
+        fun onAppForegroundChanged() {
+            instance?.onAppForegroundChanged()
         }
     }
 }

@@ -2,6 +2,7 @@ package app.azcode.bridge
 
 import android.Manifest
 import android.content.Intent
+import android.app.role.RoleManager
 import androidx.appcompat.app.AppCompatActivity
 import android.content.pm.PackageManager
 import android.os.Build
@@ -21,9 +22,15 @@ class SettingsActivity : AppCompatActivity() {
     private val TAG = "Settings"
     private var crashDialogShown = false
 
+    /** 以代码方式刷新数字助理开关时置位，避免触发用户点击逻辑导致递归跳转。 */
+    private var suppressAssistantToggle = false
+
+    private val REQ_ASSISTANT = 300
+
     private lateinit var etMaxSteps: EditText
     private lateinit var etSystemPrompt: EditText
     private lateinit var swImageWatermark: Switch
+    private lateinit var swAssistant: Switch
     private lateinit var tvStatus: TextView
     private lateinit var tvSkillsEntry: TextView
     private lateinit var tvMemoryEntry: TextView
@@ -64,6 +71,7 @@ class SettingsActivity : AppCompatActivity() {
             etMaxSteps = findViewById(R.id.etMaxSteps)
             etSystemPrompt = findViewById(R.id.etSystemPrompt)
             swImageWatermark = findViewById(R.id.swImageWatermark)
+            swAssistant = findViewById(R.id.swAssistant)
             tvStatus = findViewById(R.id.tvStatus)
             tvSkillsEntry = findViewById(R.id.tvSkillsEntry)
             tvMemoryEntry = findViewById(R.id.tvMemoryEntry)
@@ -88,6 +96,13 @@ class SettingsActivity : AppCompatActivity() {
             swImageWatermark.setOnCheckedChangeListener { _, checked ->
                 AgentConfig.setImageWatermark(this, checked)
             }
+
+            swAssistant.isChecked = isAssistantRoleHeld()
+            swAssistant.setOnCheckedChangeListener { _, _ ->
+                if (suppressAssistantToggle) return@setOnCheckedChangeListener
+                openAssistantSettings()
+            }
+            findViewById<View>(R.id.rowAssistant).setOnClickListener { openAssistantSettings() }
 
             findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
             findViewById<View>(R.id.btnSave).setOnClickListener { saveConfig() }
@@ -130,6 +145,7 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         runCatching { refreshStatus() }.onFailure { reportCrash("刷新设置页状态", it) }
+        refreshAssistantSwitch()
     }
 
     override fun onDestroy() {
@@ -174,6 +190,60 @@ class SettingsActivity : AppCompatActivity() {
                 Toast.makeText(this, R.string.toast_termux_need_allow_external, Toast.LENGTH_LONG).show()
             else -> requestPermissions(arrayOf(TermuxControl.PERMISSION), 200)
         }
+    }
+
+    /** AzCode 当前是否为系统默认数字助理（Android 10+ 通过 RoleManager 判断）。 */
+    private fun isAssistantRoleHeld(): Boolean {
+        if (Build.VERSION.SDK_INT < 29) {
+            return runCatching {
+                Settings.Secure.getString(contentResolver, "assistant")?.contains(packageName) == true
+            }.getOrDefault(false)
+        }
+        val rm = getSystemService(RoleManager::class.java) ?: return false
+        return runCatching { rm.isRoleHeld(RoleManager.ROLE_ASSISTANT) }.getOrDefault(false)
+    }
+
+    /**
+     * 打开系统「默认数字助理应用」页面。
+     * Android 10+ 优先发起 ASSISTANT 角色请求，直接跳到系统助理选择页；更早版本或角色不可用时
+     * 回退到语音输入/默认应用设置页。开关只是入口，是否生效由系统页面决定，返回后再刷新状态。
+     */
+    private fun openAssistantSettings() {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val rm = getSystemService(RoleManager::class.java)
+            if (rm != null && runCatching { rm.isRoleAvailable(RoleManager.ROLE_ASSISTANT) }.getOrDefault(false)) {
+                runCatching {
+                    startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT), REQ_ASSISTANT)
+                }.onFailure { openAssistantFallback() }
+                return
+            }
+        }
+        openAssistantFallback()
+    }
+
+    private fun openAssistantFallback() {
+        val candidates = listOf(
+            Intent(Settings.ACTION_VOICE_INPUT_SETTINGS),
+            Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS),
+        )
+        for (intent in candidates) {
+            if (runCatching { startActivity(intent) }.isSuccess) return
+        }
+        Toast.makeText(this, R.string.toast_assistant_open_failed, Toast.LENGTH_LONG).show()
+    }
+
+    /** 从系统页面返回后按真实结果刷新开关，避免开关状态与实际不一致。 */
+    private fun refreshAssistantSwitch() {
+        if (!::swAssistant.isInitialized) return
+        runCatching {
+            suppressAssistantToggle = true
+            swAssistant.isChecked = isAssistantRoleHeld()
+        }.also { suppressAssistantToggle = false }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_ASSISTANT) refreshAssistantSwitch()
     }
 
     override fun onRequestPermissionsResult(

@@ -6,6 +6,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Shader
+import android.graphics.SweepGradient
 import android.os.Handler
 import android.os.Looper
 import android.text.Layout
@@ -18,11 +20,11 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * AI 状态光效：全屏呼吸描边 + 左下角悬浮气泡。
+ * AI 状态光效：全屏贴边蓝色呼吸描边 + 左下角悬浮气泡。
  *
  * 本次任务内一旦触发过无障碍操作（[setOperating]）即显示全屏呼吸光效，并常亮到任务结束；
  * 左下角悬浮气泡先显示「AI 正在操作手机」，随后展示 AI 的文字输出（调用方已剔除代码行），
- * 由调用方在最多 5s 后自动关闭。
+ * 由调用方在最多 5s 后自动关闭。应用自身界面在前台时气泡不显示，退出应用后才显示。
  *
  * 该视图由无障碍服务以 `TYPE_ACCESSIBILITY_OVERLAY` 窗口添加，因此无需额外权限，也不拦截触摸
  * （窗口带 `FLAG_NOT_TOUCHABLE`）。
@@ -31,22 +33,34 @@ class OperationGlowView(context: Context) : View(context) {
 
     private val density = resources.displayMetrics.density
 
-    private val glowColor = Color.parseColor("#3964FE")
+    /**
+     * 贴边呼吸光效的蓝色渐变：与图片中的彩虹描边同构，但取应用主题的蓝色系
+     * （primary #3964FE → pressed #5686FE → #A9C3FF 再回到 primary），保证与前景色一致。
+     */
+    private val edgeColors = intArrayOf(
+        Color.parseColor("#3964FE"),
+        Color.parseColor("#5686FE"),
+        Color.parseColor("#A9C3FF"),
+        Color.parseColor("#5686FE"),
+        Color.parseColor("#3964FE"),
+    )
 
-    /** 外圈光晕：带模糊的粗描边。 */
+    /** 外圈光晕：带模糊的粗描边，营造整屏贴边的柔光。 */
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 6f * density
-        color = glowColor
-        maskFilter = BlurMaskFilter(7f * density, BlurMaskFilter.Blur.NORMAL)
+        strokeWidth = 14f * density
+        maskFilter = BlurMaskFilter(12f * density, BlurMaskFilter.Blur.NORMAL)
     }
 
     /** 内圈实线：让光效边界更清晰。 */
     private val corePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 1.6f * density
-        color = Color.parseColor("#7FA0FF")
+        strokeWidth = 2.4f * density
+        maskFilter = BlurMaskFilter(1.5f * density, BlurMaskFilter.Blur.NORMAL)
     }
+
+    /** 随尺寸变化重建的扫掠渐变，使蓝色沿屏幕四周平滑铺开。 */
+    private var edgeShader: Shader? = null
 
     private val bubbleTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
@@ -135,6 +149,20 @@ class OperationGlowView(context: Context) : View(context) {
     /** 光效或气泡是否还有需要展示的内容；都没有时调用方会移除窗口。 */
     fun hasContent(): Boolean = operating || !bubbleText.isNullOrBlank()
 
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (w <= 0 || h <= 0) return
+        // 以屏幕中心为原点做扫掠渐变，让蓝光沿四周边缘连续过渡（首尾同色，接缝不可见）。
+        edgeShader = SweepGradient(
+            w / 2f,
+            h / 2f,
+            edgeColors,
+            floatArrayOf(0f, 0.28f, 0.5f, 0.72f, 1f),
+        )
+        glowPaint.shader = edgeShader
+        corePaint.shader = edgeShader
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
@@ -143,7 +171,7 @@ class OperationGlowView(context: Context) : View(context) {
             // 光效紧贴物理屏幕边缘，覆盖到状态栏与导航栏区域。
             val inset = glowPaint.strokeWidth / 2f
             bounds.set(inset, inset, width - inset, height - inset)
-            val radius = 28f * density
+            val radius = 40f * density
 
             val alpha = (110 + 145 * progress).toInt().coerceIn(0, 255)
             glowPaint.alpha = alpha
