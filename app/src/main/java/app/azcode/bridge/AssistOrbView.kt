@@ -77,8 +77,8 @@ class AssistOrbView @JvmOverloads constructor(
         if (w == 0f || h == 0f) return
 
         val cx = w / 2f
-        val cy = h * 0.40f
-        val base = min(w, h) * 0.16f
+        val cy = h * 0.76f
+        val base = min(w, h) * 0.12f
         val breath = 1f + 0.06f * sin(phase * TWO_PI * 2f)
         val coreRadius = (base * (1.6f + 1.2f * level) * breath).coerceAtLeast(dp(24f))
 

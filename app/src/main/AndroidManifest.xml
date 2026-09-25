@@ -47,8 +47,10 @@
         <activity
             android:name=".AssistActivity"
             android:exported="true"
-            android:launchMode="singleTask"
+            android:launchMode="singleInstance"
+            android:taskAffinity=""
             android:excludeFromRecents="true"
+            android:finishOnTaskLaunch="true"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:theme="@style/Theme.AzCode.Assist.Transparent">
             <intent-filter>

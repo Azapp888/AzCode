@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   悬浮助理光晕（叠加在其它应用之上，背景透明）。
-  只有 AssistOrbView 绘制的光晕、居中文字与波动条可见，其余区域完全透明，
-  因此当前前台页面照常显示，看起来像"在当前页面周围亮起呼吸蓝光"。
+  左下角是一个悬浮气泡卡片：状态行 + 可读的识别/回复文字 + 波动条；
+  画面边缘由 AssistOrbView 绘制呼吸蓝光。其余区域全部透明，当前页面照常显示。
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -15,55 +15,45 @@
         android:layout_height="match_parent" />
 
     <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:gravity="center_horizontal"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="28dp"
+        android:background="@drawable/bg_assist_bubble"
+        android:elevation="10dp"
         android:orientation="vertical"
-        android:paddingStart="32dp"
-        android:paddingEnd="32dp">
+        android:paddingStart="15dp"
+        android:paddingTop="13dp"
+        android:paddingEnd="17dp"
+        android:paddingBottom="13dp">
 
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
+        <TextView
+            android:id="@+id/tvOverlayState"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/assist_listening"
+            android:textColor="#A9C3FF"
+            android:textSize="12sp" />
 
         <TextView
             android:id="@+id/tvOverlayText"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
             android:ellipsize="end"
-            android:gravity="center"
-            android:lineSpacingExtra="6dp"
-            android:maxLines="5"
-            android:shadowColor="#CC000814"
-            android:shadowDx="0"
-            android:shadowDy="2"
-            android:shadowRadius="8"
-            android:text="@string/assist_listening"
-            android:textColor="#F2F6FF"
-            android:textSize="22sp" />
+            android:lineSpacingExtra="4dp"
+            android:maxLines="6"
+            android:maxWidth="288dp"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:visibility="gone" />
 
         <app.azcode.bridge.VoiceWaveView
             android:id="@+id/overlayWave"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="22dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:shadowColor="#CC000814"
-            android:shadowDx="0"
-            android:shadowDy="2"
-            android:shadowRadius="6"
-            android:text="@string/assist_hint"
-            android:textColor="#D9E4F5"
-            android:textSize="13sp" />
-
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:layout_weight="1.7" />
+            android:layout_width="180dp"
+            android:layout_height="20dp"
+            android:layout_marginTop="10dp" />
     </LinearLayout>
 </FrameLayout>

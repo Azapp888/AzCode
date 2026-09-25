@@ -22,16 +22,19 @@ import android.widget.TextView
 import android.widget.Toast
 
 /**
- * 悬浮语音助理：在当前前台页面之上叠加一层"透明背景 + 呼吸蓝光"的光晕，而不是切到本应用界面。
+ * 悬浮语音助理：在当前前台页面之上叠加"透明背景 + 呼吸蓝光 + 左下角悬浮气泡"，
+ * 不切换到本应用界面，识别与任务执行都在当前页面完成。
  *
- * 依赖「显示在其他应用上层」（SYSTEM_ALERT_WINDOW）权限，通过两个 TYPE_APPLICATION_OVERLAY 窗口实现：
- *  - 全屏透明窗口：只绘制光晕/实时文字/波动条，设置 FLAG_NOT_TOUCHABLE，触摸事件照常落到下层应用；
- *  - 右上角小窗口：仅承载关闭按钮，可点击，不遮挡其它区域。
+ * 依赖「显示在其他应用上层」（SYSTEM_ALERT_WINDOW）权限，通过两个 OVERLAY 窗口实现：
+ *  - 全屏透明窗口：绘制边缘呼吸光 + 左下面板，设置 FLAG_NOT_TOUCHABLE，触摸照常落到下层应用；
+ *  - 右上角小窗口：仅承载关闭按钮，可点击，其余区域不遮挡。
  *
- * 说完停顿约 [VAD_EOS] 毫秒自动判定"说完了"并提交；提交时把文本带回主界面执行。
- * 全程无声 [SILENCE_NO_SPEECH]、总时长 [MAX_LISTEN] 后自动收起。
+ * 流程：进入即聆听 → 说完停顿约 [VAD_EOS] 毫秒自动判定 → 直接在本服务内跑 [AgentRunner]
+ * 把回复/进度实时写进气泡，无需跳回主界面；需要用户作答等复杂交互的场景仍由通知栏承接。
  */
 class AssistOverlayService : Service() {
+
+    private enum class Phase { LISTENING, PROCESSING, DONE }
 
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var windowManager: WindowManager
@@ -41,21 +44,26 @@ class AssistOverlayService : Service() {
     private var orb: AssistOrbView? = null
     private var wave: VoiceWaveView? = null
     private var tvText: TextView? = null
+    private var tvState: TextView? = null
 
     private var engine: SpeechEngine? = null
+    private var runner: AgentRunner? = null
+    private var worker: Thread? = null
+
+    private var phase = Phase.LISTENING
+    private var runToken = 0
     private var startedAt = 0L
     private var lastSpeechAt = 0L
     private var gotSpeech = false
-    private var done = false
 
     private val watchdog = object : Runnable {
         override fun run() {
-            if (done) return
+            if (phase != Phase.LISTENING) return
             val now = SystemClock.elapsedRealtime()
             when {
-                gotSpeech && now - lastSpeechAt >= SILENCE_AFTER_SPEECH -> submit()
+                gotSpeech && now - lastSpeechAt >= SILENCE_AFTER_SPEECH -> submitSpeech()
                 !gotSpeech && now - startedAt >= SILENCE_NO_SPEECH -> dismiss()
-                now - startedAt >= MAX_LISTEN -> submit()
+                now - startedAt >= MAX_LISTEN -> submitSpeech()
                 else -> handler.postDelayed(this, WATCHDOG_TICK)
             }
         }
@@ -80,14 +88,22 @@ class AssistOverlayService : Service() {
 
     /** 每次唤起都重新开始一次识别（重复唤起时复用已有窗口）。 */
     private fun restartListening() {
-        done = false
+        cancelRunningTask()
+        runToken++
+        phase = Phase.LISTENING
         gotSpeech = false
-        tvText?.text = getString(R.string.assist_listening)
+        startedAt = SystemClock.elapsedRealtime()
+        lastSpeechAt = startedAt
+        tvText?.text = ""
+        tvText?.visibility = View.GONE
+        tvState?.text = getString(R.string.assist_listening)
+        wave?.visibility = View.VISIBLE
+        wave?.start()
+        orb?.start()
+
         runCatching { engine?.release() }
         val e = SpeechEngines.create(this, vadEosMillis = VAD_EOS)
         engine = e
-        startedAt = SystemClock.elapsedRealtime()
-        lastSpeechAt = startedAt
         if (!e.isAvailable(this)) {
             toast(getString(R.string.warn_mic_unavailable))
             dismiss()
@@ -105,9 +121,8 @@ class AssistOverlayService : Service() {
         orb = glow.findViewById(R.id.overlayOrb)
         wave = glow.findViewById(R.id.overlayWave)
         tvText = glow.findViewById(R.id.tvOverlayText)
+        tvState = glow.findViewById(R.id.tvOverlayState)
         glowView = glow
-        orb?.start()
-        wave?.start()
         runCatching { windowManager.addView(glow, glowParams()) }
             .onFailure { CrashLog.e(TAG, "添加悬浮光晕失败", it) }
 
@@ -156,8 +171,9 @@ class AssistOverlayService : Service() {
         override fun onPartial(text: String) {
             if (text.isBlank()) return
             handler.post {
-                if (done) return@post
+                if (phase != Phase.LISTENING) return@post
                 tvText?.text = text
+                tvText?.visibility = View.VISIBLE
                 gotSpeech = true
                 lastSpeechAt = SystemClock.elapsedRealtime()
                 val level = 0.62f + 0.34f * ((SystemClock.elapsedRealtime() % 320L) / 320f)
@@ -168,47 +184,134 @@ class AssistOverlayService : Service() {
 
         override fun onResult(text: String) {
             handler.post {
-                if (text.isNotBlank()) tvText?.text = text
-                submit()
+                if (text.isNotBlank()) {
+                    tvText?.text = text
+                    tvText?.visibility = View.VISIBLE
+                }
+                submitSpeech()
             }
         }
 
         override fun onError(message: String) {
-            handler.post { if (gotSpeech) submit() else dismiss() }
+            handler.post {
+                if (phase != Phase.LISTENING) return@post
+                if (gotSpeech) submitSpeech() else dismiss()
+            }
         }
 
         override fun onStateChanged(listening: Boolean) {}
     }
 
-    /** 提交识别文本，拉起主界面执行任务。 */
-    private fun submit() {
-        if (done) return
-        done = true
+    /** 结束聆听并把识别到的文本交给 Agent 在当前页面处理。 */
+    private fun submitSpeech() {
+        if (phase != Phase.LISTENING) return
         handler.removeCallbacks(watchdog)
         val text = tvText?.text?.toString()?.trim().orEmpty()
         val placeholder = getString(R.string.assist_listening)
         runCatching { engine?.stop() }
         runCatching { engine?.release() }
         engine = null
+        wave?.stop()
+        wave?.visibility = View.GONE
         if (text.isEmpty() || text == placeholder) {
             dismiss()
             return
         }
-        val intent = Intent(this, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            putExtra(MainActivity.EXTRA_AUTO_TASK, text)
-        }
-        runCatching { startActivity(intent) }
-            .onFailure { CrashLog.e(TAG, "拉起主界面失败", it) }
-        teardownOverlay()
-        stopSelf()
+        CommandMemory.record(this, text)
+        runTask(text)
     }
 
-    /** 收起光晕并结束服务（不提交任何内容）。 */
+    /** 在本服务内直接运行 Agent，把过程与回复写进左下角气泡（不跳回主界面）。 */
+    private fun runTask(task: String) {
+        phase = Phase.PROCESSING
+        tvState?.text = getString(R.string.assist_processing)
+
+        if (AgentConfig.apiKey(this).isBlank() || AgentConfig.activeProvider(this) == null) {
+            tvState?.text = getString(R.string.assist_failed)
+            tvText?.text = getString(R.string.assist_no_model)
+            tvText?.visibility = View.VISIBLE
+            scheduleDismiss(5000)
+            return
+        }
+
+        val session = SessionStore.current(this)
+        val token = runToken
+        val r = AgentRunner(applicationContext, askUser = null) { event ->
+            handler.post { if (token == runToken) renderEvent(event) }
+        }
+        runner = r
+        worker = Thread({
+            var failed = false
+            try {
+                r.run(task, emptyList(), session)
+            } catch (e: Exception) {
+                failed = true
+                CrashLog.e(TAG, "悬浮助理任务异常", e)
+                handler.post {
+                    if (token == runToken && phase == Phase.PROCESSING) {
+                        tvState?.text = getString(R.string.assist_failed)
+                        tvText?.text = e.message ?: getString(R.string.assist_failed)
+                        tvText?.visibility = View.VISIBLE
+                    }
+                }
+            } finally {
+                runCatching { SessionStore.save(this, session) }
+                handler.post {
+                    if (token == runToken && phase == Phase.PROCESSING) {
+                        tvState?.text = if (failed) getString(R.string.assist_failed) else getString(R.string.assist_done)
+                        scheduleDismiss(if (failed) 6000 else 4500)
+                    }
+                }
+            }
+        }, "azcode-assist-agent").apply { start() }
+    }
+
+    private fun renderEvent(event: AgentEvent) {
+        if (phase != Phase.PROCESSING) return
+        when (event) {
+            is AgentEvent.Thinking -> tvState?.text = getString(R.string.assist_thinking)
+            is AgentEvent.AssistantText -> {
+                val text = AiOutput.textOnly(event.text) ?: event.text
+                if (text.isNotBlank()) {
+                    tvText?.text = text
+                    tvText?.visibility = View.VISIBLE
+                    tvState?.text = getString(R.string.assist_processing)
+                }
+            }
+            is AgentEvent.ToolStart -> tvState?.text = event.name
+            is AgentEvent.Failure -> {
+                tvState?.text = getString(R.string.assist_failed)
+                tvText?.text = event.message
+                tvText?.visibility = View.VISIBLE
+            }
+            is AgentEvent.Notice -> {
+                tvText?.text = event.text
+                tvText?.visibility = View.VISIBLE
+            }
+            else -> {}
+        }
+    }
+
+    private fun scheduleDismiss(delayMs: Long) {
+        handler.postDelayed({
+            teardownOverlay()
+            stopSelf()
+        }, delayMs)
+    }
+
+    private fun cancelRunningTask() {
+        runCatching { runner?.cancel() }
+        runner = null
+        worker = null
+        runToken++
+    }
+
+    /** 收起光晕并结束服务。 */
     private fun dismiss() {
-        if (done) return
-        done = true
+        phase = Phase.DONE
         handler.removeCallbacks(watchdog)
+        handler.removeCallbacksAndMessages(null)
+        cancelRunningTask()
         runCatching { engine?.cancel() }
         runCatching { engine?.release() }
         engine = null
@@ -226,8 +329,9 @@ class AssistOverlayService : Service() {
     }
 
     override fun onDestroy() {
-        done = true
-        handler.removeCallbacks(watchdog)
+        phase = Phase.DONE
+        handler.removeCallbacksAndMessages(null)
+        cancelRunningTask()
         runCatching { engine?.release() }
         engine = null
         teardownOverlay()
