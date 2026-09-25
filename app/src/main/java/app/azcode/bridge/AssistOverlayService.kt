@@ -18,8 +18,13 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
+import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 悬浮语音助理：在当前前台页面之上叠加"透明背景 + 呼吸蓝光 + 左下角悬浮气泡"，
@@ -41,6 +46,7 @@ class AssistOverlayService : Service() {
 
     private var glowView: View? = null
     private var closeView: View? = null
+    private var questionView: View? = null
     private var orb: AssistOrbView? = null
     private var wave: VoiceWaveView? = null
     private var tvText: TextView? = null
@@ -49,6 +55,7 @@ class AssistOverlayService : Service() {
     private var engine: SpeechEngine? = null
     private var runner: AgentRunner? = null
     private var worker: Thread? = null
+    private var questionLatch: CountDownLatch? = null
 
     private var phase = Phase.LISTENING
     private var runToken = 0
@@ -236,7 +243,7 @@ class AssistOverlayService : Service() {
 
         val session = SessionStore.current(this)
         val token = runToken
-        val r = AgentRunner(applicationContext, askUser = null) { event ->
+        val r = AgentRunner(applicationContext, askUser = { q -> askUserInPage(q) }) { event ->
             handler.post { if (token == runToken) renderEvent(event) }
         }
         runner = r
@@ -299,6 +306,96 @@ class AssistOverlayService : Service() {
         }, delayMs)
     }
 
+    // ==================== 向用户提问 ====================
+
+    /**
+     * 在当前页面弹出问答卡片（可点选项或手动输入），同时发送通知栏提醒作为并行作答通道。
+     * 在工作线程上阻塞，返回 null 表示超时未作答或任务已取消。
+     */
+    private fun askUserInPage(question: AgentQuestion): String? {
+        val latch = CountDownLatch(1)
+        val answer = AtomicReference<String?>(null)
+        questionLatch = latch
+        runCatching { TaskNotifier.notifyQuestion(this, question) }
+        QuestionBus.register { ans ->
+            if (answer.compareAndSet(null, ans)) {
+                handler.post { hideQuestionOverlay() }
+                latch.countDown()
+            }
+        }
+        handler.post {
+            runCatching { showQuestionOverlay(question) { ans ->
+                if (answer.compareAndSet(null, ans)) {
+                    hideQuestionOverlay()
+                    latch.countDown()
+                }
+            } }.onFailure { CrashLog.e(TAG, "显示问答卡片失败", it) }
+        }
+        val deadline = SystemClock.elapsedRealtime() + QUESTION_TIMEOUT
+        while (latch.count > 0) {
+            if (phase == Phase.DONE) break
+            if (runCatching { latch.await(150, TimeUnit.MILLISECONDS) }.getOrDefault(false)) break
+            if (SystemClock.elapsedRealtime() > deadline) break
+        }
+        QuestionBus.clear()
+        runCatching { TaskNotifier.cancelQuestion(this) }
+        handler.post { hideQuestionOverlay() }
+        questionLatch = null
+        return if (latch.count == 0L) answer.get() else null
+    }
+
+    private fun showQuestionOverlay(question: AgentQuestion, onAnswer: (String?) -> Unit) {
+        if (questionView != null) hideQuestionOverlay()
+        val view = LayoutInflater.from(this).inflate(R.layout.view_assist_question, null)
+        view.findViewById<TextView>(R.id.tvAskQuestion).text = question.question
+        val options = view.findViewById<LinearLayout>(R.id.askOptions)
+        val input = view.findViewById<EditText>(R.id.etAskAnswer)
+        input.visibility = if (question.allowCustom) View.VISIBLE else View.GONE
+        options.removeAllViews()
+        question.options.forEach { option ->
+            val item = TextView(this).apply {
+                text = option
+                textSize = 14f
+                setTextColor(0xFFEAF1FF.toInt())
+                background = getDrawable(R.drawable.bg_assist_option)
+                setPadding(dp(14), dp(9), dp(14), dp(9))
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { bottomMargin = dp(8) }
+                setOnClickListener { onAnswer(option) }
+            }
+            options.addView(item)
+        }
+        view.findViewById<TextView>(R.id.btnAskCancel).setOnClickListener { onAnswer(null) }
+        view.findViewById<TextView>(R.id.btnAskSend).setOnClickListener {
+            val text = input.text?.toString()?.trim().orEmpty()
+            if (text.isNotEmpty()) onAnswer(text)
+        }
+        questionView = view
+        windowManager.addView(view, questionParams())
+    }
+
+    private fun hideQuestionOverlay() {
+        questionView?.let { runCatching { windowManager.removeView(it) } }
+        questionView = null
+    }
+
+    private fun questionParams(): WindowManager.LayoutParams =
+        WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            overlayType(),
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.START
+            x = dp(16)
+            y = dp(96)
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        }
+
     private fun cancelRunningTask() {
         runCatching { runner?.cancel() }
         runner = null
@@ -322,6 +419,7 @@ class AssistOverlayService : Service() {
     private fun teardownOverlay() {
         runCatching { orb?.stop() }
         runCatching { wave?.stop() }
+        hideQuestionOverlay()
         glowView?.let { runCatching { windowManager.removeView(it) } }
         closeView?.let { runCatching { windowManager.removeView(it) } }
         glowView = null
@@ -391,6 +489,8 @@ class AssistOverlayService : Service() {
         private const val SILENCE_NO_SPEECH = 6000L
         private const val MAX_LISTEN = 60_000L
         private const val WATCHDOG_TICK = 150L
+        /** 等待用户作答的超时（毫秒），超时按未作答返回给模型。 */
+        private const val QUESTION_TIMEOUT = 120_000L
 
         /** 是否已获得「显示在其他应用上层」权限。 */
         fun canOverlay(context: Context): Boolean =
