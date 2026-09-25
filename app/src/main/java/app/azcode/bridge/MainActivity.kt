@@ -101,7 +101,17 @@ class MainActivity : AppCompatActivity() {
     private val requestMic =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) {
-                startListening()
+                if (!destroyed && !isFinishing) {
+                    runCatching { startListening() }
+                        .onFailure { t ->
+                            CrashLog.e(TAG, "麦克风授权后启动识别失败", t)
+                            Toast.makeText(
+                                this,
+                                "语音启动失败：" + (t.message ?: t.javaClass.simpleName),
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                }
             } else {
                 Toast.makeText(this, R.string.warn_need_mic, Toast.LENGTH_SHORT).show()
             }
@@ -191,8 +201,21 @@ btnAttach = findViewById(R.id.btnAttach)
         btnStop.setOnClickListener { stopTask() }
         btnAttach.setOnClickListener { showAttachmentMenu() }
         // 长按输入框直接进入语音输入（不再显示独立麦克风按钮）。
+        // 放到下一帧执行，避免在长按/触摸回调里直接拉起权限页造成异常；任何异常都落盘并提示，不闪退。
         etTask.onLongPressVoice = {
-            if (!micListening) ensureMicPermissionAndStart()
+            etTask.post {
+                if (!destroyed && !micListening) {
+                    runCatching { ensureMicPermissionAndStart() }
+                        .onFailure { t ->
+                            CrashLog.e(TAG, "长按语音启动失败", t)
+                            Toast.makeText(
+                                this,
+                                "语音启动失败：" + (t.message ?: t.javaClass.simpleName),
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                }
+            }
             true
         }
         findViewById<View>(R.id.btnVoiceKeyboard).setOnClickListener { switchToKeyboard() }
