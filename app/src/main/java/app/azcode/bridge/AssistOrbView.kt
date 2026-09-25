@@ -1,51 +1,92 @@
 package app.azcode.bridge
 
 import android.content.Context
+import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
+import android.graphics.SweepGradient
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
 import android.view.View
-import kotlin.math.min
+import kotlin.math.PI
 import kotlin.math.sin
 
 /**
- * 全屏助理特效背景。
+ * 智能助理的全屏「物理边缘」呼吸蓝光。
  *
- * 绘制三层视觉：
- *  - 中心随时间呼吸的蓝色光晕（"聆听核心"）
- *  - 由中心向外扩散、渐隐的同心圆环
- *  - 贴屏幕四边的呼吸式青色描边光
+ * 只绘制贴合屏幕物理边框的蓝色呼吸描边（外圈模糊光晕 + 内圈实线），与 AI 操作手机时的
+ * [OperationGlowView] 同构：描边中心落在窗口边缘、圆角贴住屏幕自身圆角，因此看起来像屏幕
+ * 硬件边缘在发光，而不是悬浮在画面中间的动画。中间区域完全透明，不遮挡下方页面。
  *
- * 外部可用 [setLevel] 注入说话强度，让核心亮度跟随音量变化。
- * 通过 [start]/[stop] 控制动画，不依赖识别引擎，可独立驱动或与 VoiceWaveView 并用。
+ * 通过 [start]/[stop] 控制动画；[setLevel] 可注入说话强度，让边缘亮度随音量轻微起伏。
  */
 class AssistOrbView @JvmOverloads constructor(
     context: Context,
-    attrs: AttributeSet? = null
+    attrs: AttributeSet? = null,
 ) : View(context, attrs) {
 
-    private val corePaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-    private val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val density = resources.displayMetrics.density
 
-    private var phase = 0f
+    /** 与 AI 操作光效一致的蓝色渐变（primary #3964FE → #5686FE → #A9C3FF → 回到 primary）。 */
+    private val edgeColors = intArrayOf(
+        Color.parseColor("#3964FE"),
+        Color.parseColor("#5686FE"),
+        Color.parseColor("#A9C3FF"),
+        Color.parseColor("#5686FE"),
+        Color.parseColor("#3964FE"),
+    )
+
+    /** 外圈光晕：带模糊的粗描边，营造整屏贴边的柔光。 */
+    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 14f * density
+        maskFilter = BlurMaskFilter(12f * density, BlurMaskFilter.Blur.NORMAL)
+    }
+
+    /** 内圈实线：让光效边界更清晰。 */
+    private val corePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 2.4f * density
+        maskFilter = BlurMaskFilter(1.5f * density, BlurMaskFilter.Blur.NORMAL)
+    }
+
+    private var edgeShader: Shader? = null
+
+    private val bounds = RectF()
+
+    private val handler = Handler(Looper.getMainLooper())
     private var running = false
+    private var progress = 0f
 
+    /** 说话强度 0.1~1，越大边缘越亮。 */
     @Volatile
-    private var level = 0.4f
+    private var level = 0.5f
 
-    private val ticker = object : Runnable {
+    /**
+     * 呼吸动画限制在约 15fps：光晕变化本身很慢，低帧率肉眼无差异，但能显著降低这个
+     * 全屏软件层视图的功耗（与 [OperationGlowView] 保持一致）。
+     */
+    private val frameRunnable = object : Runnable {
         override fun run() {
-            phase += 0.016f
-            if (phase > 1f) phase -= 1f
-            level = (level * 0.95f).coerceAtLeast(0.28f)
+            val phase = (System.currentTimeMillis() % BREATH_PERIOD_MS).toFloat() / BREATH_PERIOD_MS
+            progress = ((sin(phase * 2 * PI - PI / 2) + 1.0) / 2.0).toFloat()
+            // 说话强度缓慢回落，避免语音间隙边缘忽然变暗。
+            level = (level * 0.94f).coerceAtLeast(0.35f)
             invalidate()
-            if (running) postOnAnimation(this)
+            if (running) handler.postDelayed(this, FRAME_MS)
         }
+    }
+
+    init {
+        // 模糊光晕需要软件层渲染。
+        setLayerType(LAYER_TYPE_SOFTWARE, null)
+        isClickable = false
+        isFocusable = false
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
     }
 
     /** 注入 0.1~1 的音量强度。 */
@@ -56,12 +97,12 @@ class AssistOrbView @JvmOverloads constructor(
     fun start() {
         if (running) return
         running = true
-        postOnAnimation(ticker)
+        handler.post(frameRunnable)
     }
 
     fun stop() {
         running = false
-        removeCallbacks(ticker)
+        handler.removeCallbacks(frameRunnable)
         invalidate()
     }
 
@@ -70,53 +111,40 @@ class AssistOrbView @JvmOverloads constructor(
         super.onDetachedFromWindow()
     }
 
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (w <= 0 || h <= 0) return
+        // 以屏幕中心为原点做扫掠渐变，让蓝光沿四周边缘连续过渡（首尾同色，接缝不可见）。
+        edgeShader = SweepGradient(
+            w / 2f,
+            h / 2f,
+            edgeColors,
+            floatArrayOf(0f, 0.28f, 0.5f, 0.72f, 1f),
+        )
+        glowPaint.shader = edgeShader
+        corePaint.shader = edgeShader
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val w = width.toFloat()
         val h = height.toFloat()
         if (w == 0f || h == 0f) return
 
-        val cx = w / 2f
-        val cy = h * 0.76f
-        val base = min(w, h) * 0.12f
-        val breath = 1f + 0.06f * sin(phase * TWO_PI * 2f)
-        val coreRadius = (base * (1.6f + 1.2f * level) * breath).coerceAtLeast(dp(24f))
+        // 描边中心落在窗口边缘（inset=0）：一半落在屏幕外被裁掉，光效从物理边框处起亮。
+        bounds.set(0f, 0f, w, h)
+        val radius = 16f * density
+        val boost = 0.72f + 0.5f * level
+        val alpha = ((110 + 145 * progress) * boost).toInt().coerceIn(0, 255)
+        glowPaint.alpha = alpha
+        corePaint.alpha = ((alpha * 0.75f).toInt() + 30).coerceIn(0, 255)
 
-        // 1) 中心核心光晕（柔和，避免遮挡下面页面内容）
-        corePaint.shader = RadialGradient(
-            cx, cy, coreRadius,
-            intArrayOf(0x663D6BFF, 0x261E3FA8, 0x00000000),
-            floatArrayOf(0f, 0.55f, 1f),
-            Shader.TileMode.CLAMP
-        )
-        canvas.drawCircle(cx, cy, coreRadius, corePaint)
-
-        // 2) 向外扩散的同心圆环
-        ringPaint.strokeWidth = dp(2f)
-        for (i in 0 until 3) {
-            val t = (phase + i / 3f) % 1f
-            val alpha = ((1f - t) * 78f).toInt().coerceIn(0, 255)
-            ringPaint.color = Color.argb(alpha, 0x6E, 0x9B, 0xFF)
-            canvas.drawCircle(cx, cy, base * (0.7f + t * 1.7f), ringPaint)
-        }
-
-        // 3) 贴边呼吸光
-        val margin = dp(3f)
-        val rect = RectF(margin, margin, w - margin, h - margin)
-        val radius = dp(28f)
-        val glow = (0.35f + 0.35f * sin(phase * TWO_PI)).coerceIn(0f, 1f)
-        edgePaint.strokeWidth = dp(7f)
-        edgePaint.shader = null
-        edgePaint.color = Color.argb((glow * 80f).toInt(), 0x39, 0x64, 0xFE)
-        canvas.drawRoundRect(rect, radius, radius, edgePaint)
-        edgePaint.strokeWidth = dp(2f)
-        edgePaint.color = Color.argb((glow * 210f).toInt(), 0xA9, 0xC3, 0xFF)
-        canvas.drawRoundRect(rect, radius, radius, edgePaint)
+        canvas.drawRoundRect(bounds, radius, radius, glowPaint)
+        canvas.drawRoundRect(bounds, radius, radius, corePaint)
     }
 
-    private fun dp(value: Float): Float = value * resources.displayMetrics.density
-
     private companion object {
-        const val TWO_PI = 6.2831855f
+        const val BREATH_PERIOD_MS = 2600L
+        const val FRAME_MS = 66L
     }
 }

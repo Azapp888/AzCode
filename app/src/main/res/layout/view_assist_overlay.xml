@@ -2,7 +2,8 @@
 <!--
   悬浮助理光晕（叠加在其它应用之上，背景透明）。
   左下角是一个悬浮气泡卡片：状态行 + 可读的识别/回复文字 + 波动条；
-  画面边缘由 AssistOrbView 绘制呼吸蓝光。其余区域全部透明，当前页面照常显示。
+  屏幕物理边缘由 AssistOrbView 绘制呼吸蓝光（与 AI 操作手机的边缘光同构），画面中间不绘制任何动画。
+  其余区域全部透明，当前页面照常显示。
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"

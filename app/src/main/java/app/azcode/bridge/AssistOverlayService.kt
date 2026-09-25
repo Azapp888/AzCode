@@ -18,6 +18,7 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -46,6 +47,8 @@ class AssistOverlayService : Service() {
 
     private var glowView: View? = null
     private var closeView: View? = null
+    private var keyboardView: View? = null
+    private var inputView: View? = null
     private var questionView: View? = null
     private var orb: AssistOrbView? = null
     private var wave: VoiceWaveView? = null
@@ -138,6 +141,12 @@ class AssistOverlayService : Service() {
         closeView = close
         runCatching { windowManager.addView(close, closeParams()) }
             .onFailure { CrashLog.e(TAG, "添加悬浮关闭按钮失败", it) }
+
+        val keyboard = inflater.inflate(R.layout.view_assist_keyboard, null)
+        keyboard.findViewById<View>(R.id.btnOverlayKeyboard).setOnClickListener { toggleInputOverlay() }
+        keyboardView = keyboard
+        runCatching { windowManager.addView(keyboard, keyboardParams()) }
+            .onFailure { CrashLog.e(TAG, "添加键盘气泡失败", it) }
     }
 
     private fun glowParams(): WindowManager.LayoutParams =
@@ -150,7 +159,17 @@ class AssistOverlayService : Service() {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
-        ).apply { gravity = Gravity.TOP or Gravity.START }
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            // 覆盖整个物理屏幕：延伸到刘海/挖孔与系统栏区域，让蓝光贴着屏幕硬件边缘起亮。
+            if (Build.VERSION.SDK_INT >= 28) {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            }
+            if (Build.VERSION.SDK_INT >= 30) {
+                fitInsetsTypes = 0
+            }
+        }
 
     private fun closeParams(): WindowManager.LayoutParams =
         WindowManager.LayoutParams(
@@ -164,6 +183,20 @@ class AssistOverlayService : Service() {
             gravity = Gravity.TOP or Gravity.END
             x = dp(10)
             y = dp(38)
+        }
+
+    private fun keyboardParams(): WindowManager.LayoutParams =
+        WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            overlayType(),
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.END
+            x = dp(16)
+            y = dp(28)
         }
 
     private fun overlayType(): Int =
@@ -243,7 +276,12 @@ class AssistOverlayService : Service() {
 
         val session = SessionStore.current(this)
         val token = runToken
-        val r = AgentRunner(applicationContext, askUser = { q -> askUserInPage(q) }) { event ->
+        val r = AgentRunner(
+            applicationContext,
+            askUser = { q -> askUserInPage(q) },
+            // 助理自身已有边缘呼吸光，操作手机时不再叠加软件本体的光效。
+            suppressSystemGlow = true,
+        ) { event ->
             handler.post { if (token == runToken) renderEvent(event) }
         }
         runner = r
@@ -396,6 +434,77 @@ class AssistOverlayService : Service() {
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
 
+    // ==================== 键盘输入 ====================
+
+    /** 右下角键盘气泡：展开 / 收起底部输入条。 */
+    private fun toggleInputOverlay() {
+        if (inputView != null) hideInputOverlay() else showInputOverlay()
+    }
+
+    private fun showInputOverlay() {
+        if (inputView != null) return
+        val view = LayoutInflater.from(this).inflate(R.layout.view_assist_input, null)
+        val input = view.findViewById<EditText>(R.id.etAssistInput)
+        view.findViewById<TextView>(R.id.btnAssistSend).setOnClickListener {
+            val text = input.text?.toString()?.trim().orEmpty()
+            hideInputOverlay()
+            if (text.isNotEmpty()) submitTyped(text)
+        }
+        inputView = view
+        runCatching { windowManager.addView(view, inputParams()) }
+            .onFailure {
+                CrashLog.e(TAG, "显示键盘输入条失败", it)
+                inputView = null
+                return
+            }
+        input.post {
+            input.requestFocus()
+            runCatching {
+                (getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager)
+                    ?.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+            }
+        }
+    }
+
+    private fun hideInputOverlay() {
+        val view = inputView ?: return
+        inputView = null
+        runCatching {
+            (getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager)
+                ?.hideSoftInputFromWindow(view.windowToken, 0)
+        }
+        runCatching { windowManager.removeView(view) }
+    }
+
+    /** 把键盘输入的指令当作一次识别结果提交，与语音链路共用同一套执行流程。 */
+    private fun submitTyped(text: String) {
+        handler.removeCallbacks(watchdog)
+        runCatching { engine?.stop() }
+        runCatching { engine?.release() }
+        engine = null
+        wave?.stop()
+        wave?.visibility = View.GONE
+        cancelRunningTask()
+        CommandMemory.record(this, text)
+        tvText?.text = text
+        tvText?.visibility = View.VISIBLE
+        runTask(text)
+    }
+
+    private fun inputParams(): WindowManager.LayoutParams =
+        WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            overlayType(),
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.START
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
+        }
+
     private fun cancelRunningTask() {
         runCatching { runner?.cancel() }
         runner = null
@@ -420,10 +529,13 @@ class AssistOverlayService : Service() {
         runCatching { orb?.stop() }
         runCatching { wave?.stop() }
         hideQuestionOverlay()
+        hideInputOverlay()
         glowView?.let { runCatching { windowManager.removeView(it) } }
         closeView?.let { runCatching { windowManager.removeView(it) } }
+        keyboardView?.let { runCatching { windowManager.removeView(it) } }
         glowView = null
         closeView = null
+        keyboardView = null
     }
 
     override fun onDestroy() {

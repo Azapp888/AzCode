@@ -83,6 +83,11 @@ data class AgentQuestion(
 class AgentRunner(
     private val ctx: Context,
     private val askUser: ((AgentQuestion) -> String?)? = null,
+    /**
+     * 是否抑制无障碍服务的「AI 操作手机」边缘呼吸光效。
+     * 智能助理自身已有同款边缘呼吸光，操作请求由助理发起时无需再叠加一层软件本体光效。
+     */
+    private val suppressSystemGlow: Boolean = false,
     private val listener: (AgentEvent) -> Unit,
 ) {
     @Volatile private var cancelled = false
@@ -366,7 +371,7 @@ class AgentRunner(
             "tap" -> {
                 val svc = AzAccessibilityService.instance
                     ?: return err("无障碍服务未开启，无法点击。请到「设置 → 设备能力 → 无障碍设置」开启后重试。")
-                AzAccessibilityService.pulseOperating()
+                if (!suppressSystemGlow) AzAccessibilityService.pulseOperating()
                 when {
                     args.has("text") ->
                         if (svc.tapText(args.getString("text"))) ok() else err("未找到文本：${args.getString("text")}")
@@ -380,7 +385,7 @@ class AgentRunner(
             "swipe" -> {
                 val svc = AzAccessibilityService.instance
                     ?: return err("无障碍服务未开启，无法滑动。请到「设置 → 设备能力 → 无障碍设置」开启后重试。")
-                AzAccessibilityService.pulseOperating()
+                if (!suppressSystemGlow) AzAccessibilityService.pulseOperating()
                 val okSwipe = svc.dispatchSwipe(
                     args.getDouble("x1").toFloat(),
                     args.getDouble("y1").toFloat(),
@@ -394,7 +399,7 @@ class AgentRunner(
             "global" -> {
                 val svc = AzAccessibilityService.instance
                     ?: return err("无障碍服务未开启，无法执行系统导航。请到「设置 → 设备能力 → 无障碍设置」开启后重试。")
-                AzAccessibilityService.pulseOperating()
+                if (!suppressSystemGlow) AzAccessibilityService.pulseOperating()
                 if (svc.globalAction(args.optString("action"))) ok() else err("未知动作")
             }
 
@@ -593,7 +598,7 @@ class AgentRunner(
         if (text.isEmpty()) return err("缺少 text")
         val append = args.optBoolean("append", false)
 
-        AzAccessibilityService.pulseOperating()
+        if (!suppressSystemGlow) AzAccessibilityService.pulseOperating()
         val accessibilityOn = AzAccessibilityService.isEnabled()
         if (accessibilityOn && AzAccessibilityService.setFocusedText(text, append)) {
             return JSONObject().put("ok", true).put("via", "accessibility").toString()

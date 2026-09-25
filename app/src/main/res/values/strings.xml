@@ -45,6 +45,7 @@
     <string name="assist_hint">说完停顿一下即可自动发送</string>
     <string name="assist_no_speech">没有听到内容</string>
     <string name="assist_close">关闭</string>
+    <string name="assist_keyboard">键盘输入</string>
     <string name="assist_overlay_channel">语音助理光晕</string>
     <string name="assist_overlay_notif_title">AzCode 语音助理</string>
     <string name="assist_overlay_notif_text">正在聆听…</string>

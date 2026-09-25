@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 智能助理右下角键盘气泡（独立小窗口，可点击；其余区域由全屏透明窗口穿透） -->
+<ImageButton xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/btnOverlayKeyboard"
+    android:layout_width="40dp"
+    android:layout_height="40dp"
+    android:background="@drawable/bg_assist_close"
+    android:contentDescription="@string/assist_keyboard"
+    android:padding="9dp"
+    android:src="@drawable/ic_keyboard"
+    android:tint="#FFFFFF" />
