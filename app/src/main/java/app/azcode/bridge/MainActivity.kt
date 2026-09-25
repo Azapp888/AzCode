@@ -1091,7 +1091,7 @@ btnAttach = findViewById(R.id.btnAttach)
         stopListening()
         hideVoicePanel()
         etTask.requestFocus()
-        etTask.setSelection(etTask.text.length)
+        etTask.setSelection(etTask.length())
         runCatching {
             (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
                 .showSoftInput(etTask, InputMethodManager.SHOW_IMPLICIT)
@@ -1130,7 +1130,7 @@ btnAttach = findViewById(R.id.btnAttach)
         if (text.isBlank()) return
         val joined = if (micBase.isBlank()) text else micBase + text
         etTask.setText(joined)
-        etTask.setSelection(etTask.text.length)
+        etTask.setSelection(etTask.length())
     }
 
     // ==================== 事件处理 ====================
