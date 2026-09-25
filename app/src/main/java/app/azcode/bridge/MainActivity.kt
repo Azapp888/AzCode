@@ -336,6 +336,18 @@ class MainActivity : AppCompatActivity() {
     /** 弹窗前确认 Activity 仍可用，避免已销毁后 show 抛 BadTokenException 导致闪退。 */
     private fun canShowUi(): Boolean = !destroyed && !isFinishing && !isDestroyed
 
+    /** 音频被当前模型拒绝时，用弹窗明确告知用户换模型或移除音频。 */
+    private fun showAudioUnsupportedDialog() {
+        if (!canShowUi()) return
+        runCatching {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.audio_unsupported_title)
+                .setMessage(R.string.audio_unsupported_message)
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+        }.onFailure { CrashLog.w(TAG, "显示音频不支持弹窗失败: ${it.message}", it) }
+    }
+
     /** 返回手势（含侧滑）默认会直接退出应用，改为两秒内二次返回才退出，避免误触。 */
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
@@ -1320,6 +1332,7 @@ class MainActivity : AppCompatActivity() {
             is AgentEvent.Failure -> {
                 removeTyping()
                 addError(getString(R.string.error_prefix, event.message))
+                if (event.audioUnsupported) showAudioUnsupportedDialog()
             }
         }
     }

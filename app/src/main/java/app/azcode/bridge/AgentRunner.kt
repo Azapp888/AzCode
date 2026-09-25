@@ -4,6 +4,8 @@ import android.content.Context
 import app.azcode.bridge.llm.LLMContent
 import app.azcode.bridge.llm.LLMService
 import app.azcode.bridge.llm.core.LLMCodec
+import app.azcode.bridge.llm.core.LLMErrorCode
+import app.azcode.bridge.llm.core.LLMException
 import app.azcode.bridge.llm.core.LLMRequest
 import app.azcode.bridge.llm.core.LLMResponse
 import app.azcode.bridge.llm.core.LLMThinking
@@ -50,8 +52,8 @@ sealed interface AgentEvent {
     /** 中性系统提示，如达到步数上限。 */
     data class Notice(val text: String) : AgentEvent
 
-    /** 失败提示。 */
-    data class Failure(val message: String) : AgentEvent
+    /** 失败提示。[audioUnsupported] 为 true 表示音频附件被当前模型拒绝，UI 应弹窗提示更换模型。 */
+    data class Failure(val message: String, val audioUnsupported: Boolean = false) : AgentEvent
 }
 
 /**
@@ -104,6 +106,10 @@ class AgentRunner(
         const val SUMMARY_PREFIX = "[上下文摘要]"
         /** 送给摘要模型的文本上限，超出说明阈值估算异常，做一次兜底截断。 */
         const val SUMMARY_INPUT_MAX = 60000
+
+        /** 音频附件被模型拒绝时展示的提示，UI 据此弹窗引导更换模型。 */
+        const val AUDIO_UNSUPPORTED_HINT =
+            "当前模型不支持音频输入。请到「设置 → 模型管理」更换支持音频的模型（如 Gemini、GPT-4o audio、Qwen-Omni 等），或移除音频附件后重试。"
     }
 
     /** 上次压缩时的上下文规模；两次压缩之间需累积 [COMPACT_MIN_GROWTH] 新内容。 */
@@ -165,8 +171,13 @@ class AgentRunner(
                     )
                 } catch (e: Exception) {
                     CrashLog.w(TAG, "第 $step 步请求失败: ${e.message}", e)
-                    if (cancelled) listener(AgentEvent.Notice("已停止"))
-                    else listener(AgentEvent.Failure(e.message ?: "请求模型失败"))
+                    if (cancelled) {
+                        listener(AgentEvent.Notice("已停止"))
+                    } else if (hasAudio(attachments) && isAudioRejected(e)) {
+                        listener(AgentEvent.Failure(AUDIO_UNSUPPORTED_HINT, audioUnsupported = true))
+                    } else {
+                        listener(AgentEvent.Failure(e.message ?: "请求模型失败"))
+                    }
                     return
                 }
                 if (cancelled) { listener(AgentEvent.Notice("已停止")); return }
@@ -288,6 +299,24 @@ class AgentRunner(
         } else {
             trimmed.toString()
         }
+    }
+
+    /** 判断本次附件中是否包含音频。 */
+    private fun hasAudio(attachments: List<AttachmentReader.Prepared>): Boolean =
+        attachments.any { it is AttachmentReader.Prepared.Audio }
+
+    /**
+     * 判断异常是否由「模型不接受音频输入」导致：音频附件 + 请求被判为无效（400），
+     * 或错误文本明确提到音频 / 模态 / 内容类型不支持。
+     */
+    private fun isAudioRejected(e: Exception): Boolean {
+        val code = (e as? LLMException)?.code
+        val text = e.message.orEmpty().lowercase()
+        val mentionsAudio = listOf(
+            "audio", "input_audio", "modality", "content type",
+            "unsupported", "not support", "invalid content",
+        ).any { text.contains(it) }
+        return code == LLMErrorCode.INVALID_REQUEST || mentionsAudio
     }
 
     /** 用文本占位替换图片/音频 base64，避免持久化文件过大。 */
