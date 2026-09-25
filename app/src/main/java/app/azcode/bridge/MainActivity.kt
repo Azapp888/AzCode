@@ -14,12 +14,14 @@ import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -77,6 +79,10 @@ class MainActivity : AppCompatActivity() {
     private var speechEngine: SpeechEngine? = null
     private var micListening = false
     private var micBase = ""
+    private lateinit var voicePanel: View
+    private lateinit var tvVoicePreview: TextView
+    private lateinit var voiceWave: VoiceWaveView
+    private lateinit var llVoiceSuggest: LinearLayout
 
     private val takePicture =
         registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
@@ -157,6 +163,10 @@ class MainActivity : AppCompatActivity() {
         btnStop = findViewById(R.id.btnStop)
         btnAttach = findViewById(R.id.btnAttach)
         btnMic = findViewById(R.id.btnMic)
+        voicePanel = findViewById(R.id.voicePanel)
+        tvVoicePreview = findViewById(R.id.tvVoicePreview)
+        voiceWave = findViewById(R.id.voiceWave)
+        llVoiceSuggest = findViewById(R.id.llVoiceSuggest)
         tvHeaderTitle = findViewById(R.id.tvHeaderTitle)
         svAttachments = findViewById(R.id.svAttachments)
         attachmentsRow = findViewById(R.id.attachmentsRow)
@@ -187,6 +197,12 @@ class MainActivity : AppCompatActivity() {
         btnStop.setOnClickListener { stopTask() }
         btnAttach.setOnClickListener { showAttachmentMenu() }
         btnMic.setOnClickListener { toggleMic() }
+        // 长按输入框直接进入语音输入（与参考一致的语音优先交互）。
+        etTask.setOnLongClickListener {
+            if (!micListening) ensureMicPermissionAndStart()
+            true
+        }
+        findViewById<View>(R.id.btnVoiceKeyboard).setOnClickListener { switchToKeyboard() }
 
         runCatching { SkillStore.seedBuiltins(applicationContext) }
         runCatching { rikka.shizuku.Shizuku.addRequestPermissionResultListener(shizukuPermissionListener) }
@@ -916,6 +932,8 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.warn_need_apikey, Toast.LENGTH_LONG).show()
             return
         }
+        // 记录用户命令，供语音输入页左下角推荐「常用/最近」命令。
+        CommandMemory.record(this, task)
 
         val attachments = pending.toList()
         val displayTask = task.ifEmpty { "（见附件）" }
@@ -1029,6 +1047,7 @@ class MainActivity : AppCompatActivity() {
         }
         // 记录进入识别前输入框已有内容，识别结果追加在其后。
         micBase = etTask.text.toString()
+        showVoicePanel()
         engine.start(this, speechListener)
     }
 
@@ -1036,10 +1055,71 @@ class MainActivity : AppCompatActivity() {
         runCatching { speechEngine?.stop() }
     }
 
-    private val speechListener = object : SpeechEngine.Listener {
-        override fun onPartial(text: String) = runOnUiThread { updateMicText(text) }
+    /** 展示底部语音面板：波动条 + 实时识别预览 + 左下角推荐命令 + 右下角切键盘。 */
+    private fun showVoicePanel() {
+        tvVoicePreview.text = getString(R.string.voice_listening)
+        renderVoiceSuggestions()
+        voicePanel.visibility = View.VISIBLE
+        voiceWave.start()
+        runCatching {
+            (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
+                .hideSoftInputFromWindow(etTask.windowToken, 0)
+        }
+    }
 
-        override fun onResult(text: String) = runOnUiThread { updateMicText(text) }
+    private fun hideVoicePanel() {
+        voiceWave.stop()
+        voicePanel.visibility = View.GONE
+    }
+
+    private fun renderVoiceSuggestions() {
+        llVoiceSuggest.removeAllViews()
+        CommandMemory.frequent(this, 4).forEach { cmd ->
+            val chip = TextView(this).apply {
+                text = cmd
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                setBackgroundResource(R.drawable.bg_chip)
+                setPadding(dp(12), dp(6), dp(12), dp(6))
+                setTextColor(getColor(R.color.text_secondary))
+                textSize = 12f
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = dp(6) }
+                setOnClickListener {
+                    etTask.setText(cmd)
+                    etTask.setSelection(cmd.length)
+                    stopListening()
+                    hideVoicePanel()
+                }
+            }
+            llVoiceSuggest.addView(chip)
+        }
+    }
+
+    /** 右下角「切键盘」：结束语音，恢复输入法。 */
+    private fun switchToKeyboard() {
+        stopListening()
+        hideVoicePanel()
+        etTask.requestFocus()
+        etTask.setSelection(etTask.text.length)
+        runCatching {
+            (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
+                .showSoftInput(etTask, InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
+
+    private val speechListener = object : SpeechEngine.Listener {
+        override fun onPartial(text: String) = runOnUiThread {
+            if (text.isNotBlank()) tvVoicePreview.text = text
+            updateMicText(text)
+        }
+
+        override fun onResult(text: String) = runOnUiThread {
+            updateMicText(text)
+            hideVoicePanel()
+        }
 
         override fun onError(message: String) {
             if (message.isBlank()) return
@@ -1054,7 +1134,10 @@ class MainActivity : AppCompatActivity() {
             // 录音中麦克风图标染成主题蓝，结束后恢复次级色。
             val tint = getColor(if (listening) R.color.primary else R.color.text_secondary)
             btnMic.setColorFilter(tint)
-            if (!listening) micBase = ""
+            if (!listening) {
+                micBase = ""
+                hideVoicePanel()
+            }
         }
     }
 

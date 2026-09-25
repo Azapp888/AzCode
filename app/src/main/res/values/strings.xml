@@ -37,6 +37,9 @@
     <string name="warn_need_mic">需要麦克风权限才能语音输入</string>
     <string name="warn_mic_unavailable">当前设备不支持语音识别，请在设置中改用其他引擎</string>
     <string name="btn_mic">语音输入</string>
+    <string name="voice_listening">正在聆听…</string>
+    <string name="voice_to_keyboard">切换到键盘输入</string>
+    <string name="voice_tap_send">松开后点发送即可执行</string>
     <string name="title_speech">语音输入</string>
     <string name="speech_engine_system">系统内置（离线优先）</string>
     <string name="speech_engine_xunfei">讯飞星火（在线）</string>
