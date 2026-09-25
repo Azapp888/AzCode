@@ -29,6 +29,7 @@ object TaskNotifier {
     private const val CHANNEL_QUESTION = "azcode_question_v2"
     private const val NOTIF_ID = 8849
     private const val NOTIF_QUESTION_ID = 8850
+    private const val TAG = "TaskNotifier"
 
     /** 高优先级渠道：横幅 + 铃声 + 震动。旧渠道 id 保留不动，避免影响用户既有设置。 */
     fun ensureChannel(context: Context) {
@@ -121,8 +122,18 @@ object TaskNotifier {
     /**
      * Agent 提问提醒：常驻通知，展开后可点选选项或直接输入文本作答。
      * 作答后由 [QuestionActionReceiver] 收起通知并把答案回传给 Agent。
+     * 通知失败不应影响应用内/悬浮卡片问答，因此内部吞掉异常。
      */
     fun notifyQuestion(context: Context, question: AgentQuestion) {
+        runCatching { notifyQuestionInternal(context, question) }
+            .onFailure { CrashLog.e(TAG, "发送提问通知失败", it) }
+    }
+
+    /** 携带 RemoteInput 的 PendingIntent 在 Android 12+ 必须是 mutable。 */
+    private fun mutableFlag(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+
+    private fun notifyQuestionInternal(context: Context, question: AgentQuestion) {
         if (!canNotify(context)) return
         ensureChannel(context)
 
@@ -166,7 +177,7 @@ object TaskNotifier {
             val replyPi = PendingIntent.getBroadcast(
                 context, 260,
                 Intent(context, QuestionActionReceiver::class.java).setAction(ACTION_QUESTION),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                PendingIntent.FLAG_UPDATE_CURRENT or mutableFlag(),
             )
             builder.addAction(
                 Notification.Action.Builder(

@@ -20,8 +20,8 @@ android {
         applicationId = "app.azcode.bridge"
         minSdk = 26
         targetSdk = 34
-        versionCode = 64
-        versionName = "1.9.9"
+        versionCode = 65
+        versionName = "1.9.10"
     }
 
     signingConfigs {
