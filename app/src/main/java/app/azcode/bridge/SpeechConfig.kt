@@ -27,7 +27,13 @@ object SpeechConfig {
 
     fun engine(ctx: Context): String {
         val value = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_ENGINE, null)
-        return if (value == ENGINE_XUNFEI && xunfeiConfigured()) ENGINE_XUNFEI else ENGINE_SYSTEM
+        return when {
+            value == ENGINE_SYSTEM -> ENGINE_SYSTEM
+            value == ENGINE_XUNFEI && xunfeiConfigured() -> ENGINE_XUNFEI
+            // 未显式选择时，内置了讯飞密钥就默认用讯飞在线识别（中文更准），否则用系统内置。
+            value == null && xunfeiConfigured() -> ENGINE_XUNFEI
+            else -> ENGINE_SYSTEM
+        }
     }
 
     fun setEngine(ctx: Context, value: String) {
