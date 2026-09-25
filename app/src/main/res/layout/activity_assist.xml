@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  全屏语音助理界面。
+  · AssistOrbView 提供中心光晕 + 扩散圆环 + 贴边呼吸光
+  · 中间大字号显示实时识别文本，下方波动条跟随音量
+  · 说完停顿即自动提交；右上角可随时关闭
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0A0E18">
+
+    <app.azcode.bridge.AssistOrbView
+        android:id="@+id/assistOrb"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="36dp"
+        android:letterSpacing="0.24"
+        android:text="AZCODE"
+        android:textColor="#7E97BE"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingStart="32dp"
+        android:paddingTop="96dp"
+        android:paddingEnd="32dp"
+        android:paddingBottom="72dp">
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/tvAssistText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:lineSpacingExtra="6dp"
+            android:maxLines="6"
+            android:text="@string/assist_listening"
+            android:textColor="#F2F6FF"
+            android:textSize="24sp" />
+
+        <app.azcode.bridge.VoiceWaveView
+            android:id="@+id/assistWave"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="28dp" />
+
+        <TextView
+            android:id="@+id/tvAssistHint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="@string/assist_hint"
+            android:textColor="#8FA6C8"
+            android:textSize="13sp" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1.6" />
+    </LinearLayout>
+
+    <ImageButton
+        android:id="@+id/btnAssistClose"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="16dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/assist_close"
+        android:src="@drawable/ic_close" />
+</FrameLayout>

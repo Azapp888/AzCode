@@ -14,7 +14,7 @@ import android.speech.SpeechRecognizer
  * 优先使用设备端离线识别（Android 12 / API 31+），无法离线时回退到系统识别服务（可能联网）。
  * 不依赖任何第三方 SDK 与密钥，但中文识别能力因设备/系统而异。
  */
-class SystemSpeechEngine : SpeechEngine {
+class SystemSpeechEngine(private val vadEosMillis: Int = 10_000) : SpeechEngine {
 
     private var recognizer: SpeechRecognizer? = null
     private var listener: SpeechEngine.Listener? = null
@@ -45,6 +45,15 @@ class SystemSpeechEngine : SpeechEngine {
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            // 说完后的静音阈值：到时自动判定「说完了」并回调最终结果，用于助理模式的自动提交。
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
+                vadEosMillis.toLong()
+            )
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                vadEosMillis.toLong()
+            )
         }
         runCatching { rec.startListening(intent) }.onFailure {
             listener.onError(it.message ?: "启动语音识别失败")

@@ -51,6 +51,15 @@
         <item name="android:textColor">@color/text_secondary</item>
     </style>
 
+    <!-- 全屏语音助理：深色窗口背景，避免首帧白闪；系统栏与页面底色一致 -->
+    <style name="Theme.AzCode.Assist" parent="Theme.AzCode">
+        <item name="android:windowBackground">#0A0E18</item>
+        <item name="android:statusBarColor">#0A0E18</item>
+        <item name="android:navigationBarColor">#0A0E18</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
     <!-- 设置页：分组小标题 + 白色卡片内的图标行（参照豆包设置页） -->
     <style name="SectionLabel">
         <item name="android:layout_width">match_parent</item>

@@ -39,12 +39,22 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- 注册为系统数字助理：让 AzCode 出现在「默认数字助理应用」列表中并可被选为默认助理 -->
+        </activity>
+
+        <!-- 系统数字助理界面：注册 ASSIST / VOICE_COMMAND，被选为默认助理后
+             长按电源键/耳机、助理手势会直接进入全屏语音特效页，而非回到聊天界面 -->
+        <activity
+            android:name=".AssistActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@style/Theme.AzCode.Assist">
             <intent-filter>
                 <action android:name="android.intent.action.ASSIST" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-            <!-- 部分系统的助理手势、耳机/电源键长按通过 VOICE_COMMAND 唤起助理 -->
             <intent-filter>
                 <action android:name="android.intent.action.VOICE_COMMAND" />
                 <category android:name="android.intent.category.DEFAULT" />

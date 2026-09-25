@@ -30,7 +30,7 @@ import javax.crypto.spec.SecretKeySpec
  *
  * 识别失败会给出本地化提示，用户可在「设置 → 语音输入」改回系统内置引擎。
  */
-class XunfeiSpeechEngine : SpeechEngine {
+class XunfeiSpeechEngine(private val vadEosMillis: Int = 10_000) : SpeechEngine {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -201,7 +201,7 @@ class XunfeiSpeechEngine : SpeechEngine {
                     .put("language", "zh_cn")
                     .put("domain", "iat")
                     .put("accent", "mandarin")
-                    .put("vad_eos", 10000)
+                    .put("vad_eos", vadEosMillis)
             )
         }
         return frame.toString()

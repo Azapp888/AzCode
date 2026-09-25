@@ -16,6 +16,7 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.text.TextUtils
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
@@ -78,7 +79,10 @@ class MainActivity : AppCompatActivity() {
     private var speechEngine: SpeechEngine? = null
     private var micListening = false
     private var micBase = ""
-    private var lastAssistIntent: Intent? = null
+    // 按住输入框说话的会话状态：按住开始识别，松手提交。
+    private var pttActive = false
+    private var pttPendingSend = false
+    private var autoTaskConsumed = false
     private lateinit var voicePanel: View
     private lateinit var tvVoicePreview: TextView
     private lateinit var voiceWave: VoiceWaveView
@@ -205,13 +209,17 @@ class MainActivity : AppCompatActivity() {
         btnSend.setOnClickListener { sendTask() }
         btnStop.setOnClickListener { stopTask() }
         btnAttach.setOnClickListener { showAttachmentMenu() }
-        // 长按输入框直接进入语音输入（不再显示独立麦克风按钮）。
+        // 按住输入框说话：长按进入识别，松手立即提交（按住说话）。
         // 放到下一帧执行，避免在长按/触摸回调里直接拉起权限页造成异常；任何异常都落盘并提示，不闪退。
         etTask.onLongPressVoice = {
             etTask.post {
                 if (!destroyed && !micListening) {
-                    runCatching { ensureMicPermissionAndStart() }
+                    runCatching {
+                        pttActive = true
+                        ensureMicPermissionAndStart()
+                    }
                         .onFailure { t ->
+                            pttActive = false
                             CrashLog.e(TAG, "长按语音启动失败", t)
                             Toast.makeText(
                                 this,
@@ -223,6 +231,19 @@ class MainActivity : AppCompatActivity() {
             }
             true
         }
+        // 松手 = 说完了 → 停止识别并自动发送。
+        etTask.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_UP && pttActive) {
+                pttActive = false
+                if (micListening) {
+                    pttPendingSend = true
+                    stopListening()
+                } else {
+                    sendPttIfAny()
+                }
+            }
+            false
+        }
         findViewById<View>(R.id.btnVoiceKeyboard).setOnClickListener { switchToKeyboard() }
 
         runCatching { SkillStore.seedBuiltins(applicationContext) }
@@ -233,29 +254,34 @@ class MainActivity : AppCompatActivity() {
         renderSession()
         refreshAttachments()
         refreshDrawer()
-        // 通过系统助理（长按电源键/耳机、助理手势）唤起时，直接进入语音输入。
-        maybeAutoVoiceFromAssist()
+        // 全屏助理说完后把识别文本带回来，这里直接把它当作任务发送。
+        maybeAutoTaskFromIntent()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        // singleTask 下重复唤起不会重建 Activity，这里同样自动进入语音输入。
-        maybeAutoVoiceFromAssist()
+        // singleTask 下重复唤起不会重建 Activity，这里同样接收助理带回来的任务。
+        maybeAutoTaskFromIntent()
     }
 
     /**
-     * 系统助理唤起（ACTION_ASSIST / ACTION_VOICE_COMMAND）时自动开始语音识别。
+     * 接收全屏助理（AssistActivity）提交回来的识别文本并自动发送。
      *
-     * 用 Intent 实例做去重：同一次唤起只触发一次，重复唤起（onNewIntent 带来新 Intent）仍会触发。
+     * 用 [autoTaskConsumed] 去重，避免配置变更/重建时重复发送同一任务。
      */
-    private fun maybeAutoVoiceFromAssist() {
-        val current = intent ?: return
-        val action = current.action ?: return
-        if (action != Intent.ACTION_ASSIST && action != ACTION_VOICE_COMMAND) return
-        if (lastAssistIntent === current) return
-        lastAssistIntent = current
-        etTask.post { if (!destroyed && !micListening) ensureMicPermissionAndStart() }
+    private fun maybeAutoTaskFromIntent() {
+        if (autoTaskConsumed) return
+        val task = intent?.getStringExtra(EXTRA_AUTO_TASK)?.trim().orEmpty()
+        if (task.isEmpty()) return
+        autoTaskConsumed = true
+        intent?.removeExtra(EXTRA_AUTO_TASK)
+        etTask.post {
+            if (destroyed) return@post
+            etTask.setText(task)
+            etTask.setSelection(etTask.length())
+            sendTask()
+        }
     }
 
     override fun onResume() {
@@ -1096,7 +1122,7 @@ class MainActivity : AppCompatActivity() {
 
     /** 展示底部语音面板：波动条 + 实时识别预览 + 左下角推荐命令 + 右下角切键盘。 */
     private fun showVoicePanel() {
-        tvVoicePreview.text = getString(R.string.voice_listening)
+        tvVoicePreview.text = getString(R.string.voice_hold_send)
         renderVoiceSuggestions()
         voicePanel.visibility = View.VISIBLE
         voiceWave.start()
@@ -1139,6 +1165,8 @@ class MainActivity : AppCompatActivity() {
 
     /** 右下角「切键盘」：结束语音，恢复输入法。 */
     private fun switchToKeyboard() {
+        pttActive = false
+        pttPendingSend = false
         stopListening()
         hideVoicePanel()
         etTask.requestFocus()
@@ -1158,6 +1186,11 @@ class MainActivity : AppCompatActivity() {
         override fun onResult(text: String) = runOnUiThread {
             updateMicText(text)
             hideVoicePanel()
+            // 按住说话：松手后引擎回调最终结果，这时自动发送。
+            if (pttPendingSend) {
+                pttPendingSend = false
+                etTask.post { sendPttIfAny() }
+            }
         }
 
         override fun onError(message: String) {
@@ -1175,6 +1208,13 @@ class MainActivity : AppCompatActivity() {
                 hideVoicePanel()
             }
         }
+    }
+
+    /** 松手提交：输入框有内容才发送，避免空语音把空任务发出去。 */
+    private fun sendPttIfAny() {
+        if (destroyed) return
+        if (etTask.text.isNullOrBlank()) return
+        sendTask()
     }
 
     private fun updateMicText(text: String) {
@@ -1705,6 +1745,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "MainActivity"
         private const val REQ_NOTIF = 2002
-        private const val ACTION_VOICE_COMMAND = "android.intent.action.VOICE_COMMAND"
+        /** 全屏助理提交识别文本时携带的任务内容。 */
+        const val EXTRA_AUTO_TASK = "app.azcode.bridge.extra.AUTO_TASK"
     }
 }

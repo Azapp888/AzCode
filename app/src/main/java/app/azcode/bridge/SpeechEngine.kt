@@ -44,11 +44,17 @@ interface SpeechEngine {
 }
 
 object SpeechEngines {
-    fun create(ctx: Context): SpeechEngine =
+    /**
+     * 创建识别引擎。
+     *
+     * @param vadEosMillis 说完后的静音判定阈值（毫秒）。默认 10 秒（长语音，不自动结束）；
+     *   全屏助理模式传较短值（约 1.5 秒）以在用户停顿后自动判定说完了。
+     */
+    fun create(ctx: Context, vadEosMillis: Int = 10_000): SpeechEngine =
         if (SpeechConfig.engine(ctx) == SpeechConfig.ENGINE_XUNFEI) {
-            XunfeiSpeechEngine()
+            XunfeiSpeechEngine(vadEosMillis)
         } else {
-            SystemSpeechEngine()
+            SystemSpeechEngine(vadEosMillis)
         }
 
     /** 供设置页展示当前引擎名称。 */
