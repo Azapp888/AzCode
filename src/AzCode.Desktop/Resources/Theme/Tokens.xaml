@@ -20,17 +20,6 @@
     <FontFamily x:Key="Font.Ui">Microsoft YaHei UI, PingFang SC, Segoe UI, sans-serif</FontFamily>
     <FontFamily x:Key="Font.Mono">Cascadia Mono, Consolas, monospace</FontFamily>
 
-    <x:Double x:Key="Size.TopBar">56</x:Double>
-    <x:Double x:Key="Size.SideBar">260</x:Double>
-    <x:Double x:Key="Size.ChatMax">820</x:Double>
-    <x:Double x:Key="Size.Icon">20</x:Double>
-    <x:Double x:Key="Size.IconButton">38</x:Double>
-    <x:Double x:Key="Font.Body">15</x:Double>
-    <x:Double x:Key="Font.Small">13</x:Double>
-    <x:Double x:Key="Font.Caption">12</x:Double>
-    <x:Double x:Key="Font.Tiny">11</x:Double>
-    <x:Double x:Key="Font.Micro">10</x:Double>
-
     <Thickness x:Key="Pad.Page" Left="16" Top="16" Right="16" Bottom="16" />
     <Thickness x:Key="Pad.Bubble" Left="14" Top="10" Right="14" Bottom="11" />
     <Thickness x:Key="Pad.Field" Left="14" Top="12" Right="14" Bottom="12" />
