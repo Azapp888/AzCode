@@ -28,7 +28,7 @@ public partial class GithubPage : UserControl
 
         if (_cfg.GitHubConfigured)
         {
-            DotStatus.SetResourceReference(Shapes.Shape.FillProperty, "Status.On");
+            DotStatus.SetResourceReference(Shape.FillProperty, "Status.On");
             var branch = string.IsNullOrWhiteSpace(_cfg.GitHubDefaultBranch) ? "仓库默认" : _cfg.GitHubDefaultBranch;
             var repo = string.IsNullOrWhiteSpace(_cfg.GitHubDefaultRepo) ? "未设置" : _cfg.GitHubDefaultRepo;
             TxtHeader.Text = $"已连接：@{_cfg.GitHubLogin}　默认仓库：{repo}　默认分支：{branch}";
@@ -36,7 +36,7 @@ public partial class GithubPage : UserControl
         }
         else
         {
-            DotStatus.SetResourceReference(Shapes.Shape.FillProperty, "Status.Off");
+            DotStatus.SetResourceReference(Shape.FillProperty, "Status.Off");
             TxtHeader.Text = "未接入 GitHub。填入 Token 后，Agent 就能读取、提交你仓库中的文件，并管理 Issue 与 Pull Request。";
             BtnLogout.Visibility = Visibility.Collapsed;
         }
