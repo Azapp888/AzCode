@@ -1,6 +1,9 @@
 package app.azcode.bridge
 
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import app.azcode.bridge.llm.LLMContent
 import app.azcode.bridge.llm.LLMService
 import app.azcode.bridge.llm.core.LLMCodec
@@ -12,6 +15,7 @@ import app.azcode.bridge.llm.core.LLMThinking
 import app.azcode.bridge.llm.core.LLMToolCall
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
 /**
  * Agent 决策循环向 UI 暴露的结构化事件。
@@ -441,6 +445,20 @@ class AgentRunner(
 
             "genoffice_document" -> genofficeDocument(args)
 
+            "save_memory" -> saveMemory(args)
+
+            "list_memories" -> listMemories(args)
+
+            "remove_memory" -> removeMemory(args)
+
+            "set_memory_enabled" -> setMemoryEnabled(args)
+
+            "save_skill" -> saveSkill(args)
+
+            "list_apps" -> listApps(args)
+
+            "open_app" -> openApp(args)
+
             "list_model_providers" -> listModelProviders()
 
             "fetch_models" -> fetchModels(args)
@@ -541,6 +559,193 @@ class AgentRunner(
         } catch (e: Exception) {
             err(e.message ?: "GenOffice 生成失败")
         }
+    }
+
+    // ==================== 记忆 / 技能 / 应用 ====================
+
+    private fun saveMemory(args: JSONObject): String {
+        val category = when (args.optString("category").lowercase()) {
+            "token" -> MemoryCategory.TOKEN
+            "habit" -> MemoryCategory.HABIT
+            "method" -> MemoryCategory.METHOD
+            else -> return err("category 必须是 token / habit / method")
+        }
+        val content = args.optString("content").trim()
+        if (content.isBlank()) return err("缺少 content")
+        val entry = MemoryStore.add(ctx, category, args.optString("title").trim(), content)
+        return JSONObject().put("ok", true)
+            .put("id", entry.id)
+            .put("category", category.key)
+            .toString()
+    }
+
+    private fun listMemories(args: JSONObject): String {
+        val filter = args.optString("category").trim()
+        val all = MemoryStore.all(ctx)
+        val list = if (filter.isBlank()) all else all.filter { it.category.key == filter }
+        val arr = JSONArray()
+        list.forEach { m ->
+            arr.put(JSONObject().apply {
+                put("id", m.id)
+                put("category", m.category.key)
+                put("title", m.title)
+                put("content", if (m.sensitive) MemoryStore.mask(m.content) else m.content)
+                put("sensitive", m.sensitive)
+                put("enabled", m.enabled)
+            })
+        }
+        return JSONObject().put("ok", true).put("count", list.size).put("memories", arr).toString()
+    }
+
+    private fun resolveMemory(args: JSONObject): MemoryEntry? {
+        val id = args.optString("id")
+        val title = args.optString("title").trim()
+        val all = MemoryStore.all(ctx)
+        return all.firstOrNull { id.isNotBlank() && it.id == id }
+            ?: all.firstOrNull { title.isNotBlank() && it.title == title }
+            ?: all.firstOrNull { title.isNotBlank() && it.title.contains(title) }
+    }
+
+    private fun removeMemory(args: JSONObject): String {
+        val entry = resolveMemory(args) ?: return err("未找到该记忆")
+        MemoryStore.remove(ctx, entry.id)
+        return JSONObject().put("ok", true)
+            .put("removed", entry.title.ifBlank { entry.id })
+            .toString()
+    }
+
+    private fun setMemoryEnabled(args: JSONObject): String {
+        val entry = resolveMemory(args) ?: return err("未找到该记忆")
+        val enabled = if (args.has("enabled")) args.optBoolean("enabled") else true
+        MemoryStore.setEnabled(ctx, entry.id, enabled)
+        return JSONObject().put("ok", true).put("id", entry.id).put("enabled", enabled).toString()
+    }
+
+    private fun saveSkill(args: JSONObject): String {
+        val name = args.optString("name").trim()
+        val content = args.optString("content").trim()
+        if (name.isBlank()) return err("缺少 name")
+        if (content.isBlank()) return err("缺少 content")
+        val id = "user-" + UUID.randomUUID()
+        val enabled = if (args.has("enabled")) args.optBoolean("enabled") else true
+        SkillStore.add(
+            ctx,
+            Skill(
+                id = id,
+                name = name,
+                description = args.optString("description").trim(),
+                content = content,
+                source = "用户",
+                enabled = enabled,
+            ),
+        )
+        return JSONObject().put("ok", true).put("id", id).put("name", name).put("enabled", enabled).toString()
+    }
+
+    private fun launchableApps(): List<Pair<String, String>> {
+        val pm = ctx.packageManager
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val resolved = runCatching {
+            if (Build.VERSION.SDK_INT >= 33) {
+                pm.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.queryIntentActivities(intent, 0)
+            }
+        }.getOrDefault(emptyList())
+        val out = LinkedHashMap<String, String>()
+        resolved.forEach { ri ->
+            val pkg = ri.activityInfo?.packageName.orEmpty()
+            if (pkg.isBlank() || pkg == ctx.packageName || out.containsKey(pkg)) return@forEach
+            val label = runCatching { ri.loadLabel(pm).toString() }.getOrDefault(pkg)
+            out[pkg] = label
+        }
+        return out.entries.map { it.value to it.key }
+    }
+
+    private fun listApps(args: JSONObject): String {
+        val keyword = args.optString("keyword").trim().lowercase()
+        val limit = args.optInt("limit", 50).coerceIn(1, 300)
+        val arr = JSONArray()
+        var count = 0
+        launchableApps()
+            .sortedBy { it.first }
+            .forEach { (label, pkg) ->
+                if (count >= limit) return@forEach
+                if (keyword.isNotBlank() &&
+                    !label.lowercase().contains(keyword) && !pkg.lowercase().contains(keyword)
+                ) return@forEach
+                arr.put(JSONObject().put("name", label).put("package", pkg))
+                count++
+            }
+        return JSONObject().put("ok", true).put("count", count).put("apps", arr).toString()
+    }
+
+    private fun findPackageByName(name: String): Pair<String, String>? {
+        if (name.isBlank()) return null
+        val lower = name.lowercase()
+        val apps = launchableApps()
+        return apps.firstOrNull { it.second.equals(name, true) || it.first.equals(name, true) }
+            ?: apps.firstOrNull { it.first.lowercase() == lower }
+            ?: apps.firstOrNull { it.first.lowercase().contains(lower) || it.second.lowercase().contains(lower) }
+    }
+
+    /**
+     * 打开应用：shell（am/monkey）→ 无障碍回桌面点图标 → 返回失败交由模型追问用户。
+     * 三级降级都在本工具内完成，模型只需调用一次。
+     */
+    private fun openApp(args: JSONObject): String {
+        val pkgArg = args.optString("package").trim()
+        val nameArg = args.optString("name").trim()
+        val matched = if (pkgArg.isNotBlank()) {
+            pkgArg to (findPackageByName(pkgArg)?.first ?: pkgArg)
+        } else {
+            findPackageByName(nameArg)
+                ?: return err("未找到应用「$nameArg」，可用 list_apps 查看已安装应用")
+        }
+        val pkg = matched.first
+        val label = matched.second
+
+        val shellOut = runCatching { openAppViaShell(pkg) }.getOrDefault("")
+        if (openAppShellSucceeded(shellOut)) {
+            return JSONObject().put("ok", true).put("via", "shell")
+                .put("package", pkg).put("name", label).toString()
+        }
+
+        if (openAppViaAccessibility(label)) {
+            return JSONObject().put("ok", true).put("via", "accessibility")
+                .put("package", pkg).put("name", label).toString()
+        }
+
+        return err("无法自动打开「$label」（$pkg）：shell 与无障碍均未成功。请确认应用是否已安装，或请用户手动打开一次。")
+    }
+
+    private fun openAppViaShell(pkg: String): String {
+        val sb = StringBuilder()
+        val resolved = DeviceControl.exec(ctx, "cmd package resolve-activity --brief $pkg").trim()
+        val component = resolved.lines().lastOrNull { it.contains("/") }?.trim()
+        if (!component.isNullOrBlank()) {
+            sb.append(DeviceControl.exec(ctx, "am start -n $component"))
+        }
+        sb.append(DeviceControl.exec(ctx, "monkey -p $pkg -c android.intent.category.LAUNCHER 1"))
+        return sb.toString()
+    }
+
+    private fun openAppShellSucceeded(output: String): Boolean {
+        if (output.isBlank()) return false
+        val out = output.lowercase()
+        val failures = listOf(
+            "permission denial", "securityexception", "no activities found",
+            "error:", "not found", "does not exist", "aborted", "unable to",
+        )
+        return failures.none { out.contains(it) }
+    }
+
+    private fun openAppViaAccessibility(label: String): Boolean {
+        val svc = AzAccessibilityService.instance ?: return false
+        svc.globalAction("home")
+        Thread.sleep(700)
+        return label.isNotBlank() && svc.tapText(label)
     }
 
     // ==================== 生图意图解析 ====================
@@ -1252,6 +1457,80 @@ class AgentRunner(
                     .put("title", str("文件名（不含扩展名），可省略"))
                     .put("preview", JSONObject().put("type", "boolean").put("description", "是否渲染逐页预览图，默认 true")),
                 listOf("kind", "content"),
+            ))
+
+            // ---- 记忆：把用户的长期偏好与事实写入本地，供后续任务注入 ----
+
+            put(fn(
+                "save_memory",
+                "把用户的一条长期信息写入记忆。当用户说「记住…」「以后都这样」「我的…是…」时调用；记忆会在后续每个任务中注入。",
+                JSONObject()
+                    .put("category", JSONObject()
+                        .put("type", "string")
+                        .put("enum", JSONArray(listOf("token", "habit", "method")))
+                        .put("description", "记忆分类：token=敏感信息（API Key/密码等）；habit=使用习惯；method=技能与方法"))
+                    .put("title", str("标题（简短摘要，可省略）"))
+                    .put("content", str("要记住的完整内容")),
+                listOf("category", "content"),
+            ))
+
+            put(fn(
+                "list_memories",
+                "列出本机已保存的记忆（含分类、标题、内容与启停状态）。",
+                JSONObject().put("category", str("按分类过滤：token / habit / method / local，省略返回全部")),
+                emptyList(),
+            ))
+
+            put(fn(
+                "remove_memory",
+                "删除一条记忆。",
+                JSONObject()
+                    .put("id", str("记忆 id"))
+                    .put("title", str("记忆标题（用标题匹配，id 可省略）")),
+                emptyList(),
+            ))
+
+            put(fn(
+                "set_memory_enabled",
+                "启用或停用一条记忆（停用后不再注入提示词，但保留内容）。",
+                JSONObject()
+                    .put("id", str("记忆 id"))
+                    .put("title", str("记忆标题（用标题匹配，id 可省略）"))
+                    .put("enabled", JSONObject().put("type", "boolean").put("description", "是否启用")),
+                emptyList(),
+            ))
+
+            // ---- 技能：把用户教的方法写成长期生效的指令文本 ----
+
+            put(fn(
+                "save_skill",
+                "把一段可复用的流程/方法保存为技能。当用户说「把这个做成技能」「记住这个流程」「以后都这么做」时调用；启用后每次任务都会注入该技能内容。",
+                JSONObject()
+                    .put("name", str("技能名称"))
+                    .put("description", str("一句话说明该技能做什么"))
+                    .put("content", str("技能正文：具体的步骤、规则或指令，供后续任务直接遵循"))
+                    .put("enabled", JSONObject().put("type", "boolean").put("description", "是否立即启用，默认 true")),
+                listOf("name", "content"),
+            ))
+
+            // ---- 应用发现与启动 ----
+
+            put(fn(
+                "list_apps",
+                "列出本机可启动的应用（应用名 + 包名）。在需要打开某个应用、或不确定包名时调用。",
+                JSONObject()
+                    .put("keyword", str("按应用名或包名过滤，可省略"))
+                    .put("limit", num("最多返回条数，默认 50")),
+                emptyList(),
+            ))
+
+            put(fn(
+                "open_app",
+                "打开本机某个应用。按「shell（am/monkey）→ 无障碍回桌面点图标 → 失败」三级降级自动尝试。用应用名或包名指定目标。",
+                JSONObject()
+                    .put("name", str("应用名（中文名或英文名，模糊匹配）"))
+                    .put("package", str("包名；与 name 二选一，包名更精确")),
+                emptyList(),
             ))
         }
     }
