@@ -1,8 +1,16 @@
 # AzCode Android 设计系统
 
-设计方向：向 DeepSeek 官方 App 的视觉语言收拢——灰色画布 + 白色卡片、克制的品牌蓝、大圆角、细描边、宽松留白、线性细图标。
+设计方向：向 DeepSeek 官方 App 靠拢的克制视觉语言。灰色画布、白色卡片、品牌蓝点缀、大圆角、细描边、宽松留白与线性细图标。
 
-令牌全部取自 DeepSeek 官方设计系统真实值（`--dsw-static-*` / `--dsw-alias-*`），并非估算。
+令牌取自 DeepSeek 官方设计系统的真实色值，集中定义在 `app/src/main/res/values/colors.xml` 与 `values-night/colors.xml`。
+
+## 设计原则
+
+1. **内容优先**：主聊天页只保留消息、输入与必要状态，配置项进入设置页。
+2. **层级清晰**：页面背景、卡片、输入区形成明确的三层表面关系。
+3. **反馈及时**：点击有涟漪，执行有光效，等待有思考指示，失败有可展开的工具卡片。
+4. **品牌稳定**：品牌蓝以静态令牌引用，系统动态取色不改变品牌识别。
+5. **深浅对等**：亮色与暗色分别设计，暗色使用独立的表面与文字色阶。
 
 ## 颜色令牌
 
@@ -10,76 +18,182 @@
 | --- | --- | --- | --- |
 | `primary` | `#3964FE` | `#5686FE` | 品牌主色、发送按钮、选中态 |
 | `primary_pressed` | `#5686FE` | `#679EFE` | 主色按压态 |
-| `primary_soft` | `#E5F0FF` | `#1E2A46` | 主色浅底（容器） |
+| `primary_soft` | `#E5F0FF` | `#1E2A46` | 主色浅底容器 |
 | `background` | `#F5F6F7` | `#151517` | 页面画布 |
-| `surface` | `#FFFFFF` | `#232324` | 卡片 / 面板 |
+| `surface` | `#FFFFFF` | `#232324` | 卡片与面板 |
+| `surface_muted` | `#F5F6F7` | `#1B1B1C` | 次级表面 |
 | `input_bg` | `#FFFFFF` | `#2C2C2E` | 输入区底色 |
 | `text_primary` | `#0F1115` | `#F9FAFB` | 正文 |
 | `text_secondary` | `#61666B` | `#CFD3D6` | 次要文字 |
-| `text_caption` | `#ADB2B8` | `#81858C` | 弱化文字 / 占位 |
-| `divider` | `rgba(0,0,0,.10)` | `rgba(255,255,255,.12)` | 分隔线 / 描边 |
-| `border_subtle` | `rgba(0,0,0,.04)` | `rgba(255,255,255,.06)` | 极浅描边 |
+| `text_caption` | `#ADB2B8` | `#81858C` | 弱化文字与占位 |
+| `divider` | `#1A000000` | `#1FFFFFFF` | 分隔线 |
+| `border_subtle` | `#0A000000` | `#0FFFFFFF` | 极浅描边 |
 | `bubble_assistant` | `#FFFFFF` | `#2C2C2E` | 助手消息卡 |
 | `bubble_user` | `#3964FE` | `#5686FE` | 用户消息 |
-| `success` | `#22C55E` | `#4ED17E` | 成功 |
-| `error` | `#EC1313` | `#F25A5A` | 错误 |
-| `status_off` | `#C4C7CE` | `#5A5D63` | 关闭态指示点 |
+| `success` | `#22C55E` | `#4ED17E` | 成功状态 |
+| `error` | `#EC1313` | `#F25A5A` | 错误状态 |
+| `status_off` | `#C4C7CE` | `#5A5D63` | 关闭态指示 |
+| `glass_surface` | `#E6FFFFFF` | 跟随暗色表面 | 顶栏与弹层玻璃底 |
+| `nav_item_selected` | `#E8EEFF` | 跟随暗色主色浅底 | 抽屉选中项 |
+| `scrim` | `#59000000` | `#59000000` | 抽屉与弹层遮罩 |
+
+品牌蓝在暗色下使用更亮的 `#5686FE`，提升深底对比度。
 
 ## 圆角
 
-- 卡片 / 输入容器：24dp
-- 面板：16dp
-- 胶囊 / 标签：16dp（高约 32dp，即胶囊）
-- 输入框 / 卡片字段：10–12dp
-- 按钮：10dp
-- 消息气泡：16dp（贴近发言方的一角 4dp）
-- 圆形按钮：oval
+| 元素 | 圆角 |
+| --- | --- |
+| 卡片、输入容器 | 24dp |
+| 面板、设置分组 | 16dp |
+| 胶囊与标签 | 16dp |
+| 输入框、字段 | 10–12dp |
+| 按钮 | 10dp |
+| 消息气泡 | 16dp，贴近发言方的一角 4dp |
+| 圆形按钮 | oval |
+| 悬浮气泡 | 16dp |
 
-## 字体
+## 字体与字阶
 
-采用系统无衬线字体，层级：11 / 12 / 13 / 14 / 16 / 20sp。标题加粗，正文常规，辅助文字弱化色。
+采用系统无衬线字体，跟随系统字体缩放。常用层级：
+
+| 用途 | 字号 |
+| --- | --- |
+| 辅助说明、分组标题 | 11–12sp |
+| 次要文字、设置值 | 13sp |
+| 正文、输入框 | 14–15sp |
+| 消息与页面标题 | 16–20sp |
+
+标题加粗，正文常规，辅助文字使用 `text_secondary` 或 `text_caption`。
+
+## 间距与触控
+
+- 基础间距单位为 4dp，常用间距为 8 / 12 / 16 / 24dp。
+- 同组元素紧凑，组间留白更大；分组标题上方留白大于下方。
+- 可点击行最小高度 52dp，触控目标不小于 48×48dp。
+- 页面内容处理状态栏、导航栏、刘海与输入法 inset，避免内容被系统栏遮挡。
 
 ## 组件规则
 
-- 页面根背景 = `background`，卡片 = `surface` 且 1dp 描边。
-- 可点击的胶囊、按钮、圆形按钮均带 `ripple` 按压反馈。
-- 输入区为独立白色卡片（24dp 圆角、极浅描边、2dp 阴影）。
-- 消息：用户右侧品牌色气泡（白字），助手左侧白卡气泡（深字）。
-- 图标为线性细描边风格，尺寸 20–24dp。
+### 页面与卡片
+
+- 页面根背景使用 `background`。
+- 卡片使用 `surface`、1dp 描边与大圆角。
+- 设置页采用分组小标题加白色卡片行，行内使用图标、标题、值与右箭头。
+- 抽屉使用玻璃底、分组时间标题与选中态背景。
+
+### 消息
+
+- 用户消息靠右，品牌色气泡配白字，贴近右侧的一角使用小圆角。
+- 助手消息靠左，白色卡片配深色正文，支持 Markdown、代码块、表格、删除线与任务列表。
+- 系统通知与错误使用独立卡片样式，错误使用浅红底与红色描边。
+- 图片消息直接展示缩略图，点击进入大图预览。
+- 文档消息展示预览图、文件名、打开与分享按钮。
+
+### 工具卡片
+
+- 工具名、执行状态与展开箭头位于标题行。
+- 默认收起；执行失败时自动展开。
+- 展开后分为「参数」与「结果」两段，长内容截断并支持滚动。
+- 执行中显示进行态，成功与失败使用不同状态颜色。
+
+### 输入区
+
+- 输入区为独立卡片，24dp 圆角、极浅描边与轻阴影。
+- 左侧为附件入口，右侧为发送或停止按钮。
+- 模型选择器与思考深度位于输入区上方。
+- 附件以胶囊或卡片形式排列，图片显示缩略图，文件显示类型图标。
+
+### 弹层与选择器
+
+- 模型选择器使用底部弹出层，按提供商分组，当前项高亮。
+- 附件菜单使用弹出卡片，提供拍照、相册、文件三个入口。
+- 深度确认、删除确认等使用对话框，危险操作使用错误色。
+- 玻璃面板用于顶栏、抽屉与浮层，保持背景内容可感知。
+
+### 问答区
+
+- 问题显示在输入框下方，支持单选、多选与手动输入。
+- 多问题场景显示 `(当前/总数)` 进度。
+- 选项使用可选胶囊，选中态使用品牌浅底与主色描边。
+- 通知栏提供同样的问题与操作，用户可以直接在通知中作答。
+
+### 语音面板
+
+- 按住输入框进入语音面板，显示实时波形与识别预览。
+- 左下角展示常用命令推荐，右下角提供键盘切换。
+- 松手后自动发送；识别失败或无语音时给出明确提示。
+
+### 悬浮助理
+
+- 透明全屏窗口绘制贴边呼吸蓝光，窗口不拦截触摸，下层应用保持可操作。
+- 左下角悬浮气泡显示识别文本、执行状态与结果，任务结束或超时后自动收起。
+- 右下角键盘气泡用于手动输入，右上角关闭按钮随时退出。
+- 问题面板直接叠加在当前页面，避免跳转打断用户。
+- 光效使用品牌蓝渐变与柔和模糊，按执行状态调整强度。
+
+### 运行光效
+
+- 无障碍服务执行点击、滑动等操作时显示「AI 正在操作手机」提示。
+- 应用自身界面位于前台时隐藏左下角气泡，避免遮挡聊天内容。
+- 光效按需显示，任务结束后停止，避免长时间占用屏幕。
+
+### 文档与图片结果
+
+- 图片卡片支持点击放大与保存到相册。
+- 文档卡片展示逐页预览，提供打开与分享操作。
+- 找不到可打开文档的应用时提示使用分享。
 
 ## 主题与动态取色
 
-- `Theme.AzCode` 基于 `Theme.Material3.DayNight.NoActionBar`，通过 `values-night` 自动切换深浅色。
-- `viewInflaterClass` 固定为 AppCompat inflater，保留各界面自定义 `android:background`。
-- Android 12+ 启用 Material You 动态取色（`DynamicColors`），仅协调系统与 Material 控件；品牌蓝以静态引用保持稳定。
+- `Theme.AzCode` 基于 `Theme.Material3.DayNight.NoActionBar`。
+- `values` 与 `values-night` 分别提供亮色与暗色令牌。
+- Android 12 及以上启用 Material You 动态取色，系统与 Material 控件跟随壁纸；品牌蓝保持静态引用。
+- `viewInflaterClass` 固定为 AppCompat inflater，保留各界面自定义背景。
+- 系统栏颜色跟随页面背景，亮色主题使用深色图标，暗色主题使用浅色图标。
+- 系统返回手势保持可用，应用不劫持返回行为。
 
-## 参考来源与引用文件
+## 无障碍与可读性
 
-本设计系统不是凭记忆估算，而是从下列真实来源提取。为可追溯，逐项列出所引用的文件。
+- 正文与背景对比度不低于 4.5:1，大号文字不低于 3:1。
+- 图标提供内容描述，纯装饰图标不进入无障碍焦点。
+- 点击行提供足够的触控高度与按压反馈。
+- 字号使用 sp，跟随系统字体缩放。
+- 错误信息说明问题与恢复方式，避免只显示错误码。
 
-### 一、DeepSeek 官方（色值、圆角、字号令牌的真实来源）
+## 实现文件
 
-| 引用的文件 | 用途 |
+| 文件 | 内容 |
 | --- | --- |
-| `https://fe-static.deepseek.com/chat/static/main.cffac0f0da.css` | 主来源：提取 `--dsw-static-*` 基础色板与 `--dsw-alias-*` 语义令牌的明/暗两套取值 |
-| `https://www.deepseek.com/_next/static/css/8200fbc59b0ac2c5.css` | 官网样式，用于交叉核对品牌蓝 |
-| `https://www.deepseek.com/_next/static/css/826310b8bcf73c16.css` | 官网样式，用于交叉核对品牌蓝 |
-| `https://www.deepseek.com/_next/static/css/aa0e993381ed79dc.css` | 官网样式，用于交叉核对品牌蓝 |
+| `app/src/main/res/values/colors.xml` | 亮色颜色令牌 |
+| `app/src/main/res/values-night/colors.xml` | 暗色颜色令牌 |
+| `app/src/main/res/values/themes.xml` | 主题、设置行、输入框、助理主题 |
+| `app/src/main/res/drawable/` | 气泡、卡片、胶囊、按钮、玻璃面板等背景 |
+| `app/src/main/res/layout/` | 聊天、设置、会话、记忆、技能、助理悬浮层等布局 |
+| `OperationGlowView.kt` | 无障碍操作光效与左下角气泡 |
+| `AssistOrbView.kt` / `VoiceWaveView.kt` | 悬浮助理气泡与语音波形 |
 
-### 二、impeccable 技能（设计流程与工艺底线的来源）
+## 参考来源
 
-| 引用的文件 | 用途 |
+### DeepSeek 官方
+
+| 引用文件 | 用途 |
 | --- | --- |
-| `SKILL.md`（v4.3.1） | 工作流总纲、命令表、模式定义 |
+| `https://fe-static.deepseek.com/chat/static/main.cffac0f0da.css` | 提取 `--dsw-static-*` 与 `--dsw-alias-*` 的明暗色板 |
+| `https://www.deepseek.com/_next/static/css/8200fbc59b0ac2c5.css` | 交叉核对品牌蓝 |
+| `https://www.deepseek.com/_next/static/css/826310b8bcf73c16.css` | 交叉核对品牌蓝 |
+| `https://www.deepseek.com/_next/static/css/aa0e993381ed79dc.css` | 交叉核对品牌蓝 |
+
+### impeccable
+
+| 引用文件 | 用途 |
+| --- | --- |
+| `SKILL.md` v4.3.1 | 工作流、命令表与模式定义 |
 | `reference/routing.md` | 请求路由与命令选择 |
-| `reference/new-work.md` | 新界面/替换视觉世界的流程（先取参考、再定方向） |
-| `reference/craft-floor.md` | 工艺底线核验项与「明确拒绝」清单 |
-| `reference/android.md` | Android 平台规则（Material 3、48dp 触控、边到边 inset、深色与字体缩放验证） |
-| `scripts/impeccable` | 运行 `impeccable context` 探测项目上下文 |
+| `reference/new-work.md` | 新界面与视觉方向流程 |
+| `reference/craft-floor.md` | 工艺底线与拒绝清单 |
+| `reference/android.md` | Material 3、48dp 触控、边到边与深色验证 |
+| `scripts/impeccable` | 项目上下文探测脚本 |
 
-技能主页：`https://github.com/pbakaus/impeccable`（Apache-2.0）。
+上游主页：`https://github.com/pbakaus/impeccable`（Apache-2.0）。
 
-### 三、随应用内置的版本
-
-`SkillStore.IMPECCABLE_CONTENT` 是上述技能的 Android 原生精简移植版，随 APK 内置、可在「设置 → 技能」中启停。上游完整技能不含在本仓库内。
-
+`SkillStore.IMPECCABLE_CONTENT` 是上述技能的 Android 原生精简移植版，随 APK 内置，可在「设置 → 技能管理」启停。

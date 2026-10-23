@@ -2,7 +2,7 @@
 # Listen（Android 端命令行）安装脚本：把 listen 装到 ~/.local/bin。
 #
 # 用法（一行命令）：
-#   curl -fsSL https://raw.githubusercontent.com/Azapp888/AzCode/260912-feat-android-native/tools/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Azapp888/AzCode/main/tools/install.sh | bash
 #
 # 前置条件：
 #   1. 手机安装并运行 magic App（无障碍/桥接服务开启，桥监听 127.0.0.1:8848）
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 REPO="${LISTEN_REPO:-Azapp888/AzCode}"
-BRANCH="${LISTEN_BRANCH:-260912-feat-android-native}"
+BRANCH="${LISTEN_BRANCH:-main}"
 PREFIX="${LISTEN_PREFIX:-$HOME/.local}"
 BIN_DIR="$PREFIX/bin"
 DEST="$BIN_DIR/listen"
