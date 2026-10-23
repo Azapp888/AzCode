@@ -36,7 +36,7 @@ AzCode 是运行在 Android 手机本地的自动化助手。用自然语言描�
 
 ### 安装
 
-从 GitHub Releases 下载 `android-v*` 版本的 APK 安装。debug 与 release 使用仓库内同一把签名密钥，可以互相覆盖安装。
+从 GitHub Releases 的 `android-v*` 版本下载 APK；日常构建产物也可以在 GitHub Actions 的 `azcode-magic-apk` 工件中获取。debug 与 release 使用仓库内同一把签名密钥，可以互相覆盖安装。
 
 ### 首次配置
 

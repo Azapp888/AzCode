@@ -5,7 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/Azapp888/AzCode/main/tools/install.sh | bash
 #
 # 前置条件：
-#   1. 手机安装并运行 magic App（无障碍/桥接服务开启，桥监听 127.0.0.1:8848）
+#   1. 手机安装并运行 AzCode App（无障碍/桥接服务开启，桥监听 127.0.0.1:8848）
 #   2. 电脑已安装 adb 且已连接手机（adb devices 可见）
 #   3. 电脑已安装 curl；建议安装 python3 以获得更好的 JSON 输出
 set -euo pipefail
