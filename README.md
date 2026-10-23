@@ -1,5 +1,7 @@
 # AzCode (Android)
 
+[简体中文](./docs/i18n/zh-CN.md) | [English](./docs/i18n/en.md) | [日本語](./docs/i18n/ja.md) | [한국어](./docs/i18n/ko.md) | [Français](./docs/i18n/fr.md) | [Deutsch](./docs/i18n/de.md) | [Русский](./docs/i18n/ru.md) | [Español](./docs/i18n/es.md)
+
 AzCode 是运行在 Android 手机本地的自动化助手。用自然语言描述任务，应用内置 Agent 决策循环，通过无障碍服务读取屏幕、点击控件、滑动与执行命令，直到任务完成。
 
 - 应用名：**AzCode**
